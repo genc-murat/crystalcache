@@ -52,6 +52,14 @@ func (s *Server) registerHandlers() {
 	s.cmds["RPOP"] = s.handleRPop
 	s.cmds["SCARD"] = s.handleSCard
 	s.cmds["SREM"] = s.handleSRem
+	s.cmds["SISMEMBER"] = s.handleSIsMember
+	s.cmds["LSET"] = s.handleLSet
+	s.cmds["SINTER"] = s.handleSInter
+	s.cmds["SUNION"] = s.handleSUnion
+	s.cmds["TYPE"] = s.handleType
+	s.cmds["EXISTS"] = s.handleExists
+	s.cmds["FLUSHALL"] = s.handleFlushAll
+	s.cmds["DBSIZE"] = s.handleDBSize
 }
 
 func (s *Server) Start(address string) error {
@@ -414,4 +422,111 @@ func (s *Server) handleSRem(args []models.Value) models.Value {
 		return models.Value{Type: "integer", Num: 1}
 	}
 	return models.Value{Type: "integer", Num: 0}
+}
+
+func (s *Server) handleSIsMember(args []models.Value) models.Value {
+	if len(args) != 2 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'sismember' command"}
+	}
+
+	isMember := s.cache.SIsMember(args[0].Bulk, args[1].Bulk)
+	if isMember {
+		return models.Value{Type: "integer", Num: 1}
+	}
+	return models.Value{Type: "integer", Num: 0}
+}
+
+func (s *Server) handleLSet(args []models.Value) models.Value {
+	if len(args) != 3 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'lset' command"}
+	}
+
+	index, err := strconv.Atoi(args[1].Bulk)
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR value is not an integer"}
+	}
+
+	err = s.cache.LSet(args[0].Bulk, index, args[2].Bulk)
+	if err != nil {
+		return models.Value{Type: "error", Str: err.Error()}
+	}
+
+	return models.Value{Type: "string", Str: "OK"}
+}
+
+func (s *Server) handleSInter(args []models.Value) models.Value {
+	if len(args) < 1 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'sinter' command"}
+	}
+
+	keys := make([]string, len(args))
+	for i, arg := range args {
+		keys[i] = arg.Bulk
+	}
+
+	intersection := s.cache.SInter(keys...)
+	result := make([]models.Value, len(intersection))
+	for i, member := range intersection {
+		result[i] = models.Value{Type: "bulk", Bulk: member}
+	}
+
+	return models.Value{Type: "array", Array: result}
+}
+
+func (s *Server) handleSUnion(args []models.Value) models.Value {
+	if len(args) < 1 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'sunion' command"}
+	}
+
+	keys := make([]string, len(args))
+	for i, arg := range args {
+		keys[i] = arg.Bulk
+	}
+
+	union := s.cache.SUnion(keys...)
+	result := make([]models.Value, len(union))
+	for i, member := range union {
+		result[i] = models.Value{Type: "bulk", Bulk: member}
+	}
+
+	return models.Value{Type: "array", Array: result}
+}
+
+func (s *Server) handleType(args []models.Value) models.Value {
+	if len(args) != 1 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'type' command"}
+	}
+
+	typ := s.cache.Type(args[0].Bulk)
+	return models.Value{Type: "string", Str: typ}
+}
+
+func (s *Server) handleExists(args []models.Value) models.Value {
+	if len(args) != 1 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'exists' command"}
+	}
+
+	exists := s.cache.Exists(args[0].Bulk)
+	if exists {
+		return models.Value{Type: "integer", Num: 1}
+	}
+	return models.Value{Type: "integer", Num: 0}
+}
+
+func (s *Server) handleFlushAll(args []models.Value) models.Value {
+	if len(args) != 0 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'flushall' command"}
+	}
+
+	s.cache.FlushAll()
+	return models.Value{Type: "string", Str: "OK"}
+}
+
+func (s *Server) handleDBSize(args []models.Value) models.Value {
+	if len(args) != 0 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'dbsize' command"}
+	}
+
+	size := s.cache.DBSize()
+	return models.Value{Type: "integer", Num: size}
 }

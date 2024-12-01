@@ -21,4 +21,12 @@ type Cache interface {
 	RPop(key string) (string, bool)
 	SCard(key string) int
 	SRem(key string, member string) (bool, error)
+	SIsMember(key string, member string) bool
+	LSet(key string, index int, value string) error
+	SInter(keys ...string) []string
+	SUnion(keys ...string) []string
+	Type(key string) string
+	Exists(key string) bool
+	FlushAll()
+	DBSize() int
 }

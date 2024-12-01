@@ -402,3 +402,179 @@ func (c *MemoryCache) SRem(key string, member string) (bool, error) {
 
 	return true, nil
 }
+
+func (c *MemoryCache) SIsMember(key string, member string) bool {
+	c.setsMu_.RLock()
+	defer c.setsMu_.RUnlock()
+
+	set, exists := c.sets_[key]
+	if !exists {
+		return false
+	}
+
+	return set[member]
+}
+
+func (c *MemoryCache) LSet(key string, index int, value string) error {
+	c.listsMu.Lock()
+	defer c.listsMu.Unlock()
+
+	list, exists := c.lists[key]
+	if !exists {
+		return fmt.Errorf("ERR no such key")
+	}
+
+	if index < 0 {
+		index = len(list) + index
+	}
+
+	if index < 0 || index >= len(list) {
+		return fmt.Errorf("ERR index out of range")
+	}
+
+	list[index] = value
+	return nil
+}
+
+func (c *MemoryCache) SInter(keys ...string) []string {
+	c.setsMu_.RLock()
+	defer c.setsMu_.RUnlock()
+
+	if len(keys) == 0 {
+		return []string{}
+	}
+
+	// İlk set'i sonuç olarak al
+	result := make(map[string]bool)
+	firstSet, exists := c.sets_[keys[0]]
+	if !exists {
+		return []string{}
+	}
+
+	// İlk set'in elemanlarını result'a kopyala
+	for member := range firstSet {
+		result[member] = true
+	}
+
+	// Diğer setlerle kesişimi bul
+	for _, key := range keys[1:] {
+		set, exists := c.sets_[key]
+		if !exists {
+			return []string{} // Herhangi bir set yoksa boş dön
+		}
+
+		// Sadece tüm setlerde olan elemanları tut
+		for member := range result {
+			if !set[member] {
+				delete(result, member)
+			}
+		}
+	}
+
+	// Map'i slice'a çevir ve sırala
+	intersection := make([]string, 0, len(result))
+	for member := range result {
+		intersection = append(intersection, member)
+	}
+	sort.Strings(intersection)
+	return intersection
+}
+
+func (c *MemoryCache) SUnion(keys ...string) []string {
+	c.setsMu_.RLock()
+	defer c.setsMu_.RUnlock()
+
+	result := make(map[string]bool)
+
+	// Tüm setlerdeki elemanları birleştir
+	for _, key := range keys {
+		if set, exists := c.sets_[key]; exists {
+			for member := range set {
+				result[member] = true
+			}
+		}
+	}
+
+	// Map'i slice'a çevir ve sırala
+	union := make([]string, 0, len(result))
+	for member := range result {
+		union = append(union, member)
+	}
+	sort.Strings(union)
+	return union
+}
+
+func (c *MemoryCache) Type(key string) string {
+	c.setsMu.RLock()
+	if _, exists := c.sets[key]; exists {
+		c.setsMu.RUnlock()
+		return "string"
+	}
+	c.setsMu.RUnlock()
+
+	c.hsetsMu.RLock()
+	if _, exists := c.hsets[key]; exists {
+		c.hsetsMu.RUnlock()
+		return "hash"
+	}
+	c.hsetsMu.RUnlock()
+
+	c.listsMu.RLock()
+	if _, exists := c.lists[key]; exists {
+		c.listsMu.RUnlock()
+		return "list"
+	}
+	c.listsMu.RUnlock()
+
+	c.setsMu_.RLock()
+	if _, exists := c.sets_[key]; exists {
+		c.setsMu_.RUnlock()
+		return "set"
+	}
+	c.setsMu_.RUnlock()
+
+	return "none"
+}
+
+func (c *MemoryCache) Exists(key string) bool {
+	return c.Type(key) != "none"
+}
+
+func (c *MemoryCache) FlushAll() {
+	c.setsMu.Lock()
+	c.hsetsMu.Lock()
+	c.listsMu.Lock()
+	c.setsMu_.Lock()
+	defer c.setsMu.Unlock()
+	defer c.hsetsMu.Unlock()
+	defer c.listsMu.Unlock()
+	defer c.setsMu_.Unlock()
+
+	c.sets = make(map[string]string)
+	c.hsets = make(map[string]map[string]string)
+	c.lists = make(map[string][]string)
+	c.sets_ = make(map[string]map[string]bool)
+	c.expires = make(map[string]time.Time)
+}
+
+func (c *MemoryCache) DBSize() int {
+	total := 0
+
+	c.setsMu.RLock()
+	total += len(c.sets)
+	c.setsMu.RUnlock()
+
+	c.hsetsMu.RLock()
+	total += len(c.hsets)
+	c.hsetsMu.RUnlock()
+
+	c.listsMu.RLock()
+	total += len(c.lists)
+	c.listsMu.RUnlock()
+
+	c.setsMu_.RLock()
+	total += len(c.sets_)
+	c.setsMu_.RUnlock()
+
+	return total
+}
