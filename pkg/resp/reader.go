@@ -102,7 +102,6 @@ func (r *Reader) readBulkString() (models.Value, error) {
 		return models.Value{}, err
 	}
 
-	// Read the trailing \r\n
 	_, err = r.readLine()
 	if err != nil {
 		return models.Value{}, err

@@ -26,7 +26,6 @@ func NewHyperLogLog() *HyperLogLog {
 	}
 }
 
-// Cardinality tahmini için helper method
 func (h *HyperLogLog) Estimate() float64 {
 	sum := 0.0
 	zeros := 0

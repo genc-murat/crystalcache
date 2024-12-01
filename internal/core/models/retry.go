@@ -18,7 +18,6 @@ var (
 	ErrOperationTimeout   = errors.New("operation timeout")
 )
 
-// Varsayılan retry stratejisi
 var DefaultRetryStrategy = RetryStrategy{
 	MaxAttempts:     3,
 	InitialInterval: 100 * time.Millisecond,

@@ -28,11 +28,11 @@ type MemoryCache struct {
 	listsMu      sync.RWMutex
 	setsMu_      sync.RWMutex
 	stats        *Stats
-	transactions map[int64]*models.Transaction // goroutine ID'ye göre transaction takibi
+	transactions map[int64]*models.Transaction
 	txMu         sync.RWMutex
-	keyVersions  map[string]int64 // Her key için versiyon numarası
+	keyVersions  map[string]int64
 	versionMu    sync.RWMutex
-	zsets        map[string]map[string]float64 // key -> member -> score
+	zsets        map[string]map[string]float64
 	zsetsMu      sync.RWMutex
 	hlls         map[string]*models.HyperLogLog
 	hllsMu       sync.RWMutex
@@ -52,7 +52,6 @@ func NewMemoryCache() *MemoryCache {
 		hlls:         make(map[string]*models.HyperLogLog),
 	}
 
-	// Expire check goroutine'u
 	go func() {
 		ticker := time.NewTicker(time.Second)
 		for range ticker.C {
@@ -68,7 +67,6 @@ func matchPattern(pattern, str string) bool {
 		return true
 	}
 
-	// Convert Redis pattern to regex pattern
 	regexPattern := strings.Builder{}
 	for i := 0; i < len(pattern); i++ {
 		switch pattern[i] {
@@ -130,7 +128,7 @@ func (c *MemoryCache) Expire(key string, seconds int) error {
 	defer c.setsMu.Unlock()
 
 	if _, exists := c.sets[key]; !exists {
-		return nil // Redis returns 0 if key doesn't exist
+		return nil
 	}
 
 	c.expires[key] = time.Now().Add(time.Duration(seconds) * time.Second)
@@ -147,7 +145,7 @@ func (c *MemoryCache) Del(key string) (bool, error) {
 
 	delete(c.sets, key)
 	delete(c.expires, key)
-	c.incrementKeyVersion(key) // Versiyon güncelleme
+	c.incrementKeyVersion(key)
 	return true, nil
 }
 
@@ -164,7 +162,6 @@ func (c *MemoryCache) Get(key string) (string, bool) {
 	c.setsMu.RLock()
 	defer c.setsMu.RUnlock()
 
-	// Expire kontrolü
 	if expireTime, hasExpire := c.expires[key]; hasExpire && time.Now().After(expireTime) {
 		delete(c.sets, key)
 		delete(c.expires, key)
@@ -183,7 +180,7 @@ func (c *MemoryCache) HSet(hash string, key string, value string) error {
 		c.hsets[hash] = make(map[string]string)
 	}
 	c.hsets[hash][key] = value
-	c.incrementKeyVersion(hash) // Hash key'in versiyonunu güncelle
+	c.incrementKeyVersion(hash)
 	return nil
 }
 
@@ -203,7 +200,6 @@ func (c *MemoryCache) HGetAll(hash string) map[string]string {
 	defer c.hsetsMu.RUnlock()
 
 	if hashMap, ok := c.hsets[hash]; ok {
-		// Orijinal map'i değiştirmemek için kopya oluşturuyoruz
 		result := make(map[string]string, len(hashMap))
 		for k, v := range hashMap {
 			result[k] = v
@@ -223,7 +219,7 @@ func (c *MemoryCache) Keys(pattern string) []string {
 			keys = append(keys, key)
 		}
 	}
-	sort.Strings(keys) // Sonuçları sıralıyoruz
+	sort.Strings(keys)
 	return keys
 }
 
@@ -231,21 +227,18 @@ func (c *MemoryCache) TTL(key string) int {
 	c.setsMu.RLock()
 	defer c.setsMu.RUnlock()
 
-	// Key yoksa -2 dön
 	if _, exists := c.sets[key]; !exists {
 		return -2
 	}
 
-	// Expire yoksa -1 dön
 	expireTime, hasExpire := c.expires[key]
 	if !hasExpire {
 		return -1
 	}
 
-	// Kalan süreyi hesapla
 	ttl := int(time.Until(expireTime).Seconds())
 	if ttl < 0 {
-		return -2 // Expire olmuş
+		return -2
 	}
 	return ttl
 }
@@ -258,7 +251,7 @@ func (c *MemoryCache) LPush(key string, value string) (int, error) {
 		c.lists[key] = make([]string, 0)
 	}
 	c.lists[key] = append([]string{value}, c.lists[key]...)
-	c.incrementKeyVersion(key) // Versiyon güncelleme
+	c.incrementKeyVersion(key)
 	return len(c.lists[key]), nil
 }
 
@@ -270,7 +263,7 @@ func (c *MemoryCache) RPush(key string, value string) (int, error) {
 		c.lists[key] = make([]string, 0)
 	}
 	c.lists[key] = append(c.lists[key], value)
-	c.incrementKeyVersion(key) // Versiyon güncelleme
+	c.incrementKeyVersion(key)
 	return len(c.lists[key]), nil
 }
 
@@ -285,7 +278,6 @@ func (c *MemoryCache) LRange(key string, start, stop int) ([]string, error) {
 
 	length := len(list)
 
-	// Redis'teki gibi negatif indeksleri handle et
 	if start < 0 {
 		start = length + start
 	}
@@ -293,7 +285,6 @@ func (c *MemoryCache) LRange(key string, start, stop int) ([]string, error) {
 		stop = length + stop
 	}
 
-	// Sınırları kontrol et
 	if start < 0 {
 		start = 0
 	}
@@ -320,7 +311,7 @@ func (c *MemoryCache) SAdd(key string, member string) (bool, error) {
 	}
 
 	c.sets_[key][member] = true
-	c.incrementKeyVersion(key) // Versiyon güncelleme
+	c.incrementKeyVersion(key)
 	return true, nil
 }
 
@@ -337,7 +328,7 @@ func (c *MemoryCache) SMembers(key string) ([]string, error) {
 	for member := range set {
 		members = append(members, member)
 	}
-	sort.Strings(members) // Sonuçları sıralıyoruz
+	sort.Strings(members)
 	return members, nil
 }
 
@@ -359,7 +350,7 @@ func (c *MemoryCache) LPop(key string) (string, bool) {
 
 	value := list[0]
 	c.lists[key] = list[1:]
-	c.incrementKeyVersion(key) // Versiyon güncelleme
+	c.incrementKeyVersion(key)
 
 	if len(c.lists[key]) == 0 {
 		delete(c.lists, key)
@@ -379,7 +370,7 @@ func (c *MemoryCache) RPop(key string) (string, bool) {
 	lastIdx := len(list) - 1
 	value := list[lastIdx]
 	c.lists[key] = list[:lastIdx]
-	c.incrementKeyVersion(key) // Versiyon güncelleme
+	c.incrementKeyVersion(key)
 
 	if len(c.lists[key]) == 0 {
 		delete(c.lists, key)
@@ -413,7 +404,7 @@ func (c *MemoryCache) SRem(key string, member string) (bool, error) {
 	}
 
 	delete(set, member)
-	c.incrementKeyVersion(key) // Versiyon güncelleme
+	c.incrementKeyVersion(key)
 
 	if len(set) == 0 {
 		delete(c.sets_, key)
@@ -462,26 +453,22 @@ func (c *MemoryCache) SInter(keys ...string) []string {
 		return []string{}
 	}
 
-	// İlk set'i sonuç olarak al
 	result := make(map[string]bool)
 	firstSet, exists := c.sets_[keys[0]]
 	if !exists {
 		return []string{}
 	}
 
-	// İlk set'in elemanlarını result'a kopyala
 	for member := range firstSet {
 		result[member] = true
 	}
 
-	// Diğer setlerle kesişimi bul
 	for _, key := range keys[1:] {
 		set, exists := c.sets_[key]
 		if !exists {
-			return []string{} // Herhangi bir set yoksa boş dön
+			return []string{}
 		}
 
-		// Sadece tüm setlerde olan elemanları tut
 		for member := range result {
 			if !set[member] {
 				delete(result, member)
@@ -489,7 +476,6 @@ func (c *MemoryCache) SInter(keys ...string) []string {
 		}
 	}
 
-	// Map'i slice'a çevir ve sırala
 	intersection := make([]string, 0, len(result))
 	for member := range result {
 		intersection = append(intersection, member)
@@ -504,7 +490,6 @@ func (c *MemoryCache) SUnion(keys ...string) []string {
 
 	result := make(map[string]bool)
 
-	// Tüm setlerdeki elemanları birleştir
 	for _, key := range keys {
 		if set, exists := c.sets_[key]; exists {
 			for member := range set {
@@ -513,7 +498,6 @@ func (c *MemoryCache) SUnion(keys ...string) []string {
 		}
 	}
 
-	// Map'i slice'a çevir ve sırala
 	union := make([]string, 0, len(result))
 	for member := range result {
 		union = append(union, member)
@@ -623,19 +607,16 @@ func (c *MemoryCache) SDiff(keys ...string) []string {
 		return []string{}
 	}
 
-	// İlk set'i sonuç olarak al
 	result := make(map[string]bool)
 	firstSet, exists := c.sets_[keys[0]]
 	if !exists {
 		return []string{}
 	}
 
-	// İlk set'in elemanlarını result'a kopyala
 	for member := range firstSet {
 		result[member] = true
 	}
 
-	// Diğer setlerdeki elemanları çıkar
 	for _, key := range keys[1:] {
 		if set, exists := c.sets_[key]; exists {
 			for member := range set {
@@ -644,7 +625,6 @@ func (c *MemoryCache) SDiff(keys ...string) []string {
 		}
 	}
 
-	// Map'i slice'a çevir ve sırala
 	diff := make([]string, 0, len(result))
 	for member := range result {
 		diff = append(diff, member)
@@ -666,7 +646,6 @@ func (c *MemoryCache) LRem(key string, count int, value string) (int, error) {
 	newList := make([]string, 0, len(list))
 
 	if count > 0 {
-		// Baştan count kadar eleman sil
 		for _, v := range list {
 			if v == value && removed < count {
 				removed++
@@ -675,7 +654,6 @@ func (c *MemoryCache) LRem(key string, count int, value string) (int, error) {
 			newList = append(newList, v)
 		}
 	} else if count < 0 {
-		// Sondan |count| kadar eleman sil
 		matches := make([]int, 0)
 		for i, v := range list {
 			if v == value {
@@ -696,7 +674,6 @@ func (c *MemoryCache) LRem(key string, count int, value string) (int, error) {
 			}
 		}
 	} else {
-		// count == 0: tüm eşleşmeleri sil
 		for _, v := range list {
 			if v != value {
 				newList = append(newList, v)
@@ -707,7 +684,7 @@ func (c *MemoryCache) LRem(key string, count int, value string) (int, error) {
 	}
 
 	if removed > 0 {
-		c.incrementKeyVersion(key) // Versiyon güncelleme
+		c.incrementKeyVersion(key)
 	}
 
 	if len(newList) == 0 {
@@ -729,7 +706,6 @@ func (c *MemoryCache) Rename(oldKey, newKey string) error {
 	defer c.listsMu.Unlock()
 	defer c.setsMu_.Unlock()
 
-	// String tipinde
 	if val, exists := c.sets[oldKey]; exists {
 		c.sets[newKey] = val
 		delete(c.sets, oldKey)
@@ -737,12 +713,11 @@ func (c *MemoryCache) Rename(oldKey, newKey string) error {
 			c.expires[newKey] = expTime
 			delete(c.expires, oldKey)
 		}
-		c.incrementKeyVersion(oldKey) // Eski key'in versiyonunu güncelle
-		c.incrementKeyVersion(newKey) // Yeni key'in versiyonunu güncelle
+		c.incrementKeyVersion(oldKey)
+		c.incrementKeyVersion(newKey)
 		return nil
 	}
 
-	// Hash tipinde
 	if val, exists := c.hsets[oldKey]; exists {
 		c.hsets[newKey] = val
 		delete(c.hsets, oldKey)
@@ -751,7 +726,6 @@ func (c *MemoryCache) Rename(oldKey, newKey string) error {
 		return nil
 	}
 
-	// List tipinde
 	if val, exists := c.lists[oldKey]; exists {
 		c.lists[newKey] = val
 		delete(c.lists, oldKey)
@@ -760,7 +734,6 @@ func (c *MemoryCache) Rename(oldKey, newKey string) error {
 		return nil
 	}
 
-	// Set tipinde
 	if val, exists := c.sets_[oldKey]; exists {
 		c.sets_[newKey] = val
 		delete(c.sets_, oldKey)
@@ -769,24 +742,20 @@ func (c *MemoryCache) Rename(oldKey, newKey string) error {
 		return nil
 	}
 
-	// Key bulunamadı
 	return fmt.Errorf("ERR no such key")
 }
 
 func (c *MemoryCache) Info() map[string]string {
 	info := make(map[string]string)
 
-	// Server bilgileri
 	info["uptime_in_seconds"] = fmt.Sprintf("%d", int(time.Since(c.stats.startTime).Seconds()))
 	info["total_commands_processed"] = fmt.Sprintf("%d", atomic.LoadInt64(&c.stats.cmdCount))
 
-	// Memory kullanımı
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
 	info["used_memory"] = fmt.Sprintf("%d", memStats.Alloc)
 	info["used_memory_peak"] = fmt.Sprintf("%d", memStats.TotalAlloc)
 
-	// Keyler
 	info["total_keys"] = fmt.Sprintf("%d", c.DBSize())
 
 	c.setsMu.RLock()
@@ -848,19 +817,15 @@ func (c *MemoryCache) Exec() ([]models.Value, error) {
 		return nil, fmt.Errorf("ERR EXEC without MULTI")
 	}
 
-	// Watch'ları kontrol et
 	if !c.checkWatches(tx) {
 		delete(c.transactions, gid)
-		return nil, nil // Redis NULL response for failed transactions
+		return nil, nil
 	}
 
-	// Transaction'ı temizle
 	defer delete(c.transactions, gid)
 
-	// Tüm komutları sırayla çalıştır
 	results := make([]models.Value, 0, len(tx.Commands))
 
-	// Global mutex kullanarak atomikliği sağla
 	c.setsMu.Lock()
 	c.hsetsMu.Lock()
 	c.listsMu.Lock()
@@ -974,7 +939,6 @@ func (c *MemoryCache) Exec() ([]models.Value, error) {
 			result = models.Value{Type: "error", Str: "ERR unknown command " + cmd.Name}
 		}
 
-		// Her komutun versiyonunu artır
 		c.incrementKeyVersion(cmd.Args[0].Bulk)
 		results = append(results, result)
 	}
@@ -1043,7 +1007,6 @@ func (c *MemoryCache) Watch(keys ...string) error {
 		c.transactions[gid] = tx
 	}
 
-	// Her key için mevcut versiyonu kaydet
 	for _, key := range keys {
 		tx.Watches[key] = c.GetKeyVersion(key)
 	}
@@ -1058,7 +1021,7 @@ func (c *MemoryCache) Unwatch() error {
 	gid := getGoroutineID()
 	tx, exists := c.transactions[gid]
 	if !exists {
-		return nil // UNWATCH is a no-op if no WATCH is set
+		return nil
 	}
 
 	tx.Watches = make(map[string]int64)
@@ -1087,7 +1050,6 @@ func (c *MemoryCache) ZAdd(key string, score float64, member string) error {
 	c.zsetsMu.Lock()
 	defer c.zsetsMu.Unlock()
 
-	// Key için map yoksa oluştur
 	if _, exists := c.zsets[key]; !exists {
 		c.zsets[key] = make(map[string]float64)
 	}
@@ -1096,7 +1058,6 @@ func (c *MemoryCache) ZAdd(key string, score float64, member string) error {
 	return nil
 }
 
-// ZCard: Sorted set'teki eleman sayısını döner
 func (c *MemoryCache) ZCard(key string) int {
 	c.zsetsMu.RLock()
 	defer c.zsetsMu.RUnlock()
@@ -1107,7 +1068,6 @@ func (c *MemoryCache) ZCard(key string) int {
 	return 0
 }
 
-// ZCount: Belirli score aralığındaki eleman sayısını döner
 func (c *MemoryCache) ZCount(key string, min, max float64) int {
 	c.zsetsMu.RLock()
 	defer c.zsetsMu.RUnlock()
@@ -1123,14 +1083,12 @@ func (c *MemoryCache) ZCount(key string, min, max float64) int {
 	return count
 }
 
-// ZRange: Sıralı elemanları döner
 func (c *MemoryCache) ZRange(key string, start, stop int) []string {
 	members := c.getSortedMembers(key)
 	if len(members) == 0 {
 		return []string{}
 	}
 
-	// Negatif indeksleri handle et
 	if start < 0 {
 		start = len(members) + start
 	}
@@ -1138,7 +1096,6 @@ func (c *MemoryCache) ZRange(key string, start, stop int) []string {
 		stop = len(members) + stop
 	}
 
-	// Sınırları kontrol et
 	if start < 0 {
 		start = 0
 	}
@@ -1156,14 +1113,12 @@ func (c *MemoryCache) ZRange(key string, start, stop int) []string {
 	return result
 }
 
-// ZRangeWithScores: Sıralı elemanları score'larıyla birlikte döner
 func (c *MemoryCache) ZRangeWithScores(key string, start, stop int) []models.ZSetMember {
 	members := c.getSortedMembers(key)
 	if len(members) == 0 {
 		return []models.ZSetMember{}
 	}
 
-	// Negatif indeksleri handle et
 	if start < 0 {
 		start = len(members) + start
 	}
@@ -1171,7 +1126,6 @@ func (c *MemoryCache) ZRangeWithScores(key string, start, stop int) []models.ZSe
 		stop = len(members) + stop
 	}
 
-	// Sınırları kontrol et
 	if start < 0 {
 		start = 0
 	}
@@ -1185,7 +1139,6 @@ func (c *MemoryCache) ZRangeWithScores(key string, start, stop int) []models.ZSe
 	return members[start : stop+1]
 }
 
-// ZRangeByScore: Belirli score aralığındaki elemanları döner
 func (c *MemoryCache) ZRangeByScore(key string, min, max float64) []string {
 	members := c.getSortedMembers(key)
 	result := make([]string, 0)
@@ -1198,7 +1151,6 @@ func (c *MemoryCache) ZRangeByScore(key string, min, max float64) []string {
 	return result
 }
 
-// ZRank: Elemanın sırasını döner
 func (c *MemoryCache) ZRank(key string, member string) (int, bool) {
 	members := c.getSortedMembers(key)
 	for i, m := range members {
@@ -1209,7 +1161,6 @@ func (c *MemoryCache) ZRank(key string, member string) (int, bool) {
 	return 0, false
 }
 
-// ZRem: Sorted set'ten eleman siler
 func (c *MemoryCache) ZRem(key string, member string) error {
 	c.zsetsMu.Lock()
 	defer c.zsetsMu.Unlock()
@@ -1223,7 +1174,6 @@ func (c *MemoryCache) ZRem(key string, member string) error {
 	return nil
 }
 
-// ZScore: Elemanın score değerini döner
 func (c *MemoryCache) ZScore(key string, member string) (float64, bool) {
 	c.zsetsMu.RLock()
 	defer c.zsetsMu.RUnlock()
@@ -1236,7 +1186,6 @@ func (c *MemoryCache) ZScore(key string, member string) (float64, bool) {
 	return 0, false
 }
 
-// Yardımcı method: Score'a göre sıralı üyeleri döner
 func (c *MemoryCache) getSortedMembers(key string) []models.ZSetMember {
 	c.zsetsMu.RLock()
 	defer c.zsetsMu.RUnlock()
@@ -1254,7 +1203,6 @@ func (c *MemoryCache) getSortedMembers(key string) []models.ZSetMember {
 		})
 	}
 
-	// Score'a göre sırala, aynı score'da lexicographical sıralama
 	sort.Slice(members, func(i, j int) bool {
 		if members[i].Score == members[j].Score {
 			return members[i].Member < members[j].Member
@@ -1271,12 +1219,10 @@ func (c *MemoryCache) ZRevRange(key string, start, stop int) []string {
 		return []string{}
 	}
 
-	// Reverse the slice
 	for i, j := 0, len(members)-1; i < j; i, j = i+1, j-1 {
 		members[i], members[j] = members[j], members[i]
 	}
 
-	// Negatif indeksleri handle et
 	if start < 0 {
 		start = len(members) + start
 	}
@@ -1284,7 +1230,6 @@ func (c *MemoryCache) ZRevRange(key string, start, stop int) []string {
 		stop = len(members) + stop
 	}
 
-	// Sınırları kontrol et
 	if start < 0 {
 		start = 0
 	}
@@ -1308,12 +1253,10 @@ func (c *MemoryCache) ZRevRangeWithScores(key string, start, stop int) []models.
 		return []models.ZSetMember{}
 	}
 
-	// Reverse the slice
 	for i, j := 0, len(members)-1; i < j; i, j = i+1, j-1 {
 		members[i], members[j] = members[j], members[i]
 	}
 
-	// Handle indices
 	if start < 0 {
 		start = len(members) + start
 	}
@@ -1372,7 +1315,6 @@ func (c *MemoryCache) ZInterStore(destination string, keys []string, weights []f
 		return 0, errors.New("ERR at least 1 input key is needed")
 	}
 
-	// weights array'ini normalize et
 	if weights == nil {
 		weights = make([]float64, len(keys))
 		for i := range weights {
@@ -1383,7 +1325,6 @@ func (c *MemoryCache) ZInterStore(destination string, keys []string, weights []f
 		return 0, errors.New("ERR weights length must match keys length")
 	}
 
-	// İlk set'in elemanlarıyla intersection map'i başlat
 	intersection := make(map[string]float64)
 	firstSet, exists := c.zsets[keys[0]]
 	if !exists {
@@ -1394,7 +1335,6 @@ func (c *MemoryCache) ZInterStore(destination string, keys []string, weights []f
 		intersection[member] = score * weights[0]
 	}
 
-	// Diğer setlerle kesişimi bul
 	for i := 1; i < len(keys); i++ {
 		set, exists := c.zsets[keys[i]]
 		if !exists {
@@ -1410,7 +1350,6 @@ func (c *MemoryCache) ZInterStore(destination string, keys []string, weights []f
 		intersection = tempIntersection
 	}
 
-	// Sonuç set'ini oluştur
 	c.zsets[destination] = intersection
 	return len(intersection), nil
 }
@@ -1423,7 +1362,6 @@ func (c *MemoryCache) ZUnionStore(destination string, keys []string, weights []f
 		return 0, errors.New("ERR at least 1 input key is needed")
 	}
 
-	// weights array'ini normalize et
 	if weights == nil {
 		weights = make([]float64, len(keys))
 		for i := range weights {
@@ -1436,7 +1374,6 @@ func (c *MemoryCache) ZUnionStore(destination string, keys []string, weights []f
 
 	union := make(map[string]float64)
 
-	// Tüm setleri birleştir
 	for i, key := range keys {
 		set, exists := c.zsets[key]
 		if !exists {
@@ -1452,7 +1389,6 @@ func (c *MemoryCache) ZUnionStore(destination string, keys []string, weights []f
 		}
 	}
 
-	// Sonuç set'ini oluştur
 	c.zsets[destination] = union
 	return len(union), nil
 }
@@ -1494,7 +1430,6 @@ func (c *MemoryCache) PFAdd(key string, elements ...string) (bool, error) {
 	c.hllsMu.Lock()
 	defer c.hllsMu.Unlock()
 
-	// Get or create HLL structure
 	hll, exists := c.hlls[key]
 	if !exists {
 		hll = models.NewHyperLogLog()
@@ -1503,10 +1438,8 @@ func (c *MemoryCache) PFAdd(key string, elements ...string) (bool, error) {
 
 	modified := false
 	for _, element := range elements {
-		// Calculate hash
 		hash := c.murmur3([]byte(element))
 
-		// Add element and track if HLL was modified
 		if hll.Add(hash) {
 			modified = true
 		}
@@ -1530,7 +1463,6 @@ func (c *MemoryCache) PFCount(keys ...string) (int64, error) {
 		return 0, nil
 	}
 
-	// Merge multiple HLLs
 	merged := models.NewHyperLogLog()
 	for _, key := range keys {
 		if hll, exists := c.hlls[key]; exists {
@@ -1547,14 +1479,12 @@ func (c *MemoryCache) PFMerge(destKey string, sourceKeys ...string) error {
 
 	merged := models.NewHyperLogLog()
 
-	// Merge source HLLs
 	for _, key := range sourceKeys {
 		if hll, exists := c.hlls[key]; exists {
 			merged.Merge(hll)
 		}
 	}
 
-	// Store result
 	c.hlls[destKey] = merged
 	return nil
 }
@@ -1606,7 +1536,6 @@ func (c *MemoryCache) ExecPipeline(pl *models.Pipeline) []models.Value {
 			}
 		}
 
-		// Her işlem sonrası versiyon güncelle
 		c.incrementKeyVersion(cmd.Args[0].Bulk)
 	}
 

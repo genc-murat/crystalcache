@@ -33,12 +33,10 @@ func (rd *RetryDecorator) executeWithRetry(operation func() error) error {
 				return nil
 			}
 
-			// Eğer maximum deneme sayısına ulaşıldıysa
 			if attempts >= rd.strategy.MaxAttempts {
 				return models.ErrMaxRetriesExceeded
 			}
 
-			// Exponential backoff ile bekleme süresi hesapla
 			if interval < rd.strategy.MaxInterval {
 				interval = time.Duration(float64(interval) * rd.strategy.Multiplier)
 				if interval > rd.strategy.MaxInterval {
@@ -56,7 +54,6 @@ func (rd *RetryDecorator) executeWithRetry(operation func() error) error {
 	}
 }
 
-// Constructor fonksiyonunu da ekleyelim
 func NewRetryDecorator(cache *MemoryCache, strategy models.RetryStrategy) *RetryDecorator {
 	return &RetryDecorator{
 		cache:    cache,
@@ -64,7 +61,6 @@ func NewRetryDecorator(cache *MemoryCache, strategy models.RetryStrategy) *Retry
 	}
 }
 
-// RetryDecorator'a eksik metodları ekleyelim
 func (rd *RetryDecorator) IncrCommandCount() {
 	rd.cache.IncrCommandCount()
 }
@@ -440,21 +436,18 @@ func (rd *RetryDecorator) Get(key string) (string, bool) {
 	return value, finalExists
 }
 
-// Set metodu
 func (rd *RetryDecorator) Set(key string, value string) error {
 	return rd.executeWithRetry(func() error {
 		return rd.cache.Set(key, value)
 	})
 }
 
-// HSet metodu
 func (rd *RetryDecorator) HSet(hash string, key string, value string) error {
 	return rd.executeWithRetry(func() error {
 		return rd.cache.HSet(hash, key, value)
 	})
 }
 
-// HGet metodu
 func (rd *RetryDecorator) HGet(hash string, key string) (string, bool) {
 	var value string
 	var exists bool
@@ -475,7 +468,6 @@ func (rd *RetryDecorator) HGet(hash string, key string) (string, bool) {
 	return value, finalExists
 }
 
-// HGetAll metodu
 func (rd *RetryDecorator) HGetAll(hash string) map[string]string {
 	var result map[string]string
 	rd.executeWithRetry(func() error {
@@ -485,7 +477,6 @@ func (rd *RetryDecorator) HGetAll(hash string) map[string]string {
 	return result
 }
 
-// Incr metodu
 func (rd *RetryDecorator) Incr(key string) (int, error) {
 	var value int
 	var finalErr error
@@ -503,7 +494,6 @@ func (rd *RetryDecorator) Incr(key string) (int, error) {
 	return value, finalErr
 }
 
-// LPush metodu
 func (rd *RetryDecorator) LPush(key string, value string) (int, error) {
 	var length int
 	var finalErr error
@@ -521,7 +511,6 @@ func (rd *RetryDecorator) LPush(key string, value string) (int, error) {
 	return length, finalErr
 }
 
-// RPush metodu
 func (rd *RetryDecorator) RPush(key string, value string) (int, error) {
 	var length int
 	var finalErr error

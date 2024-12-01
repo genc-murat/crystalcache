@@ -1,6 +1,5 @@
 package models
 
-// Transaction durumlarını tutacak struct
 type Transaction struct {
 	Commands []Command
 	InMulti  bool

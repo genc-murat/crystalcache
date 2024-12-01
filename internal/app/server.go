@@ -210,7 +210,6 @@ func (s *Server) handleHGetAll(args []models.Value) models.Value {
 	hash := args[0].Bulk
 	pairs := s.cache.HGetAll(hash)
 
-	// RESP protokolüne göre key-value çiftlerini array olarak dönüyoruz
 	result := make([]models.Value, 0, len(pairs)*2)
 	for key, value := range pairs {
 		result = append(result,
@@ -554,13 +553,11 @@ func (s *Server) handleCommand(value models.Value) models.Value {
 
 	cmd := strings.ToUpper(value.Array[0].Bulk)
 
-	// MULTI/EXEC/DISCARD komutları için özel işlem
 	if cmd == "MULTI" || cmd == "EXEC" || cmd == "DISCARD" {
 		handler := s.cmds[cmd]
 		return handler(value.Array[1:])
 	}
 
-	// Transaction içindeyse komutu queue'ya ekle
 	if s.cache.IsInTransaction() {
 		err := s.cache.AddToTransaction(models.Command{
 			Name: cmd,
@@ -572,7 +569,6 @@ func (s *Server) handleCommand(value models.Value) models.Value {
 		return models.Value{Type: "string", Str: "QUEUED"}
 	}
 
-	// Normal komut işleme
 	handler, exists := s.cmds[cmd]
 	if !exists {
 		return models.Value{Type: "error", Str: "ERR unknown command"}
@@ -639,7 +635,6 @@ func (s *Server) handleInfo(args []models.Value) models.Value {
 	info := s.cache.Info()
 	var builder strings.Builder
 
-	// Bilgileri sıralı şekilde yazdır
 	keys := make([]string, 0, len(info))
 	for k := range info {
 		keys = append(keys, k)
@@ -724,10 +719,8 @@ func (s *Server) handleUnwatch(args []models.Value) models.Value {
 }
 
 func (s *Server) handlePipeline(args []models.Value) models.Value {
-	// Pipeline nesnesini oluştur
 	pl := s.cache.Pipeline()
 
-	// Komutları pipeline'a ekle
 	for _, arg := range args {
 		if arg.Type != "array" {
 			continue
@@ -738,10 +731,8 @@ func (s *Server) handlePipeline(args []models.Value) models.Value {
 		})
 	}
 
-	// Pipeline'ı çalıştır
 	results := s.cache.ExecPipeline(pl)
 
-	// Sonuçları array olarak döndür
 	return models.Value{
 		Type:  "array",
 		Array: results,
@@ -753,7 +744,6 @@ func (s *Server) handleSetWithRetry(args []models.Value) models.Value {
 		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'set' command"}
 	}
 
-	// Retry stratejisini tanımla
 	strategy := models.RetryStrategy{
 		MaxAttempts:     3,
 		InitialInterval: 100 * time.Millisecond,
@@ -762,7 +752,6 @@ func (s *Server) handleSetWithRetry(args []models.Value) models.Value {
 		Timeout:         5 * time.Second,
 	}
 
-	// Retry dekoratorunu oluştur
 	retryCache := s.cache.WithRetry(strategy)
 
 	err := retryCache.Set(args[0].Bulk, args[1].Bulk)

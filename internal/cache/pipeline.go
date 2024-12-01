@@ -16,7 +16,6 @@ func NewPipeline(cache *MemoryCache) *Pipeline {
 	}
 }
 
-// Pipeline komut metodları
 func (p *Pipeline) Set(key, value string) {
 	p.commands = append(p.commands, models.PipelineCommand{
 		Name: "SET",
@@ -60,7 +59,6 @@ func (p *Pipeline) HGet(hash, key string) {
 func (p *Pipeline) Execute() []models.Value {
 	results := make([]models.Value, 0, len(p.commands))
 
-	// Tüm mutex'leri kilitle
 	p.cache.setsMu.Lock()
 	p.cache.hsetsMu.Lock()
 	p.cache.listsMu.Lock()
@@ -112,7 +110,6 @@ func (p *Pipeline) Execute() []models.Value {
 		results = append(results, result)
 	}
 
-	// Pipeline'ı temizle
 	p.commands = p.commands[:0]
 
 	return results
