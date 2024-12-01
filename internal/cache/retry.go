@@ -636,6 +636,63 @@ func (rd *RetryDecorator) ZScore(key string, member string) (float64, bool) {
 	return score, finalExists
 }
 
+func (rd *RetryDecorator) ZRevRange(key string, start, stop int) []string {
+	var result []string
+	rd.executeWithRetry(func() error {
+		result = rd.cache.ZRevRange(key, start, stop)
+		return nil
+	})
+	return result
+}
+
+func (rd *RetryDecorator) ZRevRangeWithScores(key string, start, stop int) []models.ZSetMember {
+	var result []models.ZSetMember
+	rd.executeWithRetry(func() error {
+		result = rd.cache.ZRevRangeWithScores(key, start, stop)
+		return nil
+	})
+	return result
+}
+
+func (rd *RetryDecorator) ZIncrBy(key string, increment float64, member string) (float64, error) {
+	var score float64
+	err := rd.executeWithRetry(func() error {
+		var err error
+		score, err = rd.cache.ZIncrBy(key, increment, member)
+		return err
+	})
+	return score, err
+}
+
+func (rd *RetryDecorator) ZRangeByScoreWithScores(key string, min, max float64) []models.ZSetMember {
+	var result []models.ZSetMember
+	rd.executeWithRetry(func() error {
+		result = rd.cache.ZRangeByScoreWithScores(key, min, max)
+		return nil
+	})
+	return result
+}
+
+func (rd *RetryDecorator) ZInterStore(destination string, keys []string, weights []float64) (int, error) {
+	var count int
+	err := rd.executeWithRetry(func() error {
+		var err error
+		count, err = rd.cache.ZInterStore(destination, keys, weights)
+		return err
+	})
+	return count, err
+}
+
+func (rd *RetryDecorator) ZUnionStore(destination string, keys []string, weights []float64) (int, error) {
+	var count int
+	err := rd.executeWithRetry(func() error {
+		var err error
+		count, err = rd.cache.ZUnionStore(destination, keys, weights)
+		return err
+	})
+	return count, err
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }

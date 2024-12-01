@@ -56,4 +56,10 @@ type Cache interface {
 	ZRank(key string, member string) (int, bool)
 	ZRem(key string, member string) error
 	ZScore(key string, member string) (float64, bool)
+	ZRevRange(key string, start, stop int) []string
+	ZRevRangeWithScores(key string, start, stop int) []models.ZSetMember
+	ZIncrBy(key string, increment float64, member string) (float64, error)
+	ZRangeByScoreWithScores(key string, min, max float64) []models.ZSetMember
+	ZInterStore(destination string, keys []string, weights []float64) (int, error)
+	ZUnionStore(destination string, keys []string, weights []float64) (int, error)
 }

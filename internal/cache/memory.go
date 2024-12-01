@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"errors"
 	"fmt"
 	"regexp"
 	"runtime"
@@ -1258,6 +1259,198 @@ func (c *MemoryCache) getSortedMembers(key string) []models.ZSetMember {
 	})
 
 	return members
+}
+
+func (c *MemoryCache) ZRevRange(key string, start, stop int) []string {
+	members := c.getSortedMembers(key)
+	if len(members) == 0 {
+		return []string{}
+	}
+
+	// Reverse the slice
+	for i, j := 0, len(members)-1; i < j; i, j = i+1, j-1 {
+		members[i], members[j] = members[j], members[i]
+	}
+
+	// Negatif indeksleri handle et
+	if start < 0 {
+		start = len(members) + start
+	}
+	if stop < 0 {
+		stop = len(members) + stop
+	}
+
+	// Sınırları kontrol et
+	if start < 0 {
+		start = 0
+	}
+	if stop >= len(members) {
+		stop = len(members) - 1
+	}
+	if start > stop {
+		return []string{}
+	}
+
+	result := make([]string, stop-start+1)
+	for i := start; i <= stop; i++ {
+		result[i-start] = members[i].Member
+	}
+	return result
+}
+
+func (c *MemoryCache) ZRevRangeWithScores(key string, start, stop int) []models.ZSetMember {
+	members := c.getSortedMembers(key)
+	if len(members) == 0 {
+		return []models.ZSetMember{}
+	}
+
+	// Reverse the slice
+	for i, j := 0, len(members)-1; i < j; i, j = i+1, j-1 {
+		members[i], members[j] = members[j], members[i]
+	}
+
+	// Handle indices
+	if start < 0 {
+		start = len(members) + start
+	}
+	if stop < 0 {
+		stop = len(members) + stop
+	}
+	if start < 0 {
+		start = 0
+	}
+	if stop >= len(members) {
+		stop = len(members) - 1
+	}
+	if start > stop {
+		return []models.ZSetMember{}
+	}
+
+	return members[start : stop+1]
+}
+
+func (c *MemoryCache) ZIncrBy(key string, increment float64, member string) (float64, error) {
+	c.zsetsMu.Lock()
+	defer c.zsetsMu.Unlock()
+
+	if _, exists := c.zsets[key]; !exists {
+		c.zsets[key] = make(map[string]float64)
+	}
+
+	currentScore, exists := c.zsets[key][member]
+	if !exists {
+		currentScore = 0
+	}
+
+	newScore := currentScore + increment
+	c.zsets[key][member] = newScore
+
+	return newScore, nil
+}
+
+func (c *MemoryCache) ZRangeByScoreWithScores(key string, min, max float64) []models.ZSetMember {
+	members := c.getSortedMembers(key)
+	result := make([]models.ZSetMember, 0)
+
+	for _, member := range members {
+		if member.Score >= min && member.Score <= max {
+			result = append(result, member)
+		}
+	}
+	return result
+}
+
+func (c *MemoryCache) ZInterStore(destination string, keys []string, weights []float64) (int, error) {
+	c.zsetsMu.Lock()
+	defer c.zsetsMu.Unlock()
+
+	if len(keys) == 0 {
+		return 0, errors.New("ERR at least 1 input key is needed")
+	}
+
+	// weights array'ini normalize et
+	if weights == nil {
+		weights = make([]float64, len(keys))
+		for i := range weights {
+			weights[i] = 1
+		}
+	}
+	if len(weights) != len(keys) {
+		return 0, errors.New("ERR weights length must match keys length")
+	}
+
+	// İlk set'in elemanlarıyla intersection map'i başlat
+	intersection := make(map[string]float64)
+	firstSet, exists := c.zsets[keys[0]]
+	if !exists {
+		return 0, nil
+	}
+
+	for member, score := range firstSet {
+		intersection[member] = score * weights[0]
+	}
+
+	// Diğer setlerle kesişimi bul
+	for i := 1; i < len(keys); i++ {
+		set, exists := c.zsets[keys[i]]
+		if !exists {
+			return 0, nil
+		}
+
+		tempIntersection := make(map[string]float64)
+		for member := range intersection {
+			if score, exists := set[member]; exists {
+				tempIntersection[member] = intersection[member] + (score * weights[i])
+			}
+		}
+		intersection = tempIntersection
+	}
+
+	// Sonuç set'ini oluştur
+	c.zsets[destination] = intersection
+	return len(intersection), nil
+}
+
+func (c *MemoryCache) ZUnionStore(destination string, keys []string, weights []float64) (int, error) {
+	c.zsetsMu.Lock()
+	defer c.zsetsMu.Unlock()
+
+	if len(keys) == 0 {
+		return 0, errors.New("ERR at least 1 input key is needed")
+	}
+
+	// weights array'ini normalize et
+	if weights == nil {
+		weights = make([]float64, len(keys))
+		for i := range weights {
+			weights[i] = 1
+		}
+	}
+	if len(weights) != len(keys) {
+		return 0, errors.New("ERR weights length must match keys length")
+	}
+
+	union := make(map[string]float64)
+
+	// Tüm setleri birleştir
+	for i, key := range keys {
+		set, exists := c.zsets[key]
+		if !exists {
+			continue
+		}
+
+		for member, score := range set {
+			if existingScore, exists := union[member]; exists {
+				union[member] = existingScore + (score * weights[i])
+			} else {
+				union[member] = score * weights[i]
+			}
+		}
+	}
+
+	// Sonuç set'ini oluştur
+	c.zsets[destination] = union
+	return len(union), nil
 }
 
 func (c *MemoryCache) ExecPipeline(pl *models.Pipeline) []models.Value {

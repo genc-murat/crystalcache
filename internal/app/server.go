@@ -82,6 +82,11 @@ func (s *Server) registerHandlers() {
 	s.cmds["ZRANK"] = s.handleZRank
 	s.cmds["ZREM"] = s.handleZRem
 	s.cmds["ZSCORE"] = s.handleZScore
+	s.cmds["ZREVRANGE"] = s.handleZRevRange
+	s.cmds["ZINCRBY"] = s.handleZIncrBy
+	s.cmds["ZRANGEBYSCORE"] = s.handleZRangeByScoreWithScores
+	s.cmds["ZINTERSTORE"] = s.handleZInterStore
+	s.cmds["ZUNIONSTORE"] = s.handleZUnionStore
 }
 
 func (s *Server) Start(address string) error {
@@ -894,4 +899,172 @@ func (s *Server) handleZScore(args []models.Value) models.Value {
 	}
 
 	return models.Value{Type: "bulk", Bulk: strconv.FormatFloat(score, 'f', -1, 64)}
+}
+
+func (s *Server) handleZRevRange(args []models.Value) models.Value {
+	if len(args) < 3 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'zrevrange' command"}
+	}
+
+	start, err := strconv.Atoi(args[1].Bulk)
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR start value is not an integer"}
+	}
+
+	stop, err := strconv.Atoi(args[2].Bulk)
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR stop value is not an integer"}
+	}
+
+	withScores := false
+	if len(args) == 4 && strings.ToUpper(args[3].Bulk) == "WITHSCORES" {
+		withScores = true
+	}
+
+	var result []models.Value
+	if withScores {
+		members := s.cache.ZRevRangeWithScores(args[0].Bulk, start, stop)
+		result = make([]models.Value, len(members)*2)
+		for i, member := range members {
+			result[i*2] = models.Value{Type: "bulk", Bulk: member.Member}
+			result[i*2+1] = models.Value{Type: "bulk", Bulk: strconv.FormatFloat(member.Score, 'f', -1, 64)}
+		}
+	} else {
+		members := s.cache.ZRevRange(args[0].Bulk, start, stop)
+		result = make([]models.Value, len(members))
+		for i, member := range members {
+			result[i] = models.Value{Type: "bulk", Bulk: member}
+		}
+	}
+
+	return models.Value{Type: "array", Array: result}
+}
+
+func (s *Server) handleZIncrBy(args []models.Value) models.Value {
+	if len(args) != 3 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'zincrby' command"}
+	}
+
+	increment, err := strconv.ParseFloat(args[1].Bulk, 64)
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR increment is not a valid float"}
+	}
+
+	score, err := s.cache.ZIncrBy(args[0].Bulk, increment, args[2].Bulk)
+	if err != nil {
+		return models.Value{Type: "error", Str: err.Error()}
+	}
+
+	return models.Value{Type: "bulk", Bulk: strconv.FormatFloat(score, 'f', -1, 64)}
+}
+
+func (s *Server) handleZRangeByScoreWithScores(args []models.Value) models.Value {
+	if len(args) != 4 || strings.ToUpper(args[3].Bulk) != "WITHSCORES" {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'zrangebyscore' command"}
+	}
+
+	min, err := strconv.ParseFloat(args[1].Bulk, 64)
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR min value is not a valid float"}
+	}
+
+	max, err := strconv.ParseFloat(args[2].Bulk, 64)
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR max value is not a valid float"}
+	}
+
+	members := s.cache.ZRangeByScoreWithScores(args[0].Bulk, min, max)
+	result := make([]models.Value, len(members)*2)
+	for i, member := range members {
+		result[i*2] = models.Value{Type: "bulk", Bulk: member.Member}
+		result[i*2+1] = models.Value{Type: "bulk", Bulk: strconv.FormatFloat(member.Score, 'f', -1, 64)}
+	}
+
+	return models.Value{Type: "array", Array: result}
+}
+
+func (s *Server) handleZInterStore(args []models.Value) models.Value {
+	if len(args) < 3 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'zinterstore' command"}
+	}
+
+	numKeys, err := strconv.Atoi(args[1].Bulk)
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR numkeys is not an integer"}
+	}
+
+	if len(args) < numKeys+2 {
+		return models.Value{Type: "error", Str: "ERR not enough keys specified"}
+	}
+
+	keys := make([]string, numKeys)
+	for i := 0; i < numKeys; i++ {
+		keys[i] = args[i+2].Bulk
+	}
+
+	var weights []float64
+	weightStartIdx := numKeys + 2
+	if len(args) > weightStartIdx && strings.ToUpper(args[weightStartIdx].Bulk) == "WEIGHTS" {
+		if len(args) < weightStartIdx+numKeys+1 {
+			return models.Value{Type: "error", Str: "ERR wrong number of weights"}
+		}
+		weights = make([]float64, numKeys)
+		for i := 0; i < numKeys; i++ {
+			weight, err := strconv.ParseFloat(args[weightStartIdx+i+1].Bulk, 64)
+			if err != nil {
+				return models.Value{Type: "error", Str: "ERR weight value is not a float"}
+			}
+			weights[i] = weight
+		}
+	}
+
+	count, err := s.cache.ZInterStore(args[0].Bulk, keys, weights)
+	if err != nil {
+		return models.Value{Type: "error", Str: err.Error()}
+	}
+
+	return models.Value{Type: "integer", Num: count}
+}
+
+func (s *Server) handleZUnionStore(args []models.Value) models.Value {
+	if len(args) < 3 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'zunionstore' command"}
+	}
+
+	numKeys, err := strconv.Atoi(args[1].Bulk)
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR numkeys is not an integer"}
+	}
+
+	if len(args) < numKeys+2 {
+		return models.Value{Type: "error", Str: "ERR not enough keys specified"}
+	}
+
+	keys := make([]string, numKeys)
+	for i := 0; i < numKeys; i++ {
+		keys[i] = args[i+2].Bulk
+	}
+
+	var weights []float64
+	weightStartIdx := numKeys + 2
+	if len(args) > weightStartIdx && strings.ToUpper(args[weightStartIdx].Bulk) == "WEIGHTS" {
+		if len(args) < weightStartIdx+numKeys+1 {
+			return models.Value{Type: "error", Str: "ERR wrong number of weights"}
+		}
+		weights = make([]float64, numKeys)
+		for i := 0; i < numKeys; i++ {
+			weight, err := strconv.ParseFloat(args[weightStartIdx+i+1].Bulk, 64)
+			if err != nil {
+				return models.Value{Type: "error", Str: "ERR weight value is not a float"}
+			}
+			weights[i] = weight
+		}
+	}
+
+	count, err := s.cache.ZUnionStore(args[0].Bulk, keys, weights)
+	if err != nil {
+		return models.Value{Type: "error", Str: err.Error()}
+	}
+
+	return models.Value{Type: "integer", Num: count}
 }
