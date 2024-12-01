@@ -36,9 +36,15 @@ type MemoryCache struct {
 	zsetsMu      sync.RWMutex
 	hlls         map[string]*models.HyperLogLog
 	hllsMu       sync.RWMutex
+	bloomFilter  *models.BloomFilter
 }
 
 func NewMemoryCache() *MemoryCache {
+	config := models.BloomFilterConfig{
+		ExpectedItems:     1000000, // 1M eleman
+		FalsePositiveRate: 0.01,    // %1 false positive
+	}
+
 	mc := &MemoryCache{
 		sets:         make(map[string]string),
 		hsets:        make(map[string]map[string]string),
@@ -50,6 +56,7 @@ func NewMemoryCache() *MemoryCache {
 		transactions: make(map[int64]*models.Transaction),
 		zsets:        make(map[string]map[string]float64),
 		hlls:         make(map[string]*models.HyperLogLog),
+		bloomFilter:  models.NewBloomFilter(config),
 	}
 
 	go func() {
@@ -150,6 +157,7 @@ func (c *MemoryCache) Del(key string) (bool, error) {
 }
 
 func (c *MemoryCache) Set(key string, value string) error {
+	c.bloomFilter.Add([]byte(key))
 	c.setsMu.Lock()
 	defer c.setsMu.Unlock()
 
@@ -159,6 +167,9 @@ func (c *MemoryCache) Set(key string, value string) error {
 }
 
 func (c *MemoryCache) Get(key string) (string, bool) {
+	if !c.bloomFilter.Contains([]byte(key)) {
+		return "", false
+	}
 	c.setsMu.RLock()
 	defer c.setsMu.RUnlock()
 
@@ -1540,6 +1551,10 @@ func (c *MemoryCache) ExecPipeline(pl *models.Pipeline) []models.Value {
 	}
 
 	return results
+}
+
+func (c *MemoryCache) GetBloomFilterStats() models.BloomFilterStats {
+	return c.bloomFilter.Stats()
 }
 
 func (c *MemoryCache) WithRetry(strategy models.RetryStrategy) ports.Cache {
