@@ -40,4 +40,7 @@ type Cache interface {
 	Discard() error
 	AddToTransaction(cmd models.Command) error
 	IsInTransaction() bool
+	Watch(keys ...string) error
+	Unwatch() error
+	GetKeyVersion(key string) int64
 }

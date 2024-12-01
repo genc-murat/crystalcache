@@ -71,6 +71,8 @@ func (s *Server) registerHandlers() {
 	s.cmds["MULTI"] = s.handleMulti
 	s.cmds["EXEC"] = s.handleExec
 	s.cmds["DISCARD"] = s.handleDiscard
+	s.cmds["WATCH"] = s.handleWatch
+	s.cmds["UNWATCH"] = s.handleUnwatch
 }
 
 func (s *Server) Start(address string) error {
@@ -666,6 +668,37 @@ func (s *Server) handleDiscard(args []models.Value) models.Value {
 	}
 
 	err := s.cache.Discard()
+	if err != nil {
+		return models.Value{Type: "error", Str: err.Error()}
+	}
+
+	return models.Value{Type: "string", Str: "OK"}
+}
+
+func (s *Server) handleWatch(args []models.Value) models.Value {
+	if len(args) < 1 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'watch' command"}
+	}
+
+	keys := make([]string, len(args))
+	for i, arg := range args {
+		keys[i] = arg.Bulk
+	}
+
+	err := s.cache.Watch(keys...)
+	if err != nil {
+		return models.Value{Type: "error", Str: err.Error()}
+	}
+
+	return models.Value{Type: "string", Str: "OK"}
+}
+
+func (s *Server) handleUnwatch(args []models.Value) models.Value {
+	if len(args) != 0 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'unwatch' command"}
+	}
+
+	err := s.cache.Unwatch()
 	if err != nil {
 		return models.Value{Type: "error", Str: err.Error()}
 	}

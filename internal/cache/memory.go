@@ -27,6 +27,8 @@ type MemoryCache struct {
 	stats        *Stats
 	transactions map[int64]*models.Transaction // goroutine ID'ye göre transaction takibi
 	txMu         sync.RWMutex
+	keyVersions  map[string]int64 // Her key için versiyon numarası
+	versionMu    sync.RWMutex
 }
 
 func NewMemoryCache() *MemoryCache {
@@ -37,6 +39,7 @@ func NewMemoryCache() *MemoryCache {
 		sets_:        make(map[string]map[string]bool),
 		expires:      make(map[string]time.Time),
 		stats:        NewStats(),
+		keyVersions:  make(map[string]int64),
 		transactions: make(map[int64]*models.Transaction),
 	}
 
@@ -135,13 +138,16 @@ func (c *MemoryCache) Del(key string) (bool, error) {
 
 	delete(c.sets, key)
 	delete(c.expires, key)
+	c.incrementKeyVersion(key) // Versiyon güncelleme
 	return true, nil
 }
 
 func (c *MemoryCache) Set(key string, value string) error {
 	c.setsMu.Lock()
 	defer c.setsMu.Unlock()
+
 	c.sets[key] = value
+	c.incrementKeyVersion(key)
 	return nil
 }
 
@@ -164,10 +170,11 @@ func (c *MemoryCache) HSet(hash string, key string, value string) error {
 	c.hsetsMu.Lock()
 	defer c.hsetsMu.Unlock()
 
-	if _, ok := c.hsets[hash]; !ok {
+	if _, exists := c.hsets[hash]; !exists {
 		c.hsets[hash] = make(map[string]string)
 	}
 	c.hsets[hash][key] = value
+	c.incrementKeyVersion(hash) // Hash key'in versiyonunu güncelle
 	return nil
 }
 
@@ -241,8 +248,8 @@ func (c *MemoryCache) LPush(key string, value string) (int, error) {
 	if _, exists := c.lists[key]; !exists {
 		c.lists[key] = make([]string, 0)
 	}
-
 	c.lists[key] = append([]string{value}, c.lists[key]...)
+	c.incrementKeyVersion(key) // Versiyon güncelleme
 	return len(c.lists[key]), nil
 }
 
@@ -253,8 +260,8 @@ func (c *MemoryCache) RPush(key string, value string) (int, error) {
 	if _, exists := c.lists[key]; !exists {
 		c.lists[key] = make([]string, 0)
 	}
-
 	c.lists[key] = append(c.lists[key], value)
+	c.incrementKeyVersion(key) // Versiyon güncelleme
 	return len(c.lists[key]), nil
 }
 
@@ -299,12 +306,12 @@ func (c *MemoryCache) SAdd(key string, member string) (bool, error) {
 		c.sets_[key] = make(map[string]bool)
 	}
 
-	// Eğer eleman zaten varsa false dön
 	if c.sets_[key][member] {
 		return false, nil
 	}
 
 	c.sets_[key][member] = true
+	c.incrementKeyVersion(key) // Versiyon güncelleme
 	return true, nil
 }
 
@@ -341,16 +348,13 @@ func (c *MemoryCache) LPop(key string) (string, bool) {
 		return "", false
 	}
 
-	// İlk elemanı al
 	value := list[0]
-	// Listeyi güncelle
 	c.lists[key] = list[1:]
+	c.incrementKeyVersion(key) // Versiyon güncelleme
 
-	// Liste boşsa key'i sil
 	if len(c.lists[key]) == 0 {
 		delete(c.lists, key)
 	}
-
 	return value, true
 }
 
@@ -363,17 +367,14 @@ func (c *MemoryCache) RPop(key string) (string, bool) {
 		return "", false
 	}
 
-	// Son elemanı al
 	lastIdx := len(list) - 1
 	value := list[lastIdx]
-	// Listeyi güncelle
 	c.lists[key] = list[:lastIdx]
+	c.incrementKeyVersion(key) // Versiyon güncelleme
 
-	// Liste boşsa key'i sil
 	if len(c.lists[key]) == 0 {
 		delete(c.lists, key)
 	}
-
 	return value, true
 }
 
@@ -403,12 +404,11 @@ func (c *MemoryCache) SRem(key string, member string) (bool, error) {
 	}
 
 	delete(set, member)
+	c.incrementKeyVersion(key) // Versiyon güncelleme
 
-	// Set boşsa key'i sil
 	if len(set) == 0 {
 		delete(c.sets_, key)
 	}
-
 	return true, nil
 }
 
@@ -695,6 +695,10 @@ func (c *MemoryCache) LRem(key string, count int, value string) (int, error) {
 		}
 	}
 
+	if removed > 0 {
+		c.incrementKeyVersion(key) // Versiyon güncelleme
+	}
+
 	if len(newList) == 0 {
 		delete(c.lists, key)
 	} else {
@@ -705,7 +709,6 @@ func (c *MemoryCache) LRem(key string, count int, value string) (int, error) {
 }
 
 func (c *MemoryCache) Rename(oldKey, newKey string) error {
-	// Tüm mutex'leri kilitle
 	c.setsMu.Lock()
 	c.hsetsMu.Lock()
 	c.listsMu.Lock()
@@ -723,6 +726,8 @@ func (c *MemoryCache) Rename(oldKey, newKey string) error {
 			c.expires[newKey] = expTime
 			delete(c.expires, oldKey)
 		}
+		c.incrementKeyVersion(oldKey) // Eski key'in versiyonunu güncelle
+		c.incrementKeyVersion(newKey) // Yeni key'in versiyonunu güncelle
 		return nil
 	}
 
@@ -730,6 +735,8 @@ func (c *MemoryCache) Rename(oldKey, newKey string) error {
 	if val, exists := c.hsets[oldKey]; exists {
 		c.hsets[newKey] = val
 		delete(c.hsets, oldKey)
+		c.incrementKeyVersion(oldKey)
+		c.incrementKeyVersion(newKey)
 		return nil
 	}
 
@@ -737,6 +744,8 @@ func (c *MemoryCache) Rename(oldKey, newKey string) error {
 	if val, exists := c.lists[oldKey]; exists {
 		c.lists[newKey] = val
 		delete(c.lists, oldKey)
+		c.incrementKeyVersion(oldKey)
+		c.incrementKeyVersion(newKey)
 		return nil
 	}
 
@@ -744,9 +753,12 @@ func (c *MemoryCache) Rename(oldKey, newKey string) error {
 	if val, exists := c.sets_[oldKey]; exists {
 		c.sets_[newKey] = val
 		delete(c.sets_, oldKey)
+		c.incrementKeyVersion(oldKey)
+		c.incrementKeyVersion(newKey)
 		return nil
 	}
 
+	// Key bulunamadı
 	return fmt.Errorf("ERR no such key")
 }
 
@@ -804,14 +816,20 @@ func (c *MemoryCache) Multi() error {
 	defer c.txMu.Unlock()
 
 	gid := getGoroutineID()
-	if _, exists := c.transactions[gid]; exists {
+	tx, exists := c.transactions[gid]
+	if exists && tx.InMulti {
 		return fmt.Errorf("ERR MULTI calls can not be nested")
 	}
 
-	c.transactions[gid] = &models.Transaction{
-		Commands: make([]models.Command, 0),
-		InMulti:  true,
+	if !exists {
+		tx = &models.Transaction{
+			Watches: make(map[string]int64),
+		}
+		c.transactions[gid] = tx
 	}
+
+	tx.Commands = make([]models.Command, 0)
+	tx.InMulti = true
 	return nil
 }
 
@@ -823,6 +841,12 @@ func (c *MemoryCache) Exec() ([]models.Value, error) {
 	tx, exists := c.transactions[gid]
 	if !exists || !tx.InMulti {
 		return nil, fmt.Errorf("ERR EXEC without MULTI")
+	}
+
+	// Watch'ları kontrol et
+	if !c.checkWatches(tx) {
+		delete(c.transactions, gid)
+		return nil, nil // Redis NULL response for failed transactions
 	}
 
 	// Transaction'ı temizle
@@ -851,6 +875,7 @@ func (c *MemoryCache) Exec() ([]models.Value, error) {
 			} else {
 				result = models.Value{Type: "string", Str: "OK"}
 			}
+
 		case "HSET":
 			err := c.HSet(cmd.Args[0].Bulk, cmd.Args[1].Bulk, cmd.Args[2].Bulk)
 			if err != nil {
@@ -858,10 +883,94 @@ func (c *MemoryCache) Exec() ([]models.Value, error) {
 			} else {
 				result = models.Value{Type: "string", Str: "OK"}
 			}
-		// Diğer komutlar için de benzer case'ler eklenebilir
+
+		case "LPUSH":
+			length, err := c.LPush(cmd.Args[0].Bulk, cmd.Args[1].Bulk)
+			if err != nil {
+				result = models.Value{Type: "error", Str: err.Error()}
+			} else {
+				result = models.Value{Type: "integer", Num: length}
+			}
+
+		case "RPUSH":
+			length, err := c.RPush(cmd.Args[0].Bulk, cmd.Args[1].Bulk)
+			if err != nil {
+				result = models.Value{Type: "error", Str: err.Error()}
+			} else {
+				result = models.Value{Type: "integer", Num: length}
+			}
+
+		case "SADD":
+			added, err := c.SAdd(cmd.Args[0].Bulk, cmd.Args[1].Bulk)
+			if err != nil {
+				result = models.Value{Type: "error", Str: err.Error()}
+			} else if added {
+				result = models.Value{Type: "integer", Num: 1}
+			} else {
+				result = models.Value{Type: "integer", Num: 0}
+			}
+
+		case "DEL":
+			deleted, err := c.Del(cmd.Args[0].Bulk)
+			if err != nil {
+				result = models.Value{Type: "error", Str: err.Error()}
+			} else if deleted {
+				result = models.Value{Type: "integer", Num: 1}
+			} else {
+				result = models.Value{Type: "integer", Num: 0}
+			}
+
+		case "LREM":
+			count, _ := strconv.Atoi(cmd.Args[1].Bulk)
+			removed, err := c.LRem(cmd.Args[0].Bulk, count, cmd.Args[2].Bulk)
+			if err != nil {
+				result = models.Value{Type: "error", Str: err.Error()}
+			} else {
+				result = models.Value{Type: "integer", Num: removed}
+			}
+
+		case "LSET":
+			index, _ := strconv.Atoi(cmd.Args[1].Bulk)
+			err := c.LSet(cmd.Args[0].Bulk, index, cmd.Args[2].Bulk)
+			if err != nil {
+				result = models.Value{Type: "error", Str: err.Error()}
+			} else {
+				result = models.Value{Type: "string", Str: "OK"}
+			}
+
+		case "EXPIRE":
+			seconds, _ := strconv.Atoi(cmd.Args[1].Bulk)
+			err := c.Expire(cmd.Args[0].Bulk, seconds)
+			if err != nil {
+				result = models.Value{Type: "error", Str: err.Error()}
+			} else {
+				result = models.Value{Type: "integer", Num: 1}
+			}
+
+		case "RENAME":
+			err := c.Rename(cmd.Args[0].Bulk, cmd.Args[1].Bulk)
+			if err != nil {
+				result = models.Value{Type: "error", Str: err.Error()}
+			} else {
+				result = models.Value{Type: "string", Str: "OK"}
+			}
+
+		case "SREM":
+			removed, err := c.SRem(cmd.Args[0].Bulk, cmd.Args[1].Bulk)
+			if err != nil {
+				result = models.Value{Type: "error", Str: err.Error()}
+			} else if removed {
+				result = models.Value{Type: "integer", Num: 1}
+			} else {
+				result = models.Value{Type: "integer", Num: 0}
+			}
+
 		default:
 			result = models.Value{Type: "error", Str: "ERR unknown command " + cmd.Name}
 		}
+
+		// Her komutun versiyonunu artır
+		c.incrementKeyVersion(cmd.Args[0].Bulk)
 		results = append(results, result)
 	}
 
@@ -902,4 +1011,63 @@ func (c *MemoryCache) IsInTransaction() bool {
 	gid := getGoroutineID()
 	tx, exists := c.transactions[gid]
 	return exists && tx.InMulti
+}
+
+func (c *MemoryCache) incrementKeyVersion(key string) {
+	c.versionMu.Lock()
+	defer c.versionMu.Unlock()
+	c.keyVersions[key]++
+}
+
+func (c *MemoryCache) GetKeyVersion(key string) int64 {
+	c.versionMu.RLock()
+	defer c.versionMu.RUnlock()
+	return c.keyVersions[key]
+}
+
+func (c *MemoryCache) Watch(keys ...string) error {
+	c.txMu.Lock()
+	defer c.txMu.Unlock()
+
+	gid := getGoroutineID()
+	tx, exists := c.transactions[gid]
+	if !exists {
+		tx = &models.Transaction{
+			Watches: make(map[string]int64),
+		}
+		c.transactions[gid] = tx
+	}
+
+	// Her key için mevcut versiyonu kaydet
+	for _, key := range keys {
+		tx.Watches[key] = c.GetKeyVersion(key)
+	}
+
+	return nil
+}
+
+func (c *MemoryCache) Unwatch() error {
+	c.txMu.Lock()
+	defer c.txMu.Unlock()
+
+	gid := getGoroutineID()
+	tx, exists := c.transactions[gid]
+	if !exists {
+		return nil // UNWATCH is a no-op if no WATCH is set
+	}
+
+	tx.Watches = make(map[string]int64)
+	return nil
+}
+
+func (c *MemoryCache) checkWatches(tx *models.Transaction) bool {
+	c.versionMu.RLock()
+	defer c.versionMu.RUnlock()
+
+	for key, version := range tx.Watches {
+		if currentVersion := c.keyVersions[key]; currentVersion != version {
+			return false
+		}
+	}
+	return true
 }
