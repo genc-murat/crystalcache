@@ -600,8 +600,10 @@ func NewStats() *Stats {
 	}
 }
 
-func (s *Stats) IncrCommandCount() {
-	atomic.AddInt64(&s.cmdCount, 1)
+func (c *MemoryCache) IncrCommandCount() {
+	if c.stats != nil {
+		atomic.AddInt64(&c.stats.cmdCount, 1)
+	}
 }
 
 func (c *MemoryCache) SDiff(keys ...string) []string {
@@ -795,12 +797,6 @@ func (c *MemoryCache) Info() map[string]string {
 	c.setsMu_.RUnlock()
 
 	return info
-}
-
-func (c *MemoryCache) IncrCommandCount() {
-	if c.stats != nil {
-		c.stats.IncrCommandCount()
-	}
 }
 
 func getGoroutineID() int64 {
@@ -1070,4 +1066,64 @@ func (c *MemoryCache) checkWatches(tx *models.Transaction) bool {
 		}
 	}
 	return true
+}
+
+func (c *MemoryCache) Pipeline() *models.Pipeline {
+	return &models.Pipeline{
+		Commands: make([]models.PipelineCommand, 0),
+	}
+}
+
+func (c *MemoryCache) ExecPipeline(pl *models.Pipeline) []models.Value {
+	c.setsMu.Lock()
+	c.hsetsMu.Lock()
+	c.listsMu.Lock()
+	c.setsMu_.Lock()
+	defer c.setsMu.Unlock()
+	defer c.hsetsMu.Unlock()
+	defer c.listsMu.Unlock()
+	defer c.setsMu_.Unlock()
+
+	results := make([]models.Value, 0, len(pl.Commands))
+
+	for _, cmd := range pl.Commands {
+		switch cmd.Name {
+		case "SET":
+			err := c.Set(cmd.Args[0].Bulk, cmd.Args[1].Bulk)
+			if err != nil {
+				results = append(results, models.Value{Type: "error", Str: err.Error()})
+			} else {
+				results = append(results, models.Value{Type: "string", Str: "OK"})
+			}
+
+		case "GET":
+			value, exists := c.Get(cmd.Args[0].Bulk)
+			if !exists {
+				results = append(results, models.Value{Type: "null"})
+			} else {
+				results = append(results, models.Value{Type: "bulk", Bulk: value})
+			}
+
+		case "HSET":
+			err := c.HSet(cmd.Args[0].Bulk, cmd.Args[1].Bulk, cmd.Args[2].Bulk)
+			if err != nil {
+				results = append(results, models.Value{Type: "error", Str: err.Error()})
+			} else {
+				results = append(results, models.Value{Type: "string", Str: "OK"})
+			}
+
+		case "HGET":
+			value, exists := c.HGet(cmd.Args[0].Bulk, cmd.Args[1].Bulk)
+			if !exists {
+				results = append(results, models.Value{Type: "null"})
+			} else {
+				results = append(results, models.Value{Type: "bulk", Bulk: value})
+			}
+		}
+
+		// Her işlem sonrası versiyon güncelle
+		c.incrementKeyVersion(cmd.Args[0].Bulk)
+	}
+
+	return results
 }

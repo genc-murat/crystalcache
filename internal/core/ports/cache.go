@@ -43,4 +43,7 @@ type Cache interface {
 	Watch(keys ...string) error
 	Unwatch() error
 	GetKeyVersion(key string) int64
+	Pipeline() *models.Pipeline
+	ExecPipeline(pipeline *models.Pipeline) []models.Value
+	IncrCommandCount()
 }

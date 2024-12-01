@@ -73,6 +73,7 @@ func (s *Server) registerHandlers() {
 	s.cmds["DISCARD"] = s.handleDiscard
 	s.cmds["WATCH"] = s.handleWatch
 	s.cmds["UNWATCH"] = s.handleUnwatch
+	s.cmds["PIPELINE"] = s.handlePipeline
 }
 
 func (s *Server) Start(address string) error {
@@ -704,4 +705,29 @@ func (s *Server) handleUnwatch(args []models.Value) models.Value {
 	}
 
 	return models.Value{Type: "string", Str: "OK"}
+}
+
+func (s *Server) handlePipeline(args []models.Value) models.Value {
+	// Pipeline nesnesini oluştur
+	pl := s.cache.Pipeline()
+
+	// Komutları pipeline'a ekle
+	for _, arg := range args {
+		if arg.Type != "array" {
+			continue
+		}
+		pl.Commands = append(pl.Commands, models.PipelineCommand{
+			Name: strings.ToUpper(arg.Array[0].Bulk),
+			Args: arg.Array[1:],
+		})
+	}
+
+	// Pipeline'ı çalıştır
+	results := s.cache.ExecPipeline(pl)
+
+	// Sonuçları array olarak döndür
+	return models.Value{
+		Type:  "array",
+		Array: results,
+	}
 }
