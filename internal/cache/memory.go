@@ -10,29 +10,34 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/genc-murat/crystalcache/internal/core/models"
 )
 
 type MemoryCache struct {
-	sets    map[string]string
-	hsets   map[string]map[string]string
-	lists   map[string][]string
-	sets_   map[string]map[string]bool
-	expires map[string]time.Time
-	setsMu  sync.RWMutex
-	hsetsMu sync.RWMutex
-	listsMu sync.RWMutex
-	setsMu_ sync.RWMutex
-	stats   *Stats
+	sets         map[string]string
+	hsets        map[string]map[string]string
+	lists        map[string][]string
+	sets_        map[string]map[string]bool
+	expires      map[string]time.Time
+	setsMu       sync.RWMutex
+	hsetsMu      sync.RWMutex
+	listsMu      sync.RWMutex
+	setsMu_      sync.RWMutex
+	stats        *Stats
+	transactions map[int64]*models.Transaction // goroutine ID'ye göre transaction takibi
+	txMu         sync.RWMutex
 }
 
 func NewMemoryCache() *MemoryCache {
 	mc := &MemoryCache{
-		sets:    make(map[string]string),
-		hsets:   make(map[string]map[string]string),
-		lists:   make(map[string][]string),
-		sets_:   make(map[string]map[string]bool),
-		expires: make(map[string]time.Time),
-		stats:   NewStats(),
+		sets:         make(map[string]string),
+		hsets:        make(map[string]map[string]string),
+		lists:        make(map[string][]string),
+		sets_:        make(map[string]map[string]bool),
+		expires:      make(map[string]time.Time),
+		stats:        NewStats(),
+		transactions: make(map[int64]*models.Transaction),
 	}
 
 	// Expire check goroutine'u
@@ -784,4 +789,117 @@ func (c *MemoryCache) IncrCommandCount() {
 	if c.stats != nil {
 		c.stats.IncrCommandCount()
 	}
+}
+
+func getGoroutineID() int64 {
+	var buf [64]byte
+	n := runtime.Stack(buf[:], false)
+	idField := strings.Fields(strings.TrimPrefix(string(buf[:n]), "goroutine "))[0]
+	id, _ := strconv.ParseInt(idField, 10, 64)
+	return id
+}
+
+func (c *MemoryCache) Multi() error {
+	c.txMu.Lock()
+	defer c.txMu.Unlock()
+
+	gid := getGoroutineID()
+	if _, exists := c.transactions[gid]; exists {
+		return fmt.Errorf("ERR MULTI calls can not be nested")
+	}
+
+	c.transactions[gid] = &models.Transaction{
+		Commands: make([]models.Command, 0),
+		InMulti:  true,
+	}
+	return nil
+}
+
+func (c *MemoryCache) Exec() ([]models.Value, error) {
+	c.txMu.Lock()
+	defer c.txMu.Unlock()
+
+	gid := getGoroutineID()
+	tx, exists := c.transactions[gid]
+	if !exists || !tx.InMulti {
+		return nil, fmt.Errorf("ERR EXEC without MULTI")
+	}
+
+	// Transaction'ı temizle
+	defer delete(c.transactions, gid)
+
+	// Tüm komutları sırayla çalıştır
+	results := make([]models.Value, 0, len(tx.Commands))
+
+	// Global mutex kullanarak atomikliği sağla
+	c.setsMu.Lock()
+	c.hsetsMu.Lock()
+	c.listsMu.Lock()
+	c.setsMu_.Lock()
+	defer c.setsMu.Unlock()
+	defer c.hsetsMu.Unlock()
+	defer c.listsMu.Unlock()
+	defer c.setsMu_.Unlock()
+
+	for _, cmd := range tx.Commands {
+		var result models.Value
+		switch cmd.Name {
+		case "SET":
+			err := c.Set(cmd.Args[0].Bulk, cmd.Args[1].Bulk)
+			if err != nil {
+				result = models.Value{Type: "error", Str: err.Error()}
+			} else {
+				result = models.Value{Type: "string", Str: "OK"}
+			}
+		case "HSET":
+			err := c.HSet(cmd.Args[0].Bulk, cmd.Args[1].Bulk, cmd.Args[2].Bulk)
+			if err != nil {
+				result = models.Value{Type: "error", Str: err.Error()}
+			} else {
+				result = models.Value{Type: "string", Str: "OK"}
+			}
+		// Diğer komutlar için de benzer case'ler eklenebilir
+		default:
+			result = models.Value{Type: "error", Str: "ERR unknown command " + cmd.Name}
+		}
+		results = append(results, result)
+	}
+
+	return results, nil
+}
+
+func (c *MemoryCache) Discard() error {
+	c.txMu.Lock()
+	defer c.txMu.Unlock()
+
+	gid := getGoroutineID()
+	if _, exists := c.transactions[gid]; !exists {
+		return fmt.Errorf("ERR DISCARD without MULTI")
+	}
+
+	delete(c.transactions, gid)
+	return nil
+}
+
+func (c *MemoryCache) AddToTransaction(cmd models.Command) error {
+	c.txMu.Lock()
+	defer c.txMu.Unlock()
+
+	gid := getGoroutineID()
+	tx, exists := c.transactions[gid]
+	if !exists || !tx.InMulti {
+		return fmt.Errorf("ERR no MULTI context")
+	}
+
+	tx.Commands = append(tx.Commands, cmd)
+	return nil
+}
+
+func (c *MemoryCache) IsInTransaction() bool {
+	c.txMu.RLock()
+	defer c.txMu.RUnlock()
+
+	gid := getGoroutineID()
+	tx, exists := c.transactions[gid]
+	return exists && tx.InMulti
 }

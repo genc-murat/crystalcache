@@ -68,6 +68,9 @@ func (s *Server) registerHandlers() {
 	s.cmds["LREM"] = s.handleLRem
 	s.cmds["RENAME"] = s.handleRename
 	s.cmds["INFO"] = s.handleInfo
+	s.cmds["MULTI"] = s.handleMulti
+	s.cmds["EXEC"] = s.handleExec
+	s.cmds["DISCARD"] = s.handleDiscard
 }
 
 func (s *Server) Start(address string) error {
@@ -526,12 +529,31 @@ func (s *Server) handleDBSize(args []models.Value) models.Value {
 }
 
 func (s *Server) handleCommand(value models.Value) models.Value {
-	// Type assertion'ı güvenli bir şekilde yapıyoruz
 	if memCache, ok := s.cache.(*cache.MemoryCache); ok {
 		memCache.IncrCommandCount()
 	}
 
 	cmd := strings.ToUpper(value.Array[0].Bulk)
+
+	// MULTI/EXEC/DISCARD komutları için özel işlem
+	if cmd == "MULTI" || cmd == "EXEC" || cmd == "DISCARD" {
+		handler := s.cmds[cmd]
+		return handler(value.Array[1:])
+	}
+
+	// Transaction içindeyse komutu queue'ya ekle
+	if s.cache.IsInTransaction() {
+		err := s.cache.AddToTransaction(models.Command{
+			Name: cmd,
+			Args: value.Array[1:],
+		})
+		if err != nil {
+			return models.Value{Type: "error", Str: err.Error()}
+		}
+		return models.Value{Type: "string", Str: "QUEUED"}
+	}
+
+	// Normal komut işleme
 	handler, exists := s.cmds[cmd]
 	if !exists {
 		return models.Value{Type: "error", Str: "ERR unknown command"}
@@ -610,4 +632,43 @@ func (s *Server) handleInfo(args []models.Value) models.Value {
 	}
 
 	return models.Value{Type: "bulk", Bulk: builder.String()}
+}
+
+func (s *Server) handleMulti(args []models.Value) models.Value {
+	if len(args) != 0 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'multi' command"}
+	}
+
+	err := s.cache.Multi()
+	if err != nil {
+		return models.Value{Type: "error", Str: err.Error()}
+	}
+
+	return models.Value{Type: "string", Str: "OK"}
+}
+
+func (s *Server) handleExec(args []models.Value) models.Value {
+	if len(args) != 0 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'exec' command"}
+	}
+
+	results, err := s.cache.Exec()
+	if err != nil {
+		return models.Value{Type: "error", Str: err.Error()}
+	}
+
+	return models.Value{Type: "array", Array: results}
+}
+
+func (s *Server) handleDiscard(args []models.Value) models.Value {
+	if len(args) != 0 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'discard' command"}
+	}
+
+	err := s.cache.Discard()
+	if err != nil {
+		return models.Value{Type: "error", Str: err.Error()}
+	}
+
+	return models.Value{Type: "string", Str: "OK"}
 }

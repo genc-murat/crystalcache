@@ -1,5 +1,7 @@
 package ports
 
+import "github.com/genc-murat/crystalcache/internal/core/models"
+
 type Cache interface {
 	Set(key string, value string) error
 	Get(key string) (string, bool)
@@ -33,4 +35,9 @@ type Cache interface {
 	LRem(key string, count int, value string) (int, error)
 	Rename(oldKey, newKey string) error
 	Info() map[string]string
+	Multi() error
+	Exec() ([]models.Value, error)
+	Discard() error
+	AddToTransaction(cmd models.Command) error
+	IsInTransaction() bool
 }
