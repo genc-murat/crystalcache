@@ -46,4 +46,5 @@ type Cache interface {
 	Pipeline() *models.Pipeline
 	ExecPipeline(pipeline *models.Pipeline) []models.Value
 	IncrCommandCount()
+	WithRetry(strategy models.RetryStrategy) Cache
 }

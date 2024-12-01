@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/genc-murat/crystalcache/internal/core/models"
+	"github.com/genc-murat/crystalcache/internal/core/ports"
 )
 
 type MemoryCache struct {
@@ -1126,4 +1127,8 @@ func (c *MemoryCache) ExecPipeline(pl *models.Pipeline) []models.Value {
 	}
 
 	return results
+}
+
+func (c *MemoryCache) WithRetry(strategy models.RetryStrategy) ports.Cache {
+	return NewRetryDecorator(c, strategy)
 }

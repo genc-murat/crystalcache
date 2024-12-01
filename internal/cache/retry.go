@@ -1,0 +1,544 @@
+package cache
+
+import (
+	"context"
+	"errors"
+	"time"
+
+	"github.com/genc-murat/crystalcache/internal/core/models"
+	"github.com/genc-murat/crystalcache/internal/core/ports"
+)
+
+type RetryDecorator struct {
+	cache    *MemoryCache
+	strategy models.RetryStrategy
+}
+
+func (rd *RetryDecorator) executeWithRetry(operation func() error) error {
+	ctx, cancel := context.WithTimeout(context.Background(), rd.strategy.Timeout)
+	defer cancel()
+
+	attempts := 0
+	interval := rd.strategy.InitialInterval
+
+	for {
+		select {
+		case <-ctx.Done():
+			return models.ErrOperationTimeout
+		default:
+			attempts++
+
+			err := operation()
+			if err == nil {
+				return nil
+			}
+
+			// Eğer maximum deneme sayısına ulaşıldıysa
+			if attempts >= rd.strategy.MaxAttempts {
+				return models.ErrMaxRetriesExceeded
+			}
+
+			// Exponential backoff ile bekleme süresi hesapla
+			if interval < rd.strategy.MaxInterval {
+				interval = time.Duration(float64(interval) * rd.strategy.Multiplier)
+				if interval > rd.strategy.MaxInterval {
+					interval = rd.strategy.MaxInterval
+				}
+			}
+
+			select {
+			case <-ctx.Done():
+				return models.ErrOperationTimeout
+			case <-time.After(interval):
+				// Bir sonraki deneme için bekle
+			}
+		}
+	}
+}
+
+// Constructor fonksiyonunu da ekleyelim
+func NewRetryDecorator(cache *MemoryCache, strategy models.RetryStrategy) *RetryDecorator {
+	return &RetryDecorator{
+		cache:    cache,
+		strategy: strategy,
+	}
+}
+
+// RetryDecorator'a eksik metodları ekleyelim
+func (rd *RetryDecorator) IncrCommandCount() {
+	rd.cache.IncrCommandCount()
+}
+
+func (rd *RetryDecorator) Pipeline() *models.Pipeline {
+	return rd.cache.Pipeline()
+}
+
+func (rd *RetryDecorator) ExecPipeline(pipeline *models.Pipeline) []models.Value {
+	var results []models.Value
+	err := rd.executeWithRetry(func() error {
+		results = rd.cache.ExecPipeline(pipeline)
+		return nil
+	})
+	if err != nil {
+		return []models.Value{{Type: "error", Str: err.Error()}}
+	}
+	return results
+}
+
+func (rd *RetryDecorator) Multi() error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.Multi()
+	})
+}
+
+func (rd *RetryDecorator) Exec() ([]models.Value, error) {
+	var results []models.Value
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		results, err = rd.cache.Exec()
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return results, finalErr
+}
+
+func (rd *RetryDecorator) Discard() error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.Discard()
+	})
+}
+
+func (rd *RetryDecorator) Watch(keys ...string) error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.Watch(keys...)
+	})
+}
+
+func (rd *RetryDecorator) Unwatch() error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.Unwatch()
+	})
+}
+
+func (rd *RetryDecorator) IsInTransaction() bool {
+	return rd.cache.IsInTransaction()
+}
+
+func (rd *RetryDecorator) AddToTransaction(cmd models.Command) error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.AddToTransaction(cmd)
+	})
+}
+
+func (rd *RetryDecorator) Keys(pattern string) []string {
+	var results []string
+	rd.executeWithRetry(func() error {
+		results = rd.cache.Keys(pattern)
+		return nil
+	})
+	return results
+}
+
+func (rd *RetryDecorator) TTL(key string) int {
+	var ttl int
+	rd.executeWithRetry(func() error {
+		ttl = rd.cache.TTL(key)
+		return nil
+	})
+	return ttl
+}
+
+func (rd *RetryDecorator) Type(key string) string {
+	var typ string
+	rd.executeWithRetry(func() error {
+		typ = rd.cache.Type(key)
+		return nil
+	})
+	return typ
+}
+
+func (rd *RetryDecorator) Exists(key string) bool {
+	var exists bool
+	rd.executeWithRetry(func() error {
+		exists = rd.cache.Exists(key)
+		return nil
+	})
+	return exists
+}
+
+func (rd *RetryDecorator) FlushAll() {
+	rd.executeWithRetry(func() error {
+		rd.cache.FlushAll()
+		return nil
+	})
+}
+
+func (rd *RetryDecorator) DBSize() int {
+	var size int
+	rd.executeWithRetry(func() error {
+		size = rd.cache.DBSize()
+		return nil
+	})
+	return size
+}
+
+func (rd *RetryDecorator) Info() map[string]string {
+	var info map[string]string
+	rd.executeWithRetry(func() error {
+		info = rd.cache.Info()
+		return nil
+	})
+	return info
+}
+
+func (rd *RetryDecorator) LLen(key string) int {
+	var length int
+	rd.executeWithRetry(func() error {
+		length = rd.cache.LLen(key)
+		return nil
+	})
+	return length
+}
+
+func (rd *RetryDecorator) LPop(key string) (string, bool) {
+	var value string
+	var exists bool
+	var finalExists bool
+
+	err := rd.executeWithRetry(func() error {
+		value, exists = rd.cache.LPop(key)
+		if exists {
+			finalExists = true
+			return nil
+		}
+		return errors.New("key not found")
+	})
+
+	if err != nil {
+		return "", false
+	}
+	return value, finalExists
+}
+
+func (rd *RetryDecorator) RPop(key string) (string, bool) {
+	var value string
+	var exists bool
+	var finalExists bool
+
+	err := rd.executeWithRetry(func() error {
+		value, exists = rd.cache.RPop(key)
+		if exists {
+			finalExists = true
+			return nil
+		}
+		return errors.New("key not found")
+	})
+
+	if err != nil {
+		return "", false
+	}
+	return value, finalExists
+}
+
+func (rd *RetryDecorator) Del(key string) (bool, error) {
+	var deleted bool
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		deleted, err = rd.cache.Del(key)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return false, err
+	}
+	return deleted, finalErr
+}
+
+func (rd *RetryDecorator) SCard(key string) int {
+	var count int
+	rd.executeWithRetry(func() error {
+		count = rd.cache.SCard(key)
+		return nil
+	})
+	return count
+}
+
+func (rd *RetryDecorator) SRem(key string, member string) (bool, error) {
+	var removed bool
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		removed, err = rd.cache.SRem(key, member)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return false, err
+	}
+	return removed, finalErr
+}
+
+func (rd *RetryDecorator) SIsMember(key string, member string) bool {
+	var isMember bool
+	rd.executeWithRetry(func() error {
+		isMember = rd.cache.SIsMember(key, member)
+		return nil
+	})
+	return isMember
+}
+
+func (rd *RetryDecorator) Expire(key string, seconds int) error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.Expire(key, seconds)
+	})
+}
+
+func (rd *RetryDecorator) GetKeyVersion(key string) int64 {
+	var version int64
+	rd.executeWithRetry(func() error {
+		version = rd.cache.GetKeyVersion(key)
+		return nil
+	})
+	return version
+}
+
+func (rd *RetryDecorator) LRange(key string, start, stop int) ([]string, error) {
+	var result []string
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		result, err = rd.cache.LRange(key, start, stop)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return result, finalErr
+}
+
+func (rd *RetryDecorator) LSet(key string, index int, value string) error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.LSet(key, index, value)
+	})
+}
+
+func (rd *RetryDecorator) LRem(key string, count int, value string) (int, error) {
+	var removed int
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		removed, err = rd.cache.LRem(key, count, value)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return 0, err
+	}
+	return removed, finalErr
+}
+
+func (rd *RetryDecorator) SAdd(key string, member string) (bool, error) {
+	var added bool
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		added, err = rd.cache.SAdd(key, member)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return false, err
+	}
+	return added, finalErr
+}
+
+func (rd *RetryDecorator) SMembers(key string) ([]string, error) {
+	var members []string
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		members, err = rd.cache.SMembers(key)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return members, finalErr
+}
+
+func (rd *RetryDecorator) SDiff(keys ...string) []string {
+	var diff []string
+	rd.executeWithRetry(func() error {
+		diff = rd.cache.SDiff(keys...)
+		return nil
+	})
+	return diff
+}
+
+func (rd *RetryDecorator) SInter(keys ...string) []string {
+	var inter []string
+	rd.executeWithRetry(func() error {
+		inter = rd.cache.SInter(keys...)
+		return nil
+	})
+	return inter
+}
+
+func (rd *RetryDecorator) SUnion(keys ...string) []string {
+	var union []string
+	rd.executeWithRetry(func() error {
+		union = rd.cache.SUnion(keys...)
+		return nil
+	})
+	return union
+}
+
+func (rd *RetryDecorator) Rename(oldKey, newKey string) error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.Rename(oldKey, newKey)
+	})
+}
+
+func (rd *RetryDecorator) Get(key string) (string, bool) {
+	var value string
+	var exists bool
+	var finalExists bool
+
+	err := rd.executeWithRetry(func() error {
+		value, exists = rd.cache.Get(key)
+		if exists {
+			finalExists = true
+			return nil
+		}
+		return errors.New("key not found")
+	})
+
+	if err != nil {
+		return "", false
+	}
+	return value, finalExists
+}
+
+// Set metodu
+func (rd *RetryDecorator) Set(key string, value string) error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.Set(key, value)
+	})
+}
+
+// HSet metodu
+func (rd *RetryDecorator) HSet(hash string, key string, value string) error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.HSet(hash, key, value)
+	})
+}
+
+// HGet metodu
+func (rd *RetryDecorator) HGet(hash string, key string) (string, bool) {
+	var value string
+	var exists bool
+	var finalExists bool
+
+	err := rd.executeWithRetry(func() error {
+		value, exists = rd.cache.HGet(hash, key)
+		if exists {
+			finalExists = true
+			return nil
+		}
+		return errors.New("hash key not found")
+	})
+
+	if err != nil {
+		return "", false
+	}
+	return value, finalExists
+}
+
+// HGetAll metodu
+func (rd *RetryDecorator) HGetAll(hash string) map[string]string {
+	var result map[string]string
+	rd.executeWithRetry(func() error {
+		result = rd.cache.HGetAll(hash)
+		return nil
+	})
+	return result
+}
+
+// Incr metodu
+func (rd *RetryDecorator) Incr(key string) (int, error) {
+	var value int
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		value, err = rd.cache.Incr(key)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return 0, err
+	}
+	return value, finalErr
+}
+
+// LPush metodu
+func (rd *RetryDecorator) LPush(key string, value string) (int, error) {
+	var length int
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		length, err = rd.cache.LPush(key, value)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return 0, err
+	}
+	return length, finalErr
+}
+
+// RPush metodu
+func (rd *RetryDecorator) RPush(key string, value string) (int, error) {
+	var length int
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		length, err = rd.cache.RPush(key, value)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return 0, err
+	}
+	return length, finalErr
+}
+
+func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
+	return NewRetryDecorator(rd.cache, strategy)
+}

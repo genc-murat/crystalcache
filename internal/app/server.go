@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/genc-murat/crystalcache/internal/cache"
 	"github.com/genc-murat/crystalcache/internal/core/models"
@@ -730,4 +731,36 @@ func (s *Server) handlePipeline(args []models.Value) models.Value {
 		Type:  "array",
 		Array: results,
 	}
+}
+
+func (s *Server) handleSetWithRetry(args []models.Value) models.Value {
+	if len(args) != 2 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'set' command"}
+	}
+
+	// Retry stratejisini tanımla
+	strategy := models.RetryStrategy{
+		MaxAttempts:     3,
+		InitialInterval: 100 * time.Millisecond,
+		MaxInterval:     1 * time.Second,
+		Multiplier:      2.0,
+		Timeout:         5 * time.Second,
+	}
+
+	// Retry dekoratorunu oluştur
+	retryCache := s.cache.WithRetry(strategy)
+
+	err := retryCache.Set(args[0].Bulk, args[1].Bulk)
+	if err != nil {
+		switch err {
+		case models.ErrMaxRetriesExceeded:
+			return models.Value{Type: "error", Str: "ERR max retries exceeded"}
+		case models.ErrOperationTimeout:
+			return models.Value{Type: "error", Str: "ERR operation timeout"}
+		default:
+			return models.Value{Type: "error", Str: err.Error()}
+		}
+	}
+
+	return models.Value{Type: "string", Str: "OK"}
 }
