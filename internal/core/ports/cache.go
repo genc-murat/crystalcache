@@ -16,4 +16,9 @@ type Cache interface {
 	LRange(key string, start, stop int) ([]string, error)
 	SAdd(key string, member string) (bool, error)
 	SMembers(key string) ([]string, error)
+	LLen(key string) int
+	LPop(key string) (string, bool)
+	RPop(key string) (string, bool)
+	SCard(key string) int
+	SRem(key string, member string) (bool, error)
 }

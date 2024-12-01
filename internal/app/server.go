@@ -47,6 +47,11 @@ func (s *Server) registerHandlers() {
 	s.cmds["LRANGE"] = s.handleLRange
 	s.cmds["SADD"] = s.handleSAdd
 	s.cmds["SMEMBERS"] = s.handleSMembers
+	s.cmds["LLEN"] = s.handleLLen
+	s.cmds["LPOP"] = s.handleLPop
+	s.cmds["RPOP"] = s.handleRPop
+	s.cmds["SCARD"] = s.handleSCard
+	s.cmds["SREM"] = s.handleSRem
 }
 
 func (s *Server) Start(address string) error {
@@ -349,4 +354,64 @@ func (s *Server) handleSMembers(args []models.Value) models.Value {
 	}
 
 	return models.Value{Type: "array", Array: result}
+}
+
+func (s *Server) handleLLen(args []models.Value) models.Value {
+	if len(args) != 1 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'llen' command"}
+	}
+
+	length := s.cache.LLen(args[0].Bulk)
+	return models.Value{Type: "integer", Num: length}
+}
+
+func (s *Server) handleLPop(args []models.Value) models.Value {
+	if len(args) != 1 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'lpop' command"}
+	}
+
+	value, exists := s.cache.LPop(args[0].Bulk)
+	if !exists {
+		return models.Value{Type: "null"}
+	}
+
+	return models.Value{Type: "bulk", Bulk: value}
+}
+
+func (s *Server) handleRPop(args []models.Value) models.Value {
+	if len(args) != 1 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'rpop' command"}
+	}
+
+	value, exists := s.cache.RPop(args[0].Bulk)
+	if !exists {
+		return models.Value{Type: "null"}
+	}
+
+	return models.Value{Type: "bulk", Bulk: value}
+}
+
+func (s *Server) handleSCard(args []models.Value) models.Value {
+	if len(args) != 1 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'scard' command"}
+	}
+
+	count := s.cache.SCard(args[0].Bulk)
+	return models.Value{Type: "integer", Num: count}
+}
+
+func (s *Server) handleSRem(args []models.Value) models.Value {
+	if len(args) != 2 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'srem' command"}
+	}
+
+	removed, err := s.cache.SRem(args[0].Bulk, args[1].Bulk)
+	if err != nil {
+		return models.Value{Type: "error", Str: err.Error()}
+	}
+
+	if removed {
+		return models.Value{Type: "integer", Num: 1}
+	}
+	return models.Value{Type: "integer", Num: 0}
 }

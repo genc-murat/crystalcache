@@ -315,3 +315,90 @@ func (c *MemoryCache) SMembers(key string) ([]string, error) {
 	sort.Strings(members) // Sonuçları sıralıyoruz
 	return members, nil
 }
+
+func (c *MemoryCache) LLen(key string) int {
+	c.listsMu.RLock()
+	defer c.listsMu.RUnlock()
+
+	return len(c.lists[key])
+}
+
+func (c *MemoryCache) LPop(key string) (string, bool) {
+	c.listsMu.Lock()
+	defer c.listsMu.Unlock()
+
+	list, exists := c.lists[key]
+	if !exists || len(list) == 0 {
+		return "", false
+	}
+
+	// İlk elemanı al
+	value := list[0]
+	// Listeyi güncelle
+	c.lists[key] = list[1:]
+
+	// Liste boşsa key'i sil
+	if len(c.lists[key]) == 0 {
+		delete(c.lists, key)
+	}
+
+	return value, true
+}
+
+func (c *MemoryCache) RPop(key string) (string, bool) {
+	c.listsMu.Lock()
+	defer c.listsMu.Unlock()
+
+	list, exists := c.lists[key]
+	if !exists || len(list) == 0 {
+		return "", false
+	}
+
+	// Son elemanı al
+	lastIdx := len(list) - 1
+	value := list[lastIdx]
+	// Listeyi güncelle
+	c.lists[key] = list[:lastIdx]
+
+	// Liste boşsa key'i sil
+	if len(c.lists[key]) == 0 {
+		delete(c.lists, key)
+	}
+
+	return value, true
+}
+
+func (c *MemoryCache) SCard(key string) int {
+	c.setsMu_.RLock()
+	defer c.setsMu_.RUnlock()
+
+	set, exists := c.sets_[key]
+	if !exists {
+		return 0
+	}
+
+	return len(set)
+}
+
+func (c *MemoryCache) SRem(key string, member string) (bool, error) {
+	c.setsMu_.Lock()
+	defer c.setsMu_.Unlock()
+
+	set, exists := c.sets_[key]
+	if !exists {
+		return false, nil
+	}
+
+	if _, exists := set[member]; !exists {
+		return false, nil
+	}
+
+	delete(set, member)
+
+	// Set boşsa key'i sil
+	if len(set) == 0 {
+		delete(c.sets_, key)
+	}
+
+	return true, nil
+}
