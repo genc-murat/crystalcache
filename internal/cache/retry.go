@@ -539,6 +539,103 @@ func (rd *RetryDecorator) RPush(key string, value string) (int, error) {
 	return length, finalErr
 }
 
+func (rd *RetryDecorator) ZAdd(key string, score float64, member string) error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.ZAdd(key, score, member)
+	})
+}
+
+func (rd *RetryDecorator) ZCard(key string) int {
+	var count int
+	rd.executeWithRetry(func() error {
+		count = rd.cache.ZCard(key)
+		return nil
+	})
+	return count
+}
+
+func (rd *RetryDecorator) ZCount(key string, min, max float64) int {
+	var count int
+	rd.executeWithRetry(func() error {
+		count = rd.cache.ZCount(key, min, max)
+		return nil
+	})
+	return count
+}
+
+func (rd *RetryDecorator) ZRange(key string, start, stop int) []string {
+	var result []string
+	rd.executeWithRetry(func() error {
+		result = rd.cache.ZRange(key, start, stop)
+		return nil
+	})
+	return result
+}
+
+func (rd *RetryDecorator) ZRangeWithScores(key string, start, stop int) []models.ZSetMember {
+	var result []models.ZSetMember
+	rd.executeWithRetry(func() error {
+		result = rd.cache.ZRangeWithScores(key, start, stop)
+		return nil
+	})
+	return result
+}
+
+func (rd *RetryDecorator) ZRangeByScore(key string, min, max float64) []string {
+	var result []string
+	rd.executeWithRetry(func() error {
+		result = rd.cache.ZRangeByScore(key, min, max)
+		return nil
+	})
+	return result
+}
+
+func (rd *RetryDecorator) ZRank(key string, member string) (int, bool) {
+	var rank int
+	var exists bool
+	var finalExists bool
+
+	err := rd.executeWithRetry(func() error {
+		rank, exists = rd.cache.ZRank(key, member)
+		if exists {
+			finalExists = true
+			return nil
+		}
+		return errors.New("member not found")
+	})
+
+	if err != nil {
+		return 0, false
+	}
+	return rank, finalExists
+}
+
+func (rd *RetryDecorator) ZRem(key string, member string) error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.ZRem(key, member)
+	})
+}
+
+func (rd *RetryDecorator) ZScore(key string, member string) (float64, bool) {
+	var score float64
+	var exists bool
+	var finalExists bool
+
+	err := rd.executeWithRetry(func() error {
+		score, exists = rd.cache.ZScore(key, member)
+		if exists {
+			finalExists = true
+			return nil
+		}
+		return errors.New("member not found")
+	})
+
+	if err != nil {
+		return 0, false
+	}
+	return score, finalExists
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }

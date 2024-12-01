@@ -47,4 +47,13 @@ type Cache interface {
 	ExecPipeline(pipeline *models.Pipeline) []models.Value
 	IncrCommandCount()
 	WithRetry(strategy models.RetryStrategy) Cache
+	ZAdd(key string, score float64, member string) error
+	ZCard(key string) int
+	ZCount(key string, min, max float64) int
+	ZRange(key string, start, stop int) []string
+	ZRangeWithScores(key string, start, stop int) []models.ZSetMember
+	ZRangeByScore(key string, min, max float64) []string
+	ZRank(key string, member string) (int, bool)
+	ZRem(key string, member string) error
+	ZScore(key string, member string) (float64, bool)
 }

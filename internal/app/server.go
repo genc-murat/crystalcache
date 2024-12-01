@@ -75,6 +75,13 @@ func (s *Server) registerHandlers() {
 	s.cmds["WATCH"] = s.handleWatch
 	s.cmds["UNWATCH"] = s.handleUnwatch
 	s.cmds["PIPELINE"] = s.handlePipeline
+	s.cmds["ZADD"] = s.handleZAdd
+	s.cmds["ZCARD"] = s.handleZCard
+	s.cmds["ZCOUNT"] = s.handleZCount
+	s.cmds["ZRANGE"] = s.handleZRange
+	s.cmds["ZRANK"] = s.handleZRank
+	s.cmds["ZREM"] = s.handleZRem
+	s.cmds["ZSCORE"] = s.handleZScore
 }
 
 func (s *Server) Start(address string) error {
@@ -763,4 +770,128 @@ func (s *Server) handleSetWithRetry(args []models.Value) models.Value {
 	}
 
 	return models.Value{Type: "string", Str: "OK"}
+}
+
+func (s *Server) handleZAdd(args []models.Value) models.Value {
+	if len(args) != 3 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'zadd' command"}
+	}
+
+	score, err := strconv.ParseFloat(args[1].Bulk, 64)
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR value is not a valid float"}
+	}
+
+	err = s.cache.ZAdd(args[0].Bulk, score, args[2].Bulk)
+	if err != nil {
+		return models.Value{Type: "error", Str: err.Error()}
+	}
+
+	return models.Value{Type: "integer", Num: 1}
+}
+
+func (s *Server) handleZCard(args []models.Value) models.Value {
+	if len(args) != 1 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'zcard' command"}
+	}
+
+	count := s.cache.ZCard(args[0].Bulk)
+	return models.Value{Type: "integer", Num: count}
+}
+
+func (s *Server) handleZCount(args []models.Value) models.Value {
+	if len(args) != 3 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'zcount' command"}
+	}
+
+	min, err := strconv.ParseFloat(args[1].Bulk, 64)
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR min value is not a valid float"}
+	}
+
+	max, err := strconv.ParseFloat(args[2].Bulk, 64)
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR max value is not a valid float"}
+	}
+
+	count := s.cache.ZCount(args[0].Bulk, min, max)
+	return models.Value{Type: "integer", Num: count}
+}
+
+func (s *Server) handleZRange(args []models.Value) models.Value {
+	if len(args) < 3 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'zrange' command"}
+	}
+
+	start, err := strconv.Atoi(args[1].Bulk)
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR start value is not an integer"}
+	}
+
+	stop, err := strconv.Atoi(args[2].Bulk)
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR stop value is not an integer"}
+	}
+
+	withScores := false
+	if len(args) == 4 && strings.ToUpper(args[3].Bulk) == "WITHSCORES" {
+		withScores = true
+	}
+
+	var result []models.Value
+	if withScores {
+		members := s.cache.ZRangeWithScores(args[0].Bulk, start, stop)
+		result = make([]models.Value, len(members)*2)
+		for i, member := range members {
+			result[i*2] = models.Value{Type: "bulk", Bulk: member.Member}
+			result[i*2+1] = models.Value{Type: "bulk", Bulk: strconv.FormatFloat(member.Score, 'f', -1, 64)}
+		}
+	} else {
+		members := s.cache.ZRange(args[0].Bulk, start, stop)
+		result = make([]models.Value, len(members))
+		for i, member := range members {
+			result[i] = models.Value{Type: "bulk", Bulk: member}
+		}
+	}
+
+	return models.Value{Type: "array", Array: result}
+}
+
+func (s *Server) handleZRank(args []models.Value) models.Value {
+	if len(args) != 2 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'zrank' command"}
+	}
+
+	rank, exists := s.cache.ZRank(args[0].Bulk, args[1].Bulk)
+	if !exists {
+		return models.Value{Type: "null"}
+	}
+
+	return models.Value{Type: "integer", Num: rank}
+}
+
+func (s *Server) handleZRem(args []models.Value) models.Value {
+	if len(args) != 2 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'zrem' command"}
+	}
+
+	err := s.cache.ZRem(args[0].Bulk, args[1].Bulk)
+	if err != nil {
+		return models.Value{Type: "error", Str: err.Error()}
+	}
+
+	return models.Value{Type: "integer", Num: 1}
+}
+
+func (s *Server) handleZScore(args []models.Value) models.Value {
+	if len(args) != 2 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'zscore' command"}
+	}
+
+	score, exists := s.cache.ZScore(args[0].Bulk, args[1].Bulk)
+	if !exists {
+		return models.Value{Type: "null"}
+	}
+
+	return models.Value{Type: "bulk", Bulk: strconv.FormatFloat(score, 'f', -1, 64)}
 }

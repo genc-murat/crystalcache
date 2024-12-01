@@ -30,6 +30,8 @@ type MemoryCache struct {
 	txMu         sync.RWMutex
 	keyVersions  map[string]int64 // Her key için versiyon numarası
 	versionMu    sync.RWMutex
+	zsets        map[string]map[string]float64 // key -> member -> score
+	zsetsMu      sync.RWMutex
 }
 
 func NewMemoryCache() *MemoryCache {
@@ -42,6 +44,7 @@ func NewMemoryCache() *MemoryCache {
 		stats:        NewStats(),
 		keyVersions:  make(map[string]int64),
 		transactions: make(map[int64]*models.Transaction),
+		zsets:        make(map[string]map[string]float64),
 	}
 
 	// Expire check goroutine'u
@@ -1073,6 +1076,188 @@ func (c *MemoryCache) Pipeline() *models.Pipeline {
 	return &models.Pipeline{
 		Commands: make([]models.PipelineCommand, 0),
 	}
+}
+
+func (c *MemoryCache) ZAdd(key string, score float64, member string) error {
+	c.zsetsMu.Lock()
+	defer c.zsetsMu.Unlock()
+
+	// Key için map yoksa oluştur
+	if _, exists := c.zsets[key]; !exists {
+		c.zsets[key] = make(map[string]float64)
+	}
+
+	c.zsets[key][member] = score
+	return nil
+}
+
+// ZCard: Sorted set'teki eleman sayısını döner
+func (c *MemoryCache) ZCard(key string) int {
+	c.zsetsMu.RLock()
+	defer c.zsetsMu.RUnlock()
+
+	if set, exists := c.zsets[key]; exists {
+		return len(set)
+	}
+	return 0
+}
+
+// ZCount: Belirli score aralığındaki eleman sayısını döner
+func (c *MemoryCache) ZCount(key string, min, max float64) int {
+	c.zsetsMu.RLock()
+	defer c.zsetsMu.RUnlock()
+
+	count := 0
+	if set, exists := c.zsets[key]; exists {
+		for _, score := range set {
+			if score >= min && score <= max {
+				count++
+			}
+		}
+	}
+	return count
+}
+
+// ZRange: Sıralı elemanları döner
+func (c *MemoryCache) ZRange(key string, start, stop int) []string {
+	members := c.getSortedMembers(key)
+	if len(members) == 0 {
+		return []string{}
+	}
+
+	// Negatif indeksleri handle et
+	if start < 0 {
+		start = len(members) + start
+	}
+	if stop < 0 {
+		stop = len(members) + stop
+	}
+
+	// Sınırları kontrol et
+	if start < 0 {
+		start = 0
+	}
+	if stop >= len(members) {
+		stop = len(members) - 1
+	}
+	if start > stop {
+		return []string{}
+	}
+
+	result := make([]string, stop-start+1)
+	for i := start; i <= stop; i++ {
+		result[i-start] = members[i].Member
+	}
+	return result
+}
+
+// ZRangeWithScores: Sıralı elemanları score'larıyla birlikte döner
+func (c *MemoryCache) ZRangeWithScores(key string, start, stop int) []models.ZSetMember {
+	members := c.getSortedMembers(key)
+	if len(members) == 0 {
+		return []models.ZSetMember{}
+	}
+
+	// Negatif indeksleri handle et
+	if start < 0 {
+		start = len(members) + start
+	}
+	if stop < 0 {
+		stop = len(members) + stop
+	}
+
+	// Sınırları kontrol et
+	if start < 0 {
+		start = 0
+	}
+	if stop >= len(members) {
+		stop = len(members) - 1
+	}
+	if start > stop {
+		return []models.ZSetMember{}
+	}
+
+	return members[start : stop+1]
+}
+
+// ZRangeByScore: Belirli score aralığındaki elemanları döner
+func (c *MemoryCache) ZRangeByScore(key string, min, max float64) []string {
+	members := c.getSortedMembers(key)
+	result := make([]string, 0)
+
+	for _, member := range members {
+		if member.Score >= min && member.Score <= max {
+			result = append(result, member.Member)
+		}
+	}
+	return result
+}
+
+// ZRank: Elemanın sırasını döner
+func (c *MemoryCache) ZRank(key string, member string) (int, bool) {
+	members := c.getSortedMembers(key)
+	for i, m := range members {
+		if m.Member == member {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
+// ZRem: Sorted set'ten eleman siler
+func (c *MemoryCache) ZRem(key string, member string) error {
+	c.zsetsMu.Lock()
+	defer c.zsetsMu.Unlock()
+
+	if set, exists := c.zsets[key]; exists {
+		delete(set, member)
+		if len(set) == 0 {
+			delete(c.zsets, key)
+		}
+	}
+	return nil
+}
+
+// ZScore: Elemanın score değerini döner
+func (c *MemoryCache) ZScore(key string, member string) (float64, bool) {
+	c.zsetsMu.RLock()
+	defer c.zsetsMu.RUnlock()
+
+	if set, exists := c.zsets[key]; exists {
+		if score, exists := set[member]; exists {
+			return score, true
+		}
+	}
+	return 0, false
+}
+
+// Yardımcı method: Score'a göre sıralı üyeleri döner
+func (c *MemoryCache) getSortedMembers(key string) []models.ZSetMember {
+	c.zsetsMu.RLock()
+	defer c.zsetsMu.RUnlock()
+
+	set, exists := c.zsets[key]
+	if !exists {
+		return []models.ZSetMember{}
+	}
+
+	members := make([]models.ZSetMember, 0, len(set))
+	for member, score := range set {
+		members = append(members, models.ZSetMember{
+			Member: member,
+			Score:  score,
+		})
+	}
+
+	// Score'a göre sırala, aynı score'da lexicographical sıralama
+	sort.Slice(members, func(i, j int) bool {
+		if members[i].Score == members[j].Score {
+			return members[i].Member < members[j].Member
+		}
+		return members[i].Score < members[j].Score
+	})
+
+	return members
 }
 
 func (c *MemoryCache) ExecPipeline(pl *models.Pipeline) []models.Value {
