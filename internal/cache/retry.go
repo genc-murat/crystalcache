@@ -693,6 +693,32 @@ func (rd *RetryDecorator) ZUnionStore(destination string, keys []string, weights
 	return count, err
 }
 
+func (rd *RetryDecorator) PFAdd(key string, elements ...string) (bool, error) {
+	var modified bool
+	err := rd.executeWithRetry(func() error {
+		var err error
+		modified, err = rd.cache.PFAdd(key, elements...)
+		return err
+	})
+	return modified, err
+}
+
+func (rd *RetryDecorator) PFCount(keys ...string) (int64, error) {
+	var count int64
+	err := rd.executeWithRetry(func() error {
+		var err error
+		count, err = rd.cache.PFCount(keys...)
+		return err
+	})
+	return count, err
+}
+
+func (rd *RetryDecorator) PFMerge(destKey string, sourceKeys ...string) error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.PFMerge(destKey, sourceKeys...)
+	})
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }

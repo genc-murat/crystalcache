@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"regexp"
@@ -33,6 +34,8 @@ type MemoryCache struct {
 	versionMu    sync.RWMutex
 	zsets        map[string]map[string]float64 // key -> member -> score
 	zsetsMu      sync.RWMutex
+	hlls         map[string]*models.HyperLogLog
+	hllsMu       sync.RWMutex
 }
 
 func NewMemoryCache() *MemoryCache {
@@ -46,6 +49,7 @@ func NewMemoryCache() *MemoryCache {
 		keyVersions:  make(map[string]int64),
 		transactions: make(map[int64]*models.Transaction),
 		zsets:        make(map[string]map[string]float64),
+		hlls:         make(map[string]*models.HyperLogLog),
 	}
 
 	// Expire check goroutine'u
@@ -1451,6 +1455,108 @@ func (c *MemoryCache) ZUnionStore(destination string, keys []string, weights []f
 	// Sonuç set'ini oluştur
 	c.zsets[destination] = union
 	return len(union), nil
+}
+
+func (c *MemoryCache) murmur3(data []byte) uint64 {
+	var h1, h2 uint64 = 0x9368e53c2f6af274, 0x586dcd208f7cd3fd
+	const c1, c2 uint64 = 0x87c37b91114253d5, 0x4cf5ad432745937f
+
+	length := len(data)
+	nblocks := length / 16
+
+	for i := 0; i < nblocks; i++ {
+		k1 := binary.LittleEndian.Uint64(data[i*16:])
+		k2 := binary.LittleEndian.Uint64(data[i*16+8:])
+
+		k1 *= c1
+		k1 = (k1 << 31) | (k1 >> 33)
+		k1 *= c2
+		h1 ^= k1
+
+		h1 = (h1 << 27) | (h1 >> 37)
+		h1 += h2
+		h1 = h1*5 + 0x52dce729
+
+		k2 *= c2
+		k2 = (k2 << 33) | (k2 >> 31)
+		k2 *= c1
+		h2 ^= k2
+
+		h2 = (h2 << 31) | (h2 >> 33)
+		h2 += h1
+		h2 = h2*5 + 0x38495ab5
+	}
+
+	return h1 ^ h2
+}
+
+func (c *MemoryCache) PFAdd(key string, elements ...string) (bool, error) {
+	c.hllsMu.Lock()
+	defer c.hllsMu.Unlock()
+
+	// Get or create HLL structure
+	hll, exists := c.hlls[key]
+	if !exists {
+		hll = models.NewHyperLogLog()
+		c.hlls[key] = hll
+	}
+
+	modified := false
+	for _, element := range elements {
+		// Calculate hash
+		hash := c.murmur3([]byte(element))
+
+		// Add element and track if HLL was modified
+		if hll.Add(hash) {
+			modified = true
+		}
+	}
+
+	return modified, nil
+}
+
+func (c *MemoryCache) PFCount(keys ...string) (int64, error) {
+	c.hllsMu.RLock()
+	defer c.hllsMu.RUnlock()
+
+	if len(keys) == 0 {
+		return 0, nil
+	}
+
+	if len(keys) == 1 {
+		if hll, exists := c.hlls[keys[0]]; exists {
+			return hll.Size, nil
+		}
+		return 0, nil
+	}
+
+	// Merge multiple HLLs
+	merged := models.NewHyperLogLog()
+	for _, key := range keys {
+		if hll, exists := c.hlls[key]; exists {
+			merged.Merge(hll)
+		}
+	}
+
+	return merged.Size, nil
+}
+
+func (c *MemoryCache) PFMerge(destKey string, sourceKeys ...string) error {
+	c.hllsMu.Lock()
+	defer c.hllsMu.Unlock()
+
+	merged := models.NewHyperLogLog()
+
+	// Merge source HLLs
+	for _, key := range sourceKeys {
+		if hll, exists := c.hlls[key]; exists {
+			merged.Merge(hll)
+		}
+	}
+
+	// Store result
+	c.hlls[destKey] = merged
+	return nil
 }
 
 func (c *MemoryCache) ExecPipeline(pl *models.Pipeline) []models.Value {

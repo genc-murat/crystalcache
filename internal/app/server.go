@@ -87,6 +87,9 @@ func (s *Server) registerHandlers() {
 	s.cmds["ZRANGEBYSCORE"] = s.handleZRangeByScoreWithScores
 	s.cmds["ZINTERSTORE"] = s.handleZInterStore
 	s.cmds["ZUNIONSTORE"] = s.handleZUnionStore
+	s.cmds["PFADD"] = s.handlePFAdd
+	s.cmds["PFCOUNT"] = s.handlePFCount
+	s.cmds["PFMERGE"] = s.handlePFMerge
 }
 
 func (s *Server) Start(address string) error {
@@ -1067,4 +1070,61 @@ func (s *Server) handleZUnionStore(args []models.Value) models.Value {
 	}
 
 	return models.Value{Type: "integer", Num: count}
+}
+
+func (s *Server) handlePFAdd(args []models.Value) models.Value {
+	if len(args) < 2 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'pfadd' command"}
+	}
+
+	elements := make([]string, len(args)-1)
+	for i := 1; i < len(args); i++ {
+		elements[i-1] = args[i].Bulk
+	}
+
+	modified, err := s.cache.PFAdd(args[0].Bulk, elements...)
+	if err != nil {
+		return models.Value{Type: "error", Str: err.Error()}
+	}
+
+	if modified {
+		return models.Value{Type: "integer", Num: 1}
+	}
+	return models.Value{Type: "integer", Num: 0}
+}
+
+func (s *Server) handlePFCount(args []models.Value) models.Value {
+	if len(args) < 1 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'pfcount' command"}
+	}
+
+	keys := make([]string, len(args))
+	for i, arg := range args {
+		keys[i] = arg.Bulk
+	}
+
+	count, err := s.cache.PFCount(keys...)
+	if err != nil {
+		return models.Value{Type: "error", Str: err.Error()}
+	}
+
+	return models.Value{Type: "integer", Num: int(count)}
+}
+
+func (s *Server) handlePFMerge(args []models.Value) models.Value {
+	if len(args) < 2 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'pfmerge' command"}
+	}
+
+	sourceKeys := make([]string, len(args)-1)
+	for i := 1; i < len(args); i++ {
+		sourceKeys[i-1] = args[i].Bulk
+	}
+
+	err := s.cache.PFMerge(args[0].Bulk, sourceKeys...)
+	if err != nil {
+		return models.Value{Type: "error", Str: err.Error()}
+	}
+
+	return models.Value{Type: "string", Str: "OK"}
 }
