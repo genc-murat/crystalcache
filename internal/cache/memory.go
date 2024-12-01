@@ -3,10 +3,12 @@ package cache
 import (
 	"fmt"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -20,6 +22,7 @@ type MemoryCache struct {
 	hsetsMu sync.RWMutex
 	listsMu sync.RWMutex
 	setsMu_ sync.RWMutex
+	stats   *Stats
 }
 
 func NewMemoryCache() *MemoryCache {
@@ -29,6 +32,7 @@ func NewMemoryCache() *MemoryCache {
 		lists:   make(map[string][]string),
 		sets_:   make(map[string]map[string]bool),
 		expires: make(map[string]time.Time),
+		stats:   NewStats(),
 	}
 
 	// Expire check goroutine'u
@@ -577,4 +581,207 @@ func (c *MemoryCache) DBSize() int {
 	c.setsMu_.RUnlock()
 
 	return total
+}
+
+type Stats struct {
+	startTime time.Time
+	cmdCount  int64
+	mu        sync.RWMutex
+}
+
+func NewStats() *Stats {
+	return &Stats{
+		startTime: time.Now(),
+	}
+}
+
+func (s *Stats) IncrCommandCount() {
+	atomic.AddInt64(&s.cmdCount, 1)
+}
+
+func (c *MemoryCache) SDiff(keys ...string) []string {
+	c.setsMu_.RLock()
+	defer c.setsMu_.RUnlock()
+
+	if len(keys) == 0 {
+		return []string{}
+	}
+
+	// İlk set'i sonuç olarak al
+	result := make(map[string]bool)
+	firstSet, exists := c.sets_[keys[0]]
+	if !exists {
+		return []string{}
+	}
+
+	// İlk set'in elemanlarını result'a kopyala
+	for member := range firstSet {
+		result[member] = true
+	}
+
+	// Diğer setlerdeki elemanları çıkar
+	for _, key := range keys[1:] {
+		if set, exists := c.sets_[key]; exists {
+			for member := range set {
+				delete(result, member)
+			}
+		}
+	}
+
+	// Map'i slice'a çevir ve sırala
+	diff := make([]string, 0, len(result))
+	for member := range result {
+		diff = append(diff, member)
+	}
+	sort.Strings(diff)
+	return diff
+}
+
+func (c *MemoryCache) LRem(key string, count int, value string) (int, error) {
+	c.listsMu.Lock()
+	defer c.listsMu.Unlock()
+
+	list, exists := c.lists[key]
+	if !exists {
+		return 0, nil
+	}
+
+	removed := 0
+	newList := make([]string, 0, len(list))
+
+	if count > 0 {
+		// Baştan count kadar eleman sil
+		for _, v := range list {
+			if v == value && removed < count {
+				removed++
+				continue
+			}
+			newList = append(newList, v)
+		}
+	} else if count < 0 {
+		// Sondan |count| kadar eleman sil
+		matches := make([]int, 0)
+		for i, v := range list {
+			if v == value {
+				matches = append(matches, i)
+			}
+		}
+
+		removeIndices := make(map[int]bool)
+		for i := 0; i < len(matches) && i < -count; i++ {
+			removeIndices[matches[len(matches)-1-i]] = true
+		}
+
+		for i, v := range list {
+			if !removeIndices[i] {
+				newList = append(newList, v)
+			} else {
+				removed++
+			}
+		}
+	} else {
+		// count == 0: tüm eşleşmeleri sil
+		for _, v := range list {
+			if v != value {
+				newList = append(newList, v)
+			} else {
+				removed++
+			}
+		}
+	}
+
+	if len(newList) == 0 {
+		delete(c.lists, key)
+	} else {
+		c.lists[key] = newList
+	}
+
+	return removed, nil
+}
+
+func (c *MemoryCache) Rename(oldKey, newKey string) error {
+	// Tüm mutex'leri kilitle
+	c.setsMu.Lock()
+	c.hsetsMu.Lock()
+	c.listsMu.Lock()
+	c.setsMu_.Lock()
+	defer c.setsMu.Unlock()
+	defer c.hsetsMu.Unlock()
+	defer c.listsMu.Unlock()
+	defer c.setsMu_.Unlock()
+
+	// String tipinde
+	if val, exists := c.sets[oldKey]; exists {
+		c.sets[newKey] = val
+		delete(c.sets, oldKey)
+		if expTime, hasExp := c.expires[oldKey]; hasExp {
+			c.expires[newKey] = expTime
+			delete(c.expires, oldKey)
+		}
+		return nil
+	}
+
+	// Hash tipinde
+	if val, exists := c.hsets[oldKey]; exists {
+		c.hsets[newKey] = val
+		delete(c.hsets, oldKey)
+		return nil
+	}
+
+	// List tipinde
+	if val, exists := c.lists[oldKey]; exists {
+		c.lists[newKey] = val
+		delete(c.lists, oldKey)
+		return nil
+	}
+
+	// Set tipinde
+	if val, exists := c.sets_[oldKey]; exists {
+		c.sets_[newKey] = val
+		delete(c.sets_, oldKey)
+		return nil
+	}
+
+	return fmt.Errorf("ERR no such key")
+}
+
+func (c *MemoryCache) Info() map[string]string {
+	info := make(map[string]string)
+
+	// Server bilgileri
+	info["uptime_in_seconds"] = fmt.Sprintf("%d", int(time.Since(c.stats.startTime).Seconds()))
+	info["total_commands_processed"] = fmt.Sprintf("%d", atomic.LoadInt64(&c.stats.cmdCount))
+
+	// Memory kullanımı
+	var memStats runtime.MemStats
+	runtime.ReadMemStats(&memStats)
+	info["used_memory"] = fmt.Sprintf("%d", memStats.Alloc)
+	info["used_memory_peak"] = fmt.Sprintf("%d", memStats.TotalAlloc)
+
+	// Keyler
+	info["total_keys"] = fmt.Sprintf("%d", c.DBSize())
+
+	c.setsMu.RLock()
+	info["string_keys"] = fmt.Sprintf("%d", len(c.sets))
+	c.setsMu.RUnlock()
+
+	c.hsetsMu.RLock()
+	info["hash_keys"] = fmt.Sprintf("%d", len(c.hsets))
+	c.hsetsMu.RUnlock()
+
+	c.listsMu.RLock()
+	info["list_keys"] = fmt.Sprintf("%d", len(c.lists))
+	c.listsMu.RUnlock()
+
+	c.setsMu_.RLock()
+	info["set_keys"] = fmt.Sprintf("%d", len(c.sets_))
+	c.setsMu_.RUnlock()
+
+	return info
+}
+
+func (c *MemoryCache) IncrCommandCount() {
+	if c.stats != nil {
+		c.stats.IncrCommandCount()
+	}
 }

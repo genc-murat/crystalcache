@@ -29,4 +29,8 @@ type Cache interface {
 	Exists(key string) bool
 	FlushAll()
 	DBSize() int
+	SDiff(keys ...string) []string
+	LRem(key string, count int, value string) (int, error)
+	Rename(oldKey, newKey string) error
+	Info() map[string]string
 }

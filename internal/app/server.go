@@ -1,20 +1,24 @@
 package app
 
 import (
+	"fmt"
 	"log"
 	"net"
+	"sort"
 	"strconv"
 	"strings"
 
+	"github.com/genc-murat/crystalcache/internal/cache"
 	"github.com/genc-murat/crystalcache/internal/core/models"
 	"github.com/genc-murat/crystalcache/internal/core/ports"
 	"github.com/genc-murat/crystalcache/pkg/resp"
 )
 
 type Server struct {
-	cache   ports.Cache
-	storage ports.Storage
-	cmds    map[string]CommandHandler
+	cache    ports.Cache
+	storage  ports.Storage
+	cmds     map[string]CommandHandler
+	cmdCount int64
 }
 
 type CommandHandler func(args []models.Value) models.Value
@@ -60,6 +64,10 @@ func (s *Server) registerHandlers() {
 	s.cmds["EXISTS"] = s.handleExists
 	s.cmds["FLUSHALL"] = s.handleFlushAll
 	s.cmds["DBSIZE"] = s.handleDBSize
+	s.cmds["SDIFF"] = s.handleSDiff
+	s.cmds["LREM"] = s.handleLRem
+	s.cmds["RENAME"] = s.handleRename
+	s.cmds["INFO"] = s.handleInfo
 }
 
 func (s *Server) Start(address string) error {
@@ -108,21 +116,7 @@ func (s *Server) handleConnection(conn net.Conn) {
 			continue
 		}
 
-		cmd := strings.ToUpper(value.Array[0].Bulk)
-		handler, exists := s.cmds[cmd]
-		if !exists {
-			writer.Write(models.Value{Type: "error", Str: "ERR unknown command"})
-			continue
-		}
-
-		// Persist commands that modify state
-		if cmd == "SET" || cmd == "HSET" {
-			if err := s.storage.Write(value); err != nil {
-				log.Printf("Error writing to AOF: %v", err)
-			}
-		}
-
-		result := handler(value.Array[1:])
+		result := s.handleCommand(value)
 		writer.Write(result)
 	}
 }
@@ -529,4 +523,91 @@ func (s *Server) handleDBSize(args []models.Value) models.Value {
 
 	size := s.cache.DBSize()
 	return models.Value{Type: "integer", Num: size}
+}
+
+func (s *Server) handleCommand(value models.Value) models.Value {
+	// Type assertion'ı güvenli bir şekilde yapıyoruz
+	if memCache, ok := s.cache.(*cache.MemoryCache); ok {
+		memCache.IncrCommandCount()
+	}
+
+	cmd := strings.ToUpper(value.Array[0].Bulk)
+	handler, exists := s.cmds[cmd]
+	if !exists {
+		return models.Value{Type: "error", Str: "ERR unknown command"}
+	}
+
+	return handler(value.Array[1:])
+}
+
+func (s *Server) handleSDiff(args []models.Value) models.Value {
+	if len(args) < 1 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'sdiff' command"}
+	}
+
+	keys := make([]string, len(args))
+	for i, arg := range args {
+		keys[i] = arg.Bulk
+	}
+
+	diff := s.cache.SDiff(keys...)
+	result := make([]models.Value, len(diff))
+	for i, member := range diff {
+		result[i] = models.Value{Type: "bulk", Bulk: member}
+	}
+
+	return models.Value{Type: "array", Array: result}
+}
+
+func (s *Server) handleLRem(args []models.Value) models.Value {
+	if len(args) != 3 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'lrem' command"}
+	}
+
+	count, err := strconv.Atoi(args[1].Bulk)
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR value is not an integer"}
+	}
+
+	removed, err := s.cache.LRem(args[0].Bulk, count, args[2].Bulk)
+	if err != nil {
+		return models.Value{Type: "error", Str: err.Error()}
+	}
+
+	return models.Value{Type: "integer", Num: removed}
+}
+
+func (s *Server) handleRename(args []models.Value) models.Value {
+	if len(args) != 2 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'rename' command"}
+	}
+
+	err := s.cache.Rename(args[0].Bulk, args[1].Bulk)
+	if err != nil {
+		return models.Value{Type: "error", Str: err.Error()}
+	}
+
+	return models.Value{Type: "string", Str: "OK"}
+}
+
+func (s *Server) handleInfo(args []models.Value) models.Value {
+	if len(args) > 0 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'info' command"}
+	}
+
+	info := s.cache.Info()
+	var builder strings.Builder
+
+	// Bilgileri sıralı şekilde yazdır
+	keys := make([]string, 0, len(info))
+	for k := range info {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		builder.WriteString(fmt.Sprintf("%s:%s\r\n", k, info[k]))
+	}
+
+	return models.Value{Type: "bulk", Bulk: builder.String()}
 }
