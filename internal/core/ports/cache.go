@@ -9,4 +9,11 @@ type Cache interface {
 	Incr(key string) (int, error)
 	Expire(key string, seconds int) error
 	Del(key string) (bool, error)
+	Keys(pattern string) []string
+	TTL(key string) int // TTL in seconds, -2 if not exists, -1 if no expire
+	LPush(key string, value string) (int, error)
+	RPush(key string, value string) (int, error)
+	LRange(key string, start, stop int) ([]string, error)
+	SAdd(key string, member string) (bool, error)
+	SMembers(key string) ([]string, error)
 }
