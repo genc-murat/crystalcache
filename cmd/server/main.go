@@ -1,17 +1,46 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"log"
+	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
-	"github.com/genc-murat/crystalcache/internal/app"
 	"github.com/genc-murat/crystalcache/internal/cache"
 	"github.com/genc-murat/crystalcache/internal/pool"
+	"github.com/genc-murat/crystalcache/internal/server"
 	"github.com/genc-murat/crystalcache/internal/storage"
 )
 
 func main() {
-	// Pool konfigürasyonu
+	// Server config
+	serverConfig := server.ServerConfig{
+		MaxConnections: 1000,
+		ReadTimeout:    10 * time.Second,
+		WriteTimeout:   10 * time.Second,
+		IdleTimeout:    60 * time.Second,
+	}
+
+	// Cache ve storage
+	memCache := cache.NewMemoryCache()
+	memCache.StartDefragmentation(5*time.Minute, 0.25)
+
+	aofStorage, err := storage.NewAOF("database.aof")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer aofStorage.Close()
+
+	// Ana server'ı başlat
+	server := server.NewServer(memCache, aofStorage, nil, serverConfig)
+	go server.Start(":6379")
+	time.Sleep(1 * time.Second) // Server başlamasını bekle
+
+	// Connection pool
 	poolConfig := pool.Config{
 		InitialSize:   10,
 		MaxSize:       100,
@@ -22,30 +51,37 @@ func main() {
 		RetryDelay:    100 * time.Millisecond,
 	}
 
-	// Connection factory oluştur
 	factory := pool.NewConnFactory("localhost:6379", 5*time.Second)
-
-	// Connection pool oluştur
 	connectionPool, err := pool.NewConnectionPool(poolConfig, factory.CreateConnection)
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer connectionPool.Close()
 
-	// Cache ve storage oluştur
-	memCache := cache.NewMemoryCache()
-	memCache.StartDefragmentation(5*time.Minute, 0.25)
+	server.SetConnectionPool(connectionPool)
 
-	aofStorage, err := storage.NewAOF("database.aof")
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer aofStorage.Close()
+	// Metrics server
+	go func() {
+		http.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
+			metrics := server.GetMetrics()
+			json.NewEncoder(w).Encode(metrics)
+		})
+		log.Printf("Metrics server starting on :2112")
+		if err := http.ListenAndServe(":2112", nil); err != nil {
+			log.Printf("Metrics server error: %v", err)
+		}
+	}()
 
-	// Server'ı başlat
-	server := app.NewServer(memCache, aofStorage, connectionPool)
-	log.Println("Starting server on :6379")
-	if err := server.Start(":6379"); err != nil {
-		log.Fatal(err)
+	// Graceful shutdown
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	<-sigCh
+
+	log.Println("Shutting down server...")
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := server.Shutdown(ctx); err != nil {
+		log.Printf("Error during shutdown: %v", err)
 	}
 }
