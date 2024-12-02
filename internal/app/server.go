@@ -1,38 +1,82 @@
 package app
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/genc-murat/crystalcache/internal/cache"
 	"github.com/genc-murat/crystalcache/internal/core/models"
 	"github.com/genc-murat/crystalcache/internal/core/ports"
 	"github.com/genc-murat/crystalcache/pkg/resp"
 )
 
+type CommandType int
+
+const (
+	ReadCommand CommandType = iota
+	WriteCommand
+	AdminCommand
+)
+
 type Server struct {
 	cache    ports.Cache
 	storage  ports.Storage
+	pool     ports.Pool
 	cmds     map[string]CommandHandler
+	cmdTypes map[string]CommandType
 	cmdCount int64
 }
 
 type CommandHandler func(args []models.Value) models.Value
 
-func NewServer(cache ports.Cache, storage ports.Storage) *Server {
+func NewServer(cache ports.Cache, storage ports.Storage, pool ports.Pool) *Server {
 	s := &Server{
-		cache:   cache,
-		storage: storage,
-		cmds:    make(map[string]CommandHandler),
+		cache:    cache,
+		storage:  storage,
+		pool:     pool,
+		cmds:     make(map[string]CommandHandler),
+		cmdTypes: make(map[string]CommandType),
 	}
 
 	s.registerHandlers()
+	s.classifyCommands()
 	return s
+}
+
+func (s *Server) classifyCommands() {
+	// Read commands
+	readCommands := []string{
+		"GET", "HGET", "HGETALL", "LRANGE", "SMEMBERS", "SCARD", "SISMEMBER",
+		"TYPE", "EXISTS", "TTL", "KEYS", "ZCARD", "ZCOUNT", "ZRANGE", "ZRANK",
+		"ZSCORE", "ZREVRANGE", "INFO", "PFCOUNT",
+	}
+
+	// Write commands
+	writeCommands := []string{
+		"SET", "HSET", "LPUSH", "RPUSH", "SADD", "SREM", "ZADD", "ZREM",
+		"ZINCRBY", "PFADD", "PFMERGE", "DEL", "EXPIRE", "RENAME",
+	}
+
+	// Admin commands
+	adminCommands := []string{
+		"FLUSHALL", "MULTI", "EXEC", "DISCARD", "WATCH", "UNWATCH",
+	}
+
+	for _, cmd := range readCommands {
+		s.cmdTypes[cmd] = ReadCommand
+	}
+	for _, cmd := range writeCommands {
+		s.cmdTypes[cmd] = WriteCommand
+	}
+	for _, cmd := range adminCommands {
+		s.cmdTypes[cmd] = AdminCommand
+	}
 }
 
 func (s *Server) registerHandlers() {
@@ -112,13 +156,19 @@ func (s *Server) Start(address string) error {
 		handler(value.Array[1:])
 	})
 
+	var wg sync.WaitGroup
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
 			log.Printf("Error accepting connection: %v", err)
 			continue
 		}
-		go s.handleConnection(conn)
+
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			s.handleConnection(conn)
+		}()
 	}
 }
 
@@ -547,17 +597,47 @@ func (s *Server) handleDBSize(args []models.Value) models.Value {
 }
 
 func (s *Server) handleCommand(value models.Value) models.Value {
-	if memCache, ok := s.cache.(*cache.MemoryCache); ok {
-		memCache.IncrCommandCount()
-	}
-
+	ctx := context.Background()
 	cmd := strings.ToUpper(value.Array[0].Bulk)
 
+	// Check command type
+	cmdType, exists := s.cmdTypes[cmd]
+	if !exists {
+		return models.Value{Type: "error", Str: "ERR unknown command"}
+	}
+
+	// Get appropriate connection based on command type
+	var poolConn net.Conn
+	var err error
+
+	switch cmdType {
+	case ReadCommand:
+		poolConn, err = s.pool.GetReadConn(ctx)
+		if err != nil {
+			return models.Value{Type: "error", Str: fmt.Sprintf("ERR getting read connection: %v", err)}
+		}
+		defer s.pool.ReturnConn(poolConn, "read")
+
+	case WriteCommand:
+		poolConn, err = s.pool.GetWriteConn(ctx)
+		if err != nil {
+			return models.Value{Type: "error", Str: fmt.Sprintf("ERR getting write connection: %v", err)}
+		}
+		defer s.pool.ReturnConn(poolConn, "write")
+
+	case AdminCommand:
+		// Admin commands use direct connection
+		handler := s.cmds[cmd]
+		return handler(value.Array[1:])
+	}
+
+	// Handle transaction commands specially
 	if cmd == "MULTI" || cmd == "EXEC" || cmd == "DISCARD" {
 		handler := s.cmds[cmd]
 		return handler(value.Array[1:])
 	}
 
+	// Check if in transaction
 	if s.cache.IsInTransaction() {
 		err := s.cache.AddToTransaction(models.Command{
 			Name: cmd,
@@ -569,12 +649,35 @@ func (s *Server) handleCommand(value models.Value) models.Value {
 		return models.Value{Type: "string", Str: "QUEUED"}
 	}
 
+	// Execute command
 	handler, exists := s.cmds[cmd]
 	if !exists {
 		return models.Value{Type: "error", Str: "ERR unknown command"}
 	}
 
-	return handler(value.Array[1:])
+	// Execute with timeout
+	resultCh := make(chan models.Value, 1)
+	errCh := make(chan error, 1)
+
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				errCh <- fmt.Errorf("panic in command execution: %v", r)
+			}
+		}()
+
+		result := handler(value.Array[1:])
+		resultCh <- result
+	}()
+
+	select {
+	case result := <-resultCh:
+		return result
+	case err := <-errCh:
+		return models.Value{Type: "error", Str: err.Error()}
+	case <-time.After(5 * time.Second): // Configurable timeout
+		return models.Value{Type: "error", Str: "ERR command execution timeout"}
+	}
 }
 
 func (s *Server) handleSDiff(args []models.Value) models.Value {
