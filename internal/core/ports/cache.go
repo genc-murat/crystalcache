@@ -1,6 +1,10 @@
 package ports
 
-import "github.com/genc-murat/crystalcache/internal/core/models"
+import (
+	"time"
+
+	"github.com/genc-murat/crystalcache/internal/core/models"
+)
 
 type Cache interface {
 	Set(key string, value string) error
@@ -65,4 +69,7 @@ type Cache interface {
 	PFAdd(key string, elements ...string) (bool, error)
 	PFCount(keys ...string) (int64, error)
 	PFMerge(destKey string, sourceKeys ...string) error
+	GetMemoryStats() models.MemoryStats
+	StartDefragmentation(interval time.Duration, threshold float64)
+	Defragment()
 }

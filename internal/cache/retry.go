@@ -708,6 +708,29 @@ func (rd *RetryDecorator) PFMerge(destKey string, sourceKeys ...string) error {
 	})
 }
 
+func (rd *RetryDecorator) GetMemoryStats() models.MemoryStats {
+	var stats models.MemoryStats
+	rd.executeWithRetry(func() error {
+		stats = rd.cache.GetMemoryStats()
+		return nil
+	})
+	return stats
+}
+
+func (rd *RetryDecorator) StartDefragmentation(interval time.Duration, threshold float64) {
+	rd.executeWithRetry(func() error {
+		rd.cache.StartDefragmentation(interval, threshold)
+		return nil
+	})
+}
+
+func (rd *RetryDecorator) Defragment() {
+	rd.executeWithRetry(func() error {
+		rd.cache.Defragment()
+		return nil
+	})
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }

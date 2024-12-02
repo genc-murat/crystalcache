@@ -37,6 +37,8 @@ type MemoryCache struct {
 	hlls         map[string]*models.HyperLogLog
 	hllsMu       sync.RWMutex
 	bloomFilter  *models.BloomFilter
+	lastDefrag   time.Time
+	defragMu     sync.Mutex
 }
 
 func NewMemoryCache() *MemoryCache {
@@ -1555,6 +1557,104 @@ func (c *MemoryCache) ExecPipeline(pl *models.Pipeline) []models.Value {
 
 func (c *MemoryCache) GetBloomFilterStats() models.BloomFilterStats {
 	return c.bloomFilter.Stats()
+}
+
+// Defragmentation işlemini başlat
+func (c *MemoryCache) StartDefragmentation(interval time.Duration, threshold float64) {
+	go func() {
+		ticker := time.NewTicker(interval)
+		for range ticker.C {
+			stats := c.GetMemoryStats()
+			fragPercent := float64(stats.FragmentedBytes) / float64(stats.TotalMemory)
+
+			if fragPercent > threshold {
+				c.Defragment()
+			}
+		}
+	}()
+}
+
+// Defragmentation işlemi
+func (c *MemoryCache) Defragment() {
+	c.defragMu.Lock()
+	defer c.defragMu.Unlock()
+
+	// String values
+	c.defragStrings()
+
+	// Hash values
+	c.defragHashes()
+
+	// List values
+	c.defragLists()
+
+	// Set values
+	c.defragSets()
+
+	c.lastDefrag = time.Now()
+}
+
+func (c *MemoryCache) defragStrings() {
+	c.setsMu.Lock()
+	defer c.setsMu.Unlock()
+
+	newSets := make(map[string]string, len(c.sets))
+	for k, v := range c.sets {
+		newSets[k] = v
+	}
+	c.sets = newSets
+}
+
+func (c *MemoryCache) defragHashes() {
+	c.hsetsMu.Lock()
+	defer c.hsetsMu.Unlock()
+
+	for hash, fields := range c.hsets {
+		newFields := make(map[string]string, len(fields))
+		for k, v := range fields {
+			newFields[k] = v
+		}
+		c.hsets[hash] = newFields
+	}
+}
+
+func (c *MemoryCache) defragLists() {
+	c.listsMu.Lock()
+	defer c.listsMu.Unlock()
+
+	for key, list := range c.lists {
+		if cap(list) > 2*len(list) {
+			newList := make([]string, len(list))
+			copy(newList, list)
+			c.lists[key] = newList
+		}
+	}
+}
+
+func (c *MemoryCache) defragSets() {
+	c.setsMu_.Lock()
+	defer c.setsMu_.Unlock()
+
+	for key, set := range c.sets_ {
+		newSet := make(map[string]bool, len(set))
+		for member := range set {
+			newSet[member] = true
+		}
+		c.sets_[key] = newSet
+	}
+}
+
+// Memory istatistiklerini getir
+func (c *MemoryCache) GetMemoryStats() models.MemoryStats {
+	var ms runtime.MemStats
+	runtime.ReadMemStats(&ms)
+
+	return models.MemoryStats{
+		TotalMemory:     int64(ms.Sys),
+		UsedMemory:      int64(ms.Alloc),
+		FragmentedBytes: int64(ms.Sys - ms.Alloc),
+		LastDefrag:      c.lastDefrag,
+	}
 }
 
 func (c *MemoryCache) WithRetry(strategy models.RetryStrategy) ports.Cache {
