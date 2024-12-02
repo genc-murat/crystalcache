@@ -5,6 +5,7 @@ import (
 	"net"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/genc-murat/crystalcache/internal/client"
@@ -17,6 +18,7 @@ type AdminHandlers struct {
 	cache         ports.Cache
 	clientManager *client.Manager
 	currentConn   net.Conn
+	connMu        sync.Mutex
 }
 
 func NewAdminHandlers(cache ports.Cache, clientManager *client.Manager) *AdminHandlers {
@@ -161,6 +163,7 @@ func (h *AdminHandlers) HandleClient(args []models.Value) models.Value {
 			return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'client setname' command"}
 		}
 		return h.handleClientSetName(args[1].Bulk)
+
 	default:
 		return models.Value{Type: "error", Str: "ERR unknown subcommand for 'client'"}
 	}
@@ -233,13 +236,13 @@ func (h *AdminHandlers) handleClientInfo() models.Value {
 }
 
 func (h *AdminHandlers) handleClientSetName(name string) models.Value {
-	// Ensure the name does not contain invalid characters (e.g., control characters).
-	if strings.ContainsAny(name, "\r\n") {
-		return models.Value{Type: "error", Str: "ERR invalid client name"}
+	conn := h.getCurrentConn()
+	if conn == nil {
+		return models.Value{Type: "error", Str: "ERR no current client connection"}
 	}
 
-	// Retrieve the current client.
-	client, exists := h.clientManager.GetClient(h.currentConn)
+	// Retrieve the current client using the connection.
+	client, exists := h.clientManager.GetClient(conn)
 	if !exists {
 		return models.Value{Type: "error", Str: "ERR no current client connection"}
 	}
@@ -251,5 +254,13 @@ func (h *AdminHandlers) handleClientSetName(name string) models.Value {
 }
 
 func (h *AdminHandlers) SetCurrentConn(conn net.Conn) {
+	h.connMu.Lock()
+	defer h.connMu.Unlock()
 	h.currentConn = conn
+}
+
+func (h *AdminHandlers) getCurrentConn() net.Conn {
+	h.connMu.Lock()
+	defer h.connMu.Unlock()
+	return h.currentConn
 }

@@ -125,15 +125,17 @@ func (s *Server) handleConnection(conn net.Conn) {
 		}
 
 		s.adminHandlers.SetCurrentConn(conn)
-		result := s.handleCommand(value)
-		s.adminHandlers.SetCurrentConn(nil)
-
+		result := s.handleCommand(value) // Command processing
 		client.LastCmd = time.Now()
 
 		if err := writer.Write(result); err != nil {
 			return
 		}
+
+		// Reset currentConn AFTER command execution completes
+		s.adminHandlers.SetCurrentConn(nil)
 	}
+
 }
 
 func (s *Server) handleCommand(value models.Value) models.Value {

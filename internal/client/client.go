@@ -1,6 +1,7 @@
 package client
 
 import (
+	"log"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -43,9 +44,19 @@ func (cm *Manager) AddClient(conn net.Conn) *Client {
 		DB:         0,
 	}
 
+	log.Printf("Adding client: %+v", client)
+
 	cm.Clients[client.ID] = client
 	cm.Ctxs.Store(conn, client)
 	return client
+}
+
+func (cm *Manager) GetClient(conn net.Conn) (*Client, bool) {
+	client, ok := cm.Ctxs.Load(conn)
+	if !ok {
+		log.Printf("Client not found for connection: %v", conn)
+	}
+	return client.(*Client), ok
 }
 
 func (cm *Manager) RemoveClient(conn net.Conn) {
@@ -55,11 +66,4 @@ func (cm *Manager) RemoveClient(conn net.Conn) {
 		delete(cm.Clients, client.ID)
 		cm.Mu.Unlock()
 	}
-}
-
-func (cm *Manager) GetClient(conn net.Conn) (*Client, bool) {
-	if ctx, ok := cm.Ctxs.Load(conn); ok {
-		return ctx.(*Client), true
-	}
-	return nil, false
 }
