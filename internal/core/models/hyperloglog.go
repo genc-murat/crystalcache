@@ -6,16 +6,16 @@ import (
 )
 
 const (
-	HLL_P                 = 14         // Precision bits
+	HLL_P                 = 14
 	HLL_M                 = 1 << HLL_P // Register count (16384)
-	HLL_MAX_ENCODING_SIZE = 12000      // Maximum size of dense encoding
+	HLL_MAX_ENCODING_SIZE = 12000
 )
 
 // HyperLogLog struct
 type HyperLogLog struct {
-	Registers []uint8 // Register array to store bucket values
-	Encoding  byte    // dense: 1, sparse: 2
-	Size      int64   // Approximate number of unique elements
+	Registers []uint8
+	Encoding  byte // dense: 1, sparse: 2
+	Size      int64
 }
 
 func NewHyperLogLog() *HyperLogLog {
@@ -55,7 +55,6 @@ func (h *HyperLogLog) Estimate() float64 {
 	return estimate
 }
 
-// Add method to add new element
 func (h *HyperLogLog) Add(hash uint64) bool {
 	idx := hash & (HLL_M - 1)
 	zeros := uint8(bits.LeadingZeros64(hash>>HLL_P)) + 1
@@ -69,7 +68,6 @@ func (h *HyperLogLog) Add(hash uint64) bool {
 	return false
 }
 
-// Merge method to merge another HLL into this one
 func (h *HyperLogLog) Merge(other *HyperLogLog) {
 	for i := 0; i < HLL_M; i++ {
 		if other.Registers[i] > h.Registers[i] {

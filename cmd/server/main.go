@@ -11,7 +11,6 @@ import (
 
 func main() {
 	memCache := cache.NewMemoryCache()
-	// Defragmentation'ı başlat
 	memCache.StartDefragmentation(5*time.Minute, 0.25)
 	aofStorage, err := storage.NewAOF("database.aof")
 	if err != nil {
