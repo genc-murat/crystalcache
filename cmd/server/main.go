@@ -44,9 +44,9 @@ func main() {
 	poolConfig := pool.Config{
 		InitialSize:   10,
 		MaxSize:       100,
-		ReadTimeout:   5 * time.Second,
-		WriteTimeout:  5 * time.Second,
-		IdleTimeout:   60 * time.Second,
+		ReadTimeout:   5000 * time.Second,
+		WriteTimeout:  5000 * time.Second,
+		IdleTimeout:   6000 * time.Second,
 		RetryAttempts: 3,
 		RetryDelay:    100 * time.Millisecond,
 	}

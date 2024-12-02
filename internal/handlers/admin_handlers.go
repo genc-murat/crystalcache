@@ -156,6 +156,11 @@ func (h *AdminHandlers) HandleClient(args []models.Value) models.Value {
 		return h.handleClientID()
 	case "INFO":
 		return h.handleClientInfo()
+	case "SETNAME":
+		if len(args) != 2 {
+			return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'client setname' command"}
+		}
+		return h.handleClientSetName(args[1].Bulk)
 	default:
 		return models.Value{Type: "error", Str: "ERR unknown subcommand for 'client'"}
 	}
@@ -214,9 +219,10 @@ func (h *AdminHandlers) handleClientInfo() models.Value {
 
 	now := time.Now()
 	info := fmt.Sprintf(
-		"id=%d\r\naddr=%s\r\nage=%d\r\nidle=%d\r\nflags=%s\r\ndb=%d\r\n",
+		"id=%d\r\naddr=%s\r\nname=%s\r\nage=%d\r\nidle=%d\r\nflags=%s\r\ndb=%d\r\n",
 		client.ID,
 		client.Addr,
+		client.Name,
 		int(now.Sub(client.CreateTime).Seconds()),
 		int(now.Sub(client.LastCmd).Seconds()),
 		strings.Join(client.Flags, ""),
@@ -224,6 +230,24 @@ func (h *AdminHandlers) handleClientInfo() models.Value {
 	)
 
 	return models.Value{Type: "bulk", Bulk: info}
+}
+
+func (h *AdminHandlers) handleClientSetName(name string) models.Value {
+	// Ensure the name does not contain invalid characters (e.g., control characters).
+	if strings.ContainsAny(name, "\r\n") {
+		return models.Value{Type: "error", Str: "ERR invalid client name"}
+	}
+
+	// Retrieve the current client.
+	client, exists := h.clientManager.GetClient(h.currentConn)
+	if !exists {
+		return models.Value{Type: "error", Str: "ERR no current client connection"}
+	}
+
+	// Set the client's name.
+	client.Name = name
+
+	return models.Value{Type: "string", Str: "OK"}
 }
 
 func (h *AdminHandlers) SetCurrentConn(conn net.Conn) {

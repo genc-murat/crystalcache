@@ -14,6 +14,7 @@ type Client struct {
 	LastCmd    time.Time
 	Flags      []string
 	DB         int
+	Name       string
 }
 
 type Manager struct {
