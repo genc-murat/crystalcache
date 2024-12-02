@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"github.com/genc-murat/crystalcache/internal/client"
 	"github.com/genc-murat/crystalcache/internal/core/models"
 	"github.com/genc-murat/crystalcache/internal/core/ports"
 )
@@ -17,7 +18,7 @@ type Registry struct {
 	adminHandlers  *AdminHandlers
 }
 
-func NewRegistry(cache ports.Cache) *Registry {
+func NewRegistry(cache ports.Cache, clientManager *client.Manager) *Registry {
 	r := &Registry{
 		handlers:       make(map[string]CommandHandler),
 		stringHandlers: NewStringHandlers(cache),
@@ -25,7 +26,7 @@ func NewRegistry(cache ports.Cache) *Registry {
 		listHandlers:   NewListHandlers(cache),
 		setHandlers:    NewSetHandlers(cache),
 		zsetHandlers:   NewZSetHandlers(cache),
-		adminHandlers:  NewAdminHandlers(cache),
+		adminHandlers:  NewAdminHandlers(cache, clientManager),
 	}
 
 	r.registerHandlers()
@@ -84,6 +85,7 @@ func (r *Registry) registerHandlers() {
 	r.handlers["DISCARD"] = r.adminHandlers.HandleDiscard
 	r.handlers["WATCH"] = r.adminHandlers.HandleWatch
 	r.handlers["UNWATCH"] = r.adminHandlers.HandleUnwatch
+	r.handlers["CLIENT"] = r.adminHandlers.HandleClient
 }
 
 func (r *Registry) GetHandler(cmd string) (CommandHandler, bool) {

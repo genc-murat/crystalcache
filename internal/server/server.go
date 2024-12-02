@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/genc-murat/crystalcache/internal/client"
 	"github.com/genc-murat/crystalcache/internal/core/models"
 	"github.com/genc-murat/crystalcache/internal/core/ports"
 	"github.com/genc-murat/crystalcache/internal/handlers"
@@ -26,6 +27,9 @@ type Server struct {
 	// Shutdown coordination
 	shutdown chan struct{}
 	wg       sync.WaitGroup
+
+	clientManager *client.Manager
+	adminHandlers *handlers.AdminHandlers
 }
 
 type ServerConfig struct {
@@ -37,16 +41,20 @@ type ServerConfig struct {
 
 func NewServer(cache ports.Cache, storage ports.Storage, pool ports.Pool, config ServerConfig) *Server {
 	metrics := metrics.NewMetrics()
-	registry := handlers.NewRegistry(cache)
+	clientManager := client.NewManager()
+	registry := handlers.NewRegistry(cache, clientManager)
+	adminHandlers := handlers.NewAdminHandlers(cache, clientManager)
 
 	return &Server{
-		cache:    cache,
-		storage:  storage,
-		pool:     pool,
-		metrics:  metrics,
-		registry: registry,
-		executor: NewCommandExecutor(registry, pool, metrics),
-		shutdown: make(chan struct{}),
+		cache:         cache,
+		storage:       storage,
+		pool:          pool,
+		metrics:       metrics,
+		registry:      registry,
+		executor:      NewCommandExecutor(registry, pool, metrics),
+		shutdown:      make(chan struct{}),
+		clientManager: clientManager,
+		adminHandlers: adminHandlers,
 	}
 }
 
@@ -98,38 +106,48 @@ func (s *Server) loadData() error {
 }
 
 func (s *Server) handleConnection(conn net.Conn) {
-	defer func() {
-		conn.Close()
-		s.wg.Done()
-	}()
+	defer conn.Close()
+
+	client := s.clientManager.AddClient(conn)
+	defer s.clientManager.RemoveClient(conn)
 
 	reader := resp.NewReader(conn)
 	writer := resp.NewWriter(conn)
 
 	for {
-		select {
-		case <-s.shutdown:
+		value, err := reader.Read()
+		if err != nil {
 			return
-		default:
-			value, err := reader.Read()
-			if err != nil {
-				log.Printf("Error reading from connection: %v", err)
-				return
-			}
+		}
 
-			if value.Type != "array" || len(value.Array) == 0 {
-				continue
-			}
+		if value.Type != "array" || len(value.Array) == 0 {
+			continue
+		}
 
-			cmd := strings.ToUpper(value.Array[0].Bulk)
-			result := s.executor.Execute(context.Background(), cmd, value.Array[1:])
+		s.adminHandlers.SetCurrentConn(conn)
+		result := s.handleCommand(value)
+		s.adminHandlers.SetCurrentConn(nil)
 
-			if err := writer.Write(result); err != nil {
-				log.Printf("Error writing response: %v", err)
-				return
-			}
+		client.LastCmd = time.Now()
+
+		if err := writer.Write(result); err != nil {
+			return
 		}
 	}
+}
+
+func (s *Server) handleCommand(value models.Value) models.Value {
+	if len(value.Array) == 0 {
+		return models.Value{Type: "error", Str: "ERR empty command"}
+	}
+
+	cmd := strings.ToUpper(value.Array[0].Bulk)
+	handler, exists := s.registry.GetHandler(cmd)
+	if !exists {
+		return models.Value{Type: "error", Str: "ERR unknown command"}
+	}
+
+	return handler(value.Array[1:])
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {
