@@ -9,32 +9,34 @@ import (
 type CommandHandler func(args []models.Value) models.Value
 
 type Registry struct {
-	handlers       map[string]CommandHandler
-	stringHandlers *StringHandlers
-	hashHandlers   *HashHandlers
-	listHandlers   *ListHandlers
-	setHandlers    *SetHandlers
-	zsetHandlers   *ZSetHandlers
-	adminHandlers  *AdminHandlers
-	moduleHandlers *ModuleHandlers
-	configHandlers *ConfigHandlers
-	scanHandlers   *ScanHandlers
-	memoryHandlers *MemoryHandlers
+	handlers        map[string]CommandHandler
+	stringHandlers  *StringHandlers
+	hashHandlers    *HashHandlers
+	listHandlers    *ListHandlers
+	setHandlers     *SetHandlers
+	zsetHandlers    *ZSetHandlers
+	adminHandlers   *AdminHandlers
+	moduleHandlers  *ModuleHandlers
+	configHandlers  *ConfigHandlers
+	scanHandlers    *ScanHandlers
+	memoryHandlers  *MemoryHandlers
+	clusterHandlers *ClusterHandlers
 }
 
 func NewRegistry(cache ports.Cache, clientManager *client.Manager) *Registry {
 	r := &Registry{
-		handlers:       make(map[string]CommandHandler),
-		stringHandlers: NewStringHandlers(cache),
-		hashHandlers:   NewHashHandlers(cache),
-		listHandlers:   NewListHandlers(cache),
-		setHandlers:    NewSetHandlers(cache),
-		zsetHandlers:   NewZSetHandlers(cache),
-		adminHandlers:  NewAdminHandlers(cache, clientManager),
-		moduleHandlers: NewModuleHandlers(cache),
-		configHandlers: NewConfigHandlers(cache),
-		scanHandlers:   NewScanHandlers(cache),
-		memoryHandlers: NewMemoryHandlers(cache),
+		handlers:        make(map[string]CommandHandler),
+		stringHandlers:  NewStringHandlers(cache),
+		hashHandlers:    NewHashHandlers(cache),
+		listHandlers:    NewListHandlers(cache),
+		setHandlers:     NewSetHandlers(cache),
+		zsetHandlers:    NewZSetHandlers(cache),
+		adminHandlers:   NewAdminHandlers(cache, clientManager),
+		moduleHandlers:  NewModuleHandlers(cache),
+		configHandlers:  NewConfigHandlers(cache),
+		scanHandlers:    NewScanHandlers(cache),
+		memoryHandlers:  NewMemoryHandlers(cache),
+		clusterHandlers: NewClusterHandlers(cache),
 	}
 
 	r.registerHandlers()
@@ -107,6 +109,8 @@ func (r *Registry) registerHandlers() {
 	r.handlers["MEMORY"] = r.memoryHandlers.HandleMemory
 	r.handlers["TYPE"] = r.memoryHandlers.HandleType
 	r.handlers["TTL"] = r.memoryHandlers.HandleTTL
+
+	r.handlers["CLUSTER"] = r.clusterHandlers.HandleCluster
 }
 
 func (r *Registry) GetHandler(cmd string) (CommandHandler, bool) {
