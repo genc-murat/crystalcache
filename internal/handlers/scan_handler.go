@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"log"
 	"strconv"
 	"strings"
 
@@ -51,6 +52,7 @@ func (h *ScanHandlers) HandleScan(args []models.Value) models.Value {
 		keyValues[i] = models.Value{Type: "string", Str: key}
 	}
 
+	log.Printf("[DEBUG] SCAN/SSCAN response: cursor=%d, results=%+v", nextCursor, keyValues)
 	return models.Value{
 		Type: "array",
 		Array: []models.Value{

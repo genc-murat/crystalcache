@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"log"
 	"regexp"
 	"runtime"
 	"sort"
@@ -146,16 +147,47 @@ func (c *MemoryCache) Expire(key string, seconds int) error {
 
 func (c *MemoryCache) Del(key string) (bool, error) {
 	c.setsMu.Lock()
+	c.setsMu_.Lock()
+	c.hsetsMu.Lock()
+	c.listsMu.Lock()
 	defer c.setsMu.Unlock()
+	defer c.setsMu_.Unlock()
+	defer c.hsetsMu.Unlock()
+	defer c.listsMu.Unlock()
 
-	if _, exists := c.sets[key]; !exists {
-		return false, nil
+	deleted := false
+
+	// Check string keys
+	if _, exists := c.sets[key]; exists {
+		delete(c.sets, key)
+		delete(c.expires, key)
+		deleted = true
 	}
 
-	delete(c.sets, key)
-	delete(c.expires, key)
-	c.incrementKeyVersion(key)
-	return true, nil
+	// Check set keys
+	if _, exists := c.sets_[key]; exists {
+		delete(c.sets_, key)
+		deleted = true
+	}
+
+	// Check hash keys
+	if _, exists := c.hsets[key]; exists {
+		delete(c.hsets, key)
+		deleted = true
+	}
+
+	// Check list keys
+	if _, exists := c.lists[key]; exists {
+		delete(c.lists, key)
+		deleted = true
+	}
+
+	if deleted {
+		c.incrementKeyVersion(key)
+	}
+
+	log.Printf("[DEBUG] DEL key=%s deleted=%v", key, deleted)
+	return deleted, nil
 }
 
 func (c *MemoryCache) Set(key string, value string) error {
@@ -1659,21 +1691,43 @@ func (c *MemoryCache) GetMemoryStats() models.MemoryStats {
 
 func (c *MemoryCache) Scan(cursor int, pattern string, count int) ([]string, int) {
 	c.setsMu.RLock()
+	c.setsMu_.RLock()
+	c.hsetsMu.RLock()
+	c.listsMu.RLock()
 	defer c.setsMu.RUnlock()
+	defer c.setsMu_.RUnlock()
+	defer c.hsetsMu.RUnlock()
+	defer c.listsMu.RUnlock()
 
-	// Get all keys
-	allKeys := make([]string, 0, len(c.sets))
+	// Get keys from all data structures
+	allKeys := make([]string, 0)
+
+	// String keys
 	for k := range c.sets {
 		allKeys = append(allKeys, k)
 	}
+
+	// Set keys
+	for k := range c.sets_ {
+		allKeys = append(allKeys, k)
+	}
+
+	// Hash keys
+	for k := range c.hsets {
+		allKeys = append(allKeys, k)
+	}
+
+	// List keys
+	for k := range c.lists {
+		allKeys = append(allKeys, k)
+	}
+
 	sort.Strings(allKeys)
 
-	// No keys
 	if len(allKeys) == 0 {
 		return []string{}, 0
 	}
 
-	// Invalid cursor, start from beginning
 	if cursor < 0 || cursor >= len(allKeys) {
 		cursor = 0
 	}
@@ -1681,7 +1735,6 @@ func (c *MemoryCache) Scan(cursor int, pattern string, count int) ([]string, int
 	matches := make([]string, 0, count)
 	nextCursor := cursor
 
-	// Collect matching keys until count is reached
 	for i := cursor; i < len(allKeys) && len(matches) < count; i++ {
 		if matchPattern(pattern, allKeys[i]) {
 			matches = append(matches, allKeys[i])
@@ -1689,11 +1742,11 @@ func (c *MemoryCache) Scan(cursor int, pattern string, count int) ([]string, int
 		nextCursor = i + 1
 	}
 
-	// Reset cursor if we've reached the end
 	if nextCursor >= len(allKeys) {
 		nextCursor = 0
 	}
 
+	log.Printf("[DEBUG] SCAN found %d keys, nextCursor: %d", len(matches), nextCursor)
 	return matches, nextCursor
 }
 
