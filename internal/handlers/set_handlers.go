@@ -1,6 +1,10 @@
 package handlers
 
 import (
+	"regexp"
+	"strconv"
+	"strings"
+
 	"github.com/genc-murat/crystalcache/internal/core/models"
 	"github.com/genc-murat/crystalcache/internal/core/ports"
 	"github.com/genc-murat/crystalcache/internal/util"
@@ -140,4 +144,100 @@ func (h *SetHandlers) HandleSDiff(args []models.Value) models.Value {
 	}
 
 	return models.Value{Type: "array", Array: result}
+}
+
+func (h *SetHandlers) HandleSScan(args []models.Value) models.Value {
+	if len(args) < 2 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for SSCAN"}
+	}
+
+	key := args[0].Bulk
+	cursor, err := strconv.Atoi(args[1].Bulk)
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR invalid cursor"}
+	}
+
+	// Default values
+	pattern := "*"
+	count := 10
+
+	// Parse optional arguments
+	for i := 2; i < len(args); i += 2 {
+		if i+1 >= len(args) {
+			return models.Value{Type: "error", Str: "ERR syntax error"}
+		}
+
+		switch strings.ToUpper(args[i].Bulk) {
+		case "MATCH":
+			pattern = args[i+1].Bulk
+		case "COUNT":
+			count, err = strconv.Atoi(args[i+1].Bulk)
+			if err != nil {
+				return models.Value{Type: "error", Str: "ERR invalid COUNT"}
+			}
+		default:
+			return models.Value{Type: "error", Str: "ERR syntax error"}
+		}
+	}
+
+	members, err := h.cache.SMembers(key)
+	if err != nil {
+		return models.Value{Type: "error", Str: err.Error()}
+	}
+
+	if cursor >= len(members) {
+		return models.Value{Type: "array", Array: []models.Value{
+			{Type: "string", Str: "0"},
+			{Type: "array", Array: []models.Value{}},
+		}}
+	}
+
+	var matches []string
+	for i := cursor; i < len(members) && len(matches) < count; i++ {
+		if matchPattern(pattern, members[i]) {
+			matches = append(matches, members[i])
+		}
+	}
+
+	nextCursor := 0
+	if cursor+count < len(members) {
+		nextCursor = cursor + count
+	}
+
+	matchValues := make([]models.Value, len(matches))
+	for i, match := range matches {
+		matchValues[i] = models.Value{Type: "string", Str: match}
+	}
+
+	return models.Value{Type: "array", Array: []models.Value{
+		{Type: "string", Str: strconv.Itoa(nextCursor)},
+		{Type: "array", Array: matchValues},
+	}}
+}
+func matchPattern(pattern, str string) bool {
+	if pattern == "*" {
+		return true
+	}
+
+	regexPattern := strings.Builder{}
+	for i := 0; i < len(pattern); i++ {
+		switch pattern[i] {
+		case '*':
+			regexPattern.WriteString(".*")
+		case '?':
+			regexPattern.WriteString(".")
+		case '[', ']', '(', ')', '{', '}', '.', '+', '|', '^', '$':
+			regexPattern.WriteString("\\")
+			regexPattern.WriteByte(pattern[i])
+		default:
+			regexPattern.WriteByte(pattern[i])
+		}
+	}
+
+	regex, err := regexp.Compile("^" + regexPattern.String() + "$")
+	if err != nil {
+		return false
+	}
+
+	return regex.MatchString(str)
 }

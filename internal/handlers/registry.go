@@ -19,6 +19,7 @@ type Registry struct {
 	moduleHandlers *ModuleHandlers
 	configHandlers *ConfigHandlers
 	scanHandlers   *ScanHandlers
+	memoryHandlers *MemoryHandlers
 }
 
 func NewRegistry(cache ports.Cache, clientManager *client.Manager) *Registry {
@@ -33,6 +34,7 @@ func NewRegistry(cache ports.Cache, clientManager *client.Manager) *Registry {
 		moduleHandlers: NewModuleHandlers(cache),
 		configHandlers: NewConfigHandlers(cache),
 		scanHandlers:   NewScanHandlers(cache),
+		memoryHandlers: NewMemoryHandlers(cache),
 	}
 
 	r.registerHandlers()
@@ -72,6 +74,7 @@ func (r *Registry) registerHandlers() {
 	r.handlers["SINTER"] = r.setHandlers.HandleSInter
 	r.handlers["SUNION"] = r.setHandlers.HandleSUnion
 	r.handlers["SDIFF"] = r.setHandlers.HandleSDiff
+	r.handlers["SSCAN"] = r.setHandlers.HandleSScan
 
 	// ZSet Commands
 	r.handlers["ZADD"] = r.zsetHandlers.HandleZAdd
@@ -95,6 +98,10 @@ func (r *Registry) registerHandlers() {
 	r.handlers["MODULE"] = r.moduleHandlers.HandleModule
 	r.handlers["CONFIG"] = r.configHandlers.HandleConfig
 	r.handlers["SCAN"] = r.scanHandlers.HandleScan
+
+	r.handlers["MEMORY"] = r.memoryHandlers.HandleMemory
+	r.handlers["TYPE"] = r.memoryHandlers.HandleType
+	r.handlers["TTL"] = r.memoryHandlers.HandleTTL
 }
 
 func (r *Registry) GetHandler(cmd string) (CommandHandler, bool) {
