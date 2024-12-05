@@ -54,6 +54,8 @@ func (r *Registry) registerHandlers() {
 	r.handlers["HSET"] = r.hashHandlers.HandleHSet
 	r.handlers["HGET"] = r.hashHandlers.HandleHGet
 	r.handlers["HGETALL"] = r.hashHandlers.HandleHGetAll
+	r.handlers["HLEN"] = r.hashHandlers.HandleHLen
+	r.handlers["HSCAN"] = r.hashHandlers.HandleHScan
 
 	// List Commands
 	r.handlers["LPUSH"] = r.listHandlers.HandleLPush

@@ -73,4 +73,5 @@ type Cache interface {
 	StartDefragmentation(interval time.Duration, threshold float64)
 	Defragment()
 	Scan(cursor int, pattern string, count int) ([]string, int)
+	HDel(hash string, key string) (bool, error)
 }

@@ -1750,6 +1750,22 @@ func (c *MemoryCache) Scan(cursor int, pattern string, count int) ([]string, int
 	return matches, nextCursor
 }
 
+func (c *MemoryCache) HDel(hash string, field string) (bool, error) {
+	c.hsetsMu.Lock()
+	defer c.hsetsMu.Unlock()
+
+	if hashMap, exists := c.hsets[hash]; exists {
+		if _, fieldExists := hashMap[field]; fieldExists {
+			delete(hashMap, field)
+			if len(hashMap) == 0 {
+				delete(c.hsets, hash)
+			}
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (c *MemoryCache) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(c, strategy)
 }
