@@ -177,3 +177,10 @@ func (h *StringHandlers) HandleGetRange(args []models.Value) models.Value {
 
 	return models.Value{Type: "bulk", Bulk: value[start : end+1]}
 }
+
+func (h *StringHandlers) HandleEcho(args []models.Value) models.Value {
+	if len(args) < 1 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'echo' command"}
+	}
+	return models.Value{Type: "bulk", Bulk: args[0].Bulk}
+}

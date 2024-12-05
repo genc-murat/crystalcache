@@ -51,6 +51,7 @@ func (r *Registry) registerHandlers() {
 	r.handlers["EXPIRE"] = r.stringHandlers.HandleExpire
 	r.handlers["STRLEN"] = r.stringHandlers.HandleStrlen
 	r.handlers["GETRANGE"] = r.stringHandlers.HandleGetRange
+	r.handlers["ECHO"] = r.stringHandlers.HandleEcho
 
 	// Hash Commands
 	r.handlers["HSET"] = r.hashHandlers.HandleHSet
