@@ -42,6 +42,7 @@ func (cm *Manager) AddClient(conn net.Conn) *Client {
 		LastCmd:    time.Now(),
 		Flags:      []string{"N"},
 		DB:         0,
+		Name:       "localhost",
 	}
 
 	log.Printf("Adding client: %+v", client)

@@ -16,6 +16,9 @@ type Registry struct {
 	setHandlers    *SetHandlers
 	zsetHandlers   *ZSetHandlers
 	adminHandlers  *AdminHandlers
+	moduleHandlers *ModuleHandlers
+	configHandlers *ConfigHandlers
+	scanHandlers   *ScanHandlers
 }
 
 func NewRegistry(cache ports.Cache, clientManager *client.Manager) *Registry {
@@ -27,6 +30,9 @@ func NewRegistry(cache ports.Cache, clientManager *client.Manager) *Registry {
 		setHandlers:    NewSetHandlers(cache),
 		zsetHandlers:   NewZSetHandlers(cache),
 		adminHandlers:  NewAdminHandlers(cache, clientManager),
+		moduleHandlers: NewModuleHandlers(cache),
+		configHandlers: NewConfigHandlers(cache),
+		scanHandlers:   NewScanHandlers(cache),
 	}
 
 	r.registerHandlers()
@@ -86,9 +92,18 @@ func (r *Registry) registerHandlers() {
 	r.handlers["WATCH"] = r.adminHandlers.HandleWatch
 	r.handlers["UNWATCH"] = r.adminHandlers.HandleUnwatch
 	r.handlers["CLIENT"] = r.adminHandlers.HandleClient
+	r.handlers["MODULE"] = r.moduleHandlers.HandleModule
+	r.handlers["CONFIG"] = r.configHandlers.HandleConfig
+	r.handlers["SCAN"] = r.scanHandlers.HandleScan
 }
 
 func (r *Registry) GetHandler(cmd string) (CommandHandler, bool) {
 	handler, exists := r.handlers[cmd]
+	if exists && cmd == "CLIENT" {
+		// Wrap client commands to preserve connection context
+		return func(args []models.Value) models.Value {
+			return r.adminHandlers.HandleClient(args)
+		}, true
+	}
 	return handler, exists
 }

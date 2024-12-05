@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"fmt"
+	"log"
 	"net"
 	"sort"
 	"strings"
@@ -18,14 +19,24 @@ type AdminHandlers struct {
 	cache         ports.Cache
 	clientManager *client.Manager
 	currentConn   net.Conn
-	connMu        sync.Mutex
+	connMu        sync.RWMutex
+	currentConnCh chan net.Conn
 }
 
 func NewAdminHandlers(cache ports.Cache, clientManager *client.Manager) *AdminHandlers {
 	return &AdminHandlers{
 		cache:         cache,
 		clientManager: clientManager,
+		currentConnCh: make(chan net.Conn, 1),
 	}
+}
+
+func (h *AdminHandlers) HandleConnection(conn net.Conn) {
+	select {
+	case <-h.currentConnCh: // Clear channel
+	default:
+	}
+	h.currentConnCh <- conn
 }
 
 func (h *AdminHandlers) HandleFlushAll(args []models.Value) models.Value {
@@ -58,6 +69,7 @@ func (h *AdminHandlers) HandleInfo(args []models.Value) models.Value {
 		builder.WriteString("\r\n")
 	}
 
+	log.Printf("[DEBUG] handleClientInfo response: %+v", models.Value{Type: "bulk", Bulk: builder.String()})
 	return models.Value{Type: "bulk", Bulk: builder.String()}
 }
 
@@ -207,7 +219,11 @@ func (h *AdminHandlers) handleClientKill(addr string) models.Value {
 }
 
 func (h *AdminHandlers) handleClientID() models.Value {
-	client, exists := h.clientManager.GetClient(h.currentConn)
+	conn := h.getCurrentConn()
+	if conn == nil {
+		return models.Value{Type: "integer", Num: 0}
+	}
+	client, exists := h.clientManager.GetClient(conn)
 	if !exists {
 		return models.Value{Type: "integer", Num: 0}
 	}
@@ -215,7 +231,11 @@ func (h *AdminHandlers) handleClientID() models.Value {
 }
 
 func (h *AdminHandlers) handleClientInfo() models.Value {
-	client, exists := h.clientManager.GetClient(h.currentConn)
+	conn := h.getCurrentConn()
+	if conn == nil {
+		return models.Value{Type: "null"}
+	}
+	client, exists := h.clientManager.GetClient(conn)
 	if !exists {
 		return models.Value{Type: "null"}
 	}
@@ -241,15 +261,14 @@ func (h *AdminHandlers) handleClientSetName(name string) models.Value {
 		return models.Value{Type: "error", Str: "ERR no current client connection"}
 	}
 
-	// Retrieve the current client using the connection.
 	client, exists := h.clientManager.GetClient(conn)
 	if !exists {
-		return models.Value{Type: "error", Str: "ERR no current client connection"}
+		client = h.clientManager.AddClient(conn)
 	}
 
-	// Set the client's name.
 	client.Name = name
 
+	log.Printf("[DEBUG] Response from handleClientSetName: %+v", models.Value{Type: "string", Str: "OK"})
 	return models.Value{Type: "string", Str: "OK"}
 }
 
@@ -260,7 +279,13 @@ func (h *AdminHandlers) SetCurrentConn(conn net.Conn) {
 }
 
 func (h *AdminHandlers) getCurrentConn() net.Conn {
-	h.connMu.Lock()
-	defer h.connMu.Unlock()
-	return h.currentConn
+	h.connMu.RLock()
+	defer h.connMu.RUnlock()
+	select {
+	case conn := <-h.currentConnCh:
+		h.currentConnCh <- conn // Put it back
+		return conn
+	default:
+		return h.currentConn
+	}
 }

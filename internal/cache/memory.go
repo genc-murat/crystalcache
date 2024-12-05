@@ -1657,6 +1657,46 @@ func (c *MemoryCache) GetMemoryStats() models.MemoryStats {
 	}
 }
 
+func (c *MemoryCache) Scan(cursor int, pattern string, count int) ([]string, int) {
+	c.setsMu.RLock()
+	defer c.setsMu.RUnlock()
+
+	// Get all keys
+	allKeys := make([]string, 0, len(c.sets))
+	for k := range c.sets {
+		allKeys = append(allKeys, k)
+	}
+	sort.Strings(allKeys)
+
+	// No keys
+	if len(allKeys) == 0 {
+		return []string{}, 0
+	}
+
+	// Invalid cursor, start from beginning
+	if cursor < 0 || cursor >= len(allKeys) {
+		cursor = 0
+	}
+
+	matches := make([]string, 0, count)
+	nextCursor := cursor
+
+	// Collect matching keys until count is reached
+	for i := cursor; i < len(allKeys) && len(matches) < count; i++ {
+		if matchPattern(pattern, allKeys[i]) {
+			matches = append(matches, allKeys[i])
+		}
+		nextCursor = i + 1
+	}
+
+	// Reset cursor if we've reached the end
+	if nextCursor >= len(allKeys) {
+		nextCursor = 0
+	}
+
+	return matches, nextCursor
+}
+
 func (c *MemoryCache) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(c, strategy)
 }

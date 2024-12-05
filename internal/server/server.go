@@ -30,6 +30,7 @@ type Server struct {
 
 	clientManager *client.Manager
 	adminHandlers *handlers.AdminHandlers
+	activeConns   sync.Map
 }
 
 type ServerConfig struct {
@@ -107,7 +108,9 @@ func (s *Server) loadData() error {
 
 func (s *Server) handleConnection(conn net.Conn) {
 	defer conn.Close()
+	defer s.wg.Done()
 
+	s.adminHandlers.HandleConnection(conn)
 	client := s.clientManager.AddClient(conn)
 	defer s.clientManager.RemoveClient(conn)
 
@@ -125,17 +128,13 @@ func (s *Server) handleConnection(conn net.Conn) {
 		}
 
 		s.adminHandlers.SetCurrentConn(conn)
-		result := s.handleCommand(value) // Command processing
+		result := s.handleCommand(value)
 		client.LastCmd = time.Now()
 
 		if err := writer.Write(result); err != nil {
 			return
 		}
-
-		// Reset currentConn AFTER command execution completes
-		s.adminHandlers.SetCurrentConn(nil)
 	}
-
 }
 
 func (s *Server) handleCommand(value models.Value) models.Value {
@@ -144,9 +143,15 @@ func (s *Server) handleCommand(value models.Value) models.Value {
 	}
 
 	cmd := strings.ToUpper(value.Array[0].Bulk)
+	log.Printf("[DEBUG] Received command: %s", strings.ToUpper(value.Array[0].Bulk))
 	handler, exists := s.registry.GetHandler(cmd)
 	if !exists {
 		return models.Value{Type: "error", Str: "ERR unknown command"}
+	}
+
+	// Preserve connection context for admin commands
+	if cmd == "CLIENT" {
+		return s.adminHandlers.HandleClient(value.Array[1:])
 	}
 
 	return handler(value.Array[1:])

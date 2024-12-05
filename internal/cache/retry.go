@@ -731,6 +731,18 @@ func (rd *RetryDecorator) Defragment() {
 	})
 }
 
+func (rd *RetryDecorator) Scan(cursor int, pattern string, count int) ([]string, int) {
+	var keys []string
+	var nextCursor int
+
+	rd.executeWithRetry(func() error {
+		keys, nextCursor = rd.cache.Scan(cursor, pattern, count)
+		return nil
+	})
+
+	return keys, nextCursor
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }

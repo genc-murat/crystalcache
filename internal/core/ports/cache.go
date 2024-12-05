@@ -72,4 +72,5 @@ type Cache interface {
 	GetMemoryStats() models.MemoryStats
 	StartDefragmentation(interval time.Duration, threshold float64)
 	Defragment()
+	Scan(cursor int, pattern string, count int) ([]string, int)
 }
