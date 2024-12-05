@@ -15,29 +15,43 @@ func NewListHandlers(cache ports.Cache) *ListHandlers {
 }
 
 func (h *ListHandlers) HandleLPush(args []models.Value) models.Value {
-	if err := util.ValidateArgs(args, 2); err != nil {
-		return util.ToValue(err)
+	if len(args) < 2 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'lpush' command"}
 	}
 
-	length, err := h.cache.LPush(args[0].Bulk, args[1].Bulk)
-	if err != nil {
-		return util.ToValue(err)
+	key := args[0].Bulk
+	totalLen := 0
+	var err error
+
+	// Handle multiple values
+	for i := 1; i < len(args); i++ {
+		totalLen, err = h.cache.LPush(key, args[i].Bulk)
+		if err != nil {
+			return util.ToValue(err)
+		}
 	}
 
-	return models.Value{Type: "integer", Num: length}
+	return models.Value{Type: "integer", Num: totalLen}
 }
 
 func (h *ListHandlers) HandleRPush(args []models.Value) models.Value {
-	if err := util.ValidateArgs(args, 2); err != nil {
-		return util.ToValue(err)
+	if len(args) < 2 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'rpush' command"}
 	}
 
-	length, err := h.cache.RPush(args[0].Bulk, args[1].Bulk)
-	if err != nil {
-		return util.ToValue(err)
+	key := args[0].Bulk
+	totalLen := 0
+	var err error
+
+	// Handle multiple values
+	for i := 1; i < len(args); i++ {
+		totalLen, err = h.cache.RPush(key, args[i].Bulk)
+		if err != nil {
+			return util.ToValue(err)
+		}
 	}
 
-	return models.Value{Type: "integer", Num: length}
+	return models.Value{Type: "integer", Num: totalLen}
 }
 
 func (h *ListHandlers) HandleLRange(args []models.Value) models.Value {
