@@ -580,6 +580,13 @@ func (c *MemoryCache) Type(key string) string {
 	}
 	c.setsMu_.RUnlock()
 
+	c.zsetsMu.RLock()
+	if _, exists := c.zsets[key]; exists {
+		c.zsetsMu.RUnlock()
+		return "zset"
+	}
+	c.zsetsMu.RUnlock()
+
 	return "none"
 }
 
