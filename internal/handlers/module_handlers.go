@@ -26,14 +26,28 @@ func (h *ModuleHandlers) HandleModule(args []models.Value) models.Value {
 	subCmd := strings.ToUpper(args[0].Bulk)
 	switch subCmd {
 	case "LIST":
-		log.Printf("[DEBUG] MODULE response - LIST: %+v", models.Value{Type: "array", Array: []models.Value{}})
-		return models.Value{Type: "array", Array: []models.Value{}}
+		// Return JSON module info
+		jsonModule := []models.Value{
+			{Type: "array", Array: []models.Value{
+				{Type: "string", Str: "name"},
+				{Type: "string", Str: "ReJSON"},
+				{Type: "string", Str: "ver"},
+				{Type: "integer", Num: 20000}, // Version 2.0.0
+				{Type: "string", Str: "path"},
+				{Type: "string", Str: "built-in"},
+			}},
+		}
+		log.Printf("[DEBUG] MODULE response - LIST: %+v", models.Value{Type: "array", Array: jsonModule})
+		return models.Value{Type: "array", Array: jsonModule}
+
 	case "LOAD":
 		log.Printf("[DEBUG] MODULE response - LOAD: %+v", models.Value{Type: "error", Str: "ERR modules not supported"})
 		return models.Value{Type: "error", Str: "ERR modules not supported"}
+
 	case "UNLOAD":
 		log.Printf("[DEBUG] MODULE response - UNLOAD: %+v", models.Value{Type: "error", Str: "ERR modules not supported"})
 		return models.Value{Type: "error", Str: "ERR modules not supported"}
+
 	default:
 		return models.Value{Type: "error", Str: "ERR unknown subcommand for MODULE"}
 	}

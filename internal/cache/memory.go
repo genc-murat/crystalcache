@@ -810,6 +810,12 @@ func (c *MemoryCache) Info() map[string]string {
 
 	info["total_keys"] = fmt.Sprintf("%d", c.DBSize())
 
+	// Features/Modules
+	info["redis_version"] = "7.2.0"
+	info["redis_mode"] = "standalone"
+	info["modules"] = "json" // JSON modülü ekledik
+	info["json_version"] = "2.0.0"
+
 	c.setsMu.RLock()
 	info["string_keys"] = fmt.Sprintf("%d", len(c.sets))
 	c.setsMu.RUnlock()
