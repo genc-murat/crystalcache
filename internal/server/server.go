@@ -20,7 +20,6 @@ type Server struct {
 	cache    ports.Cache
 	storage  ports.Storage
 	pool     ports.Pool
-	executor *CommandExecutor
 	metrics  *metrics.Metrics
 	registry *handlers.Registry
 
@@ -52,7 +51,6 @@ func NewServer(cache ports.Cache, storage ports.Storage, pool ports.Pool, config
 		pool:          pool,
 		metrics:       metrics,
 		registry:      registry,
-		executor:      NewCommandExecutor(registry, pool, metrics),
 		shutdown:      make(chan struct{}),
 		clientManager: clientManager,
 		adminHandlers: adminHandlers,
@@ -101,8 +99,6 @@ func (s *Server) loadData() error {
 			return
 		}
 
-		cmd := strings.ToUpper(value.Array[0].Bulk)
-		s.executor.Execute(context.Background(), cmd, value.Array[1:])
 	})
 }
 
