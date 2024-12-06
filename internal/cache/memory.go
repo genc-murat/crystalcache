@@ -762,14 +762,46 @@ func (c *MemoryCache) DBSize() int {
 }
 
 type Stats struct {
-	startTime time.Time
-	cmdCount  int64
-	mu        sync.RWMutex
+	startTime   time.Time
+	cmdCount    int64
+	evictedKeys int64 // Added evicted keys counter
+	expiredKeys int64 // Added expired keys counter
+	totalKeys   int64 // Added total keys counter
+	hits        int64 // Added cache hits
+	misses      int64 // Added cache misses
+	mu          sync.RWMutex
 }
 
 func NewStats() *Stats {
 	return &Stats{
 		startTime: time.Now(),
+	}
+}
+
+func (s *Stats) IncrEvictedKeys() {
+	atomic.AddInt64(&s.evictedKeys, 1)
+}
+
+func (s *Stats) IncrExpiredKeys() {
+	atomic.AddInt64(&s.expiredKeys, 1)
+}
+
+func (s *Stats) IncrHits() {
+	atomic.AddInt64(&s.hits, 1)
+}
+
+func (s *Stats) IncrMisses() {
+	atomic.AddInt64(&s.misses, 1)
+}
+
+func (s *Stats) GetStats() map[string]int64 {
+	return map[string]int64{
+		"evicted_keys": atomic.LoadInt64(&s.evictedKeys),
+		"expired_keys": atomic.LoadInt64(&s.expiredKeys),
+		"total_keys":   atomic.LoadInt64(&s.totalKeys),
+		"hits":         atomic.LoadInt64(&s.hits),
+		"misses":       atomic.LoadInt64(&s.misses),
+		"cmd_count":    atomic.LoadInt64(&s.cmdCount),
 	}
 }
 
@@ -959,6 +991,18 @@ func (c *MemoryCache) Info() map[string]string {
 	c.setsMu_.RLock()
 	info["set_keys"] = fmt.Sprintf("%d", len(c.sets_))
 	c.setsMu_.RUnlock()
+
+	// Add memory analytics
+	analytics := c.GetMemoryAnalytics()
+	info["used_memory_human"] = fmt.Sprintf("%dM", analytics.CurrentlyInUse/(1024*1024))
+	info["mem_fragmentation_ratio"] = fmt.Sprintf("%.2f", analytics.FragmentationRatio)
+	info["total_system_memory_human"] = fmt.Sprintf("%dM", analytics.MaxMemoryUsed/(1024*1024))
+	info["used_memory_rss_human"] = fmt.Sprintf("%dM", analytics.CurrentlyInUse/(1024*1024))
+	info["used_memory_peak_human"] = fmt.Sprintf("%dM", analytics.MaxMemoryUsed/(1024*1024))
+	info["mem_allocator"] = "go"
+	info["mem_fragmentation_bytes"] = fmt.Sprintf("%d", analytics.MaxMemoryUsed-analytics.CurrentlyInUse)
+
+	return info
 
 	return info
 }
