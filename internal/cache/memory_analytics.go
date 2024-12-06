@@ -3,6 +3,7 @@ package cache
 import (
 	"log"
 	"runtime"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -58,73 +59,93 @@ func (c *MemoryCache) GetMemoryAnalytics() *MemoryAnalytics {
 
 func (c *MemoryCache) calculateStructureMemory(analytics *MemoryAnalytics) {
 	// String memory
-	c.setsMu.RLock()
-	for key, value := range c.sets {
-		size := int64(len(key) + len(value))
+	c.sets.Range(func(key, value interface{}) bool {
+		k := key.(string)
+		v := value.(string)
+		size := int64(len(k) + len(v))
 		atomic.AddInt64(&analytics.StringMemory, size)
-	}
-	c.setsMu.RUnlock()
+		return true
+	})
 
 	// Hash memory
-	c.hsetsMu.RLock()
-	for key, hash := range c.hsets {
-		size := int64(len(key))
-		for field, value := range hash {
-			size += int64(len(field) + len(value))
-		}
+	c.hsets.Range(func(key, hash interface{}) bool {
+		k := key.(string)
+		h := hash.(*sync.Map)
+		size := int64(len(k))
+		h.Range(func(field, value interface{}) bool {
+			f := field.(string)
+			v := value.(string)
+			size += int64(len(f) + len(v))
+			return true
+		})
 		atomic.AddInt64(&analytics.HashMemory, size)
-	}
-	c.hsetsMu.RUnlock()
+		return true
+	})
 
 	// List memory
-	c.listsMu.RLock()
-	for key, list := range c.lists {
-		size := int64(len(key))
-		for _, item := range list {
+	c.lists.Range(func(key, list interface{}) bool {
+		k := key.(string)
+		l := list.([]string)
+		size := int64(len(k))
+		for _, item := range l {
 			size += int64(len(item))
 		}
 		atomic.AddInt64(&analytics.ListMemory, size)
-	}
-	c.listsMu.RUnlock()
+		return true
+	})
 
 	// Set memory
-	c.setsMu_.RLock()
-	for key, set := range c.sets_ {
-		size := int64(len(key))
-		for member := range set {
-			size += int64(len(member))
-		}
+	c.sets_.Range(func(key, set interface{}) bool {
+		k := key.(string)
+		s := set.(*sync.Map)
+		size := int64(len(k))
+		s.Range(func(member, _ interface{}) bool {
+			m := member.(string)
+			size += int64(len(m))
+			return true
+		})
 		atomic.AddInt64(&analytics.SetMemory, size)
-	}
-	c.setsMu_.RUnlock()
+		return true
+	})
 
 	// ZSet memory
-	c.zsetsMu.RLock()
-	for key, zset := range c.zsets {
-		size := int64(len(key))
-		for member := range zset {
-			size += int64(len(member)) + 8 // 8 bytes for float64
-		}
+	c.zsets.Range(func(key, zset interface{}) bool {
+		k := key.(string)
+		zs := zset.(*sync.Map)
+		size := int64(len(k))
+		zs.Range(func(member, _ interface{}) bool {
+			m := member.(string)
+			size += int64(len(m)) + 8 // 8 bytes for float64 score
+			return true
+		})
 		atomic.AddInt64(&analytics.ZSetMemory, size)
-	}
-	c.zsetsMu.RUnlock()
+		return true
+	})
 
 	// Key statistics
-	analytics.KeyCount = int64(c.DBSize())
+	analytics.KeyCount = c.getKeyCount()
 	analytics.ExpiredKeyCount = c.getExpiredKeyCount()
+}
+
+func (c *MemoryCache) getKeyCount() int64 {
+	var count int64
+	c.sets.Range(func(_, _ interface{}) bool {
+		atomic.AddInt64(&count, 1)
+		return true // Tüm elemanları gezmeye devam et
+	})
+	return count
 }
 
 func (c *MemoryCache) getExpiredKeyCount() int64 {
 	var count int64
 	now := time.Now()
 
-	c.setsMu.RLock()
-	for _, expireTime := range c.expires {
-		if now.After(expireTime) {
-			count++
+	c.expires.Range(func(_, expireTime interface{}) bool {
+		if now.After(expireTime.(time.Time)) {
+			atomic.AddInt64(&count, 1)
 		}
-	}
-	c.setsMu.RUnlock()
+		return true
+	})
 
 	return count
 }
@@ -165,14 +186,23 @@ func (c *MemoryCache) SetMemoryLimit(maxBytes int64) {
 }
 
 func (c *MemoryCache) evictKeys(targetBytes int64) {
-	c.setsMu.Lock()
-	defer c.setsMu.Unlock()
-
-	for key := range c.sets {
-		if c.GetMemoryAnalytics().CurrentlyInUse <= targetBytes {
+	for {
+		analytics := c.GetMemoryAnalytics()
+		if analytics.CurrentlyInUse <= targetBytes {
 			break
 		}
-		delete(c.sets, key)
-		c.stats.IncrEvictedKeys()
+
+		var keyToDelete interface{}
+		c.sets.Range(func(key, _ interface{}) bool {
+			keyToDelete = key
+			return false // İlk bulunan anahtarı silmek için döngüyü sonlandır
+		})
+
+		if keyToDelete != nil {
+			c.sets.Delete(keyToDelete)               // Anahtarı sil
+			atomic.AddInt64(&c.stats.evictedKeys, 1) // Silme işlemini kaydet
+		} else {
+			break // Silinecek başka anahtar kalmadıysa çık
+		}
 	}
 }
