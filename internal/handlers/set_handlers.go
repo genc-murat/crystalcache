@@ -19,19 +19,25 @@ func NewSetHandlers(cache ports.Cache) *SetHandlers {
 }
 
 func (h *SetHandlers) HandleSAdd(args []models.Value) models.Value {
-	if err := util.ValidateArgs(args, 2); err != nil {
-		return util.ToValue(err)
+	if len(args) < 2 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'sadd' command"}
 	}
 
-	added, err := h.cache.SAdd(args[0].Bulk, args[1].Bulk)
-	if err != nil {
-		return util.ToValue(err)
+	key := args[0].Bulk
+	added := 0
+
+	// Handle multiple members
+	for i := 1; i < len(args); i++ {
+		wasAdded, err := h.cache.SAdd(key, args[i].Bulk)
+		if err != nil {
+			return util.ToValue(err)
+		}
+		if wasAdded {
+			added++
+		}
 	}
 
-	if added {
-		return models.Value{Type: "integer", Num: 1}
-	}
-	return models.Value{Type: "integer", Num: 0}
+	return models.Value{Type: "integer", Num: added}
 }
 
 func (h *SetHandlers) HandleSMembers(args []models.Value) models.Value {
