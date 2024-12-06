@@ -3,27 +3,21 @@ package cache
 import (
 	"strings"
 	"sync"
+
+	"github.com/genc-murat/crystalcache/internal/core/models"
 )
 
 var (
-	// Builder pool
+	// Existing pools
 	builderPool = sync.Pool{
 		New: func() interface{} {
 			return new(strings.Builder)
 		},
 	}
 
-	// String maps pool - for simple string maps
 	stringMapPool = sync.Pool{
 		New: func() interface{} {
 			return make(map[string]string)
-		},
-	}
-
-	// Bool maps pool - for sets
-	boolMapSetPool = sync.Pool{
-		New: func() interface{} {
-			return make(map[string]map[string]bool)
 		},
 	}
 
@@ -34,10 +28,57 @@ var (
 		},
 	}
 
-	// Hash maps pool
+	// Bool maps pool - for sets
+	boolMapSetPool = sync.Pool{
+		New: func() interface{} {
+			return make(map[string]map[string]bool)
+		},
+	}
+
+	// Lists pool
+	listMapPool = sync.Pool{
+		New: func() interface{} {
+			return make(map[string][]string)
+		},
+	}
+
+	stringListPool = sync.Pool{
+		New: func() interface{} {
+			return make([]string, 0, 32)
+		},
+	}
+
+	// Hash pools
 	hashMapPool = sync.Pool{
 		New: func() interface{} {
 			return make(map[string]map[string]string)
+		},
+	}
+
+	// Set pools
+	setMapPool = sync.Pool{
+		New: func() interface{} {
+			return make(map[string]map[string]bool)
+		},
+	}
+
+	// Sorted Set pools
+	zsetMapPool = sync.Pool{
+		New: func() interface{} {
+			return make(map[string]map[string]float64)
+		},
+	}
+
+	zsetMemberPool = sync.Pool{
+		New: func() interface{} {
+			return make([]models.ZSetMember, 0, 32)
+		},
+	}
+
+	// HyperLogLog pool
+	hllMapPool = sync.Pool{
+		New: func() interface{} {
+			return make(map[string]*models.HyperLogLog)
 		},
 	}
 )

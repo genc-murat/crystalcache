@@ -760,6 +760,18 @@ func (rd *RetryDecorator) HDel(hash string, field string) (bool, error) {
 	return deleted, finalErr
 }
 
+func (rd *RetryDecorator) HScan(hash string, cursor int, pattern string, count int) ([]string, int) {
+	var results []string
+	var nextCursor int
+
+	rd.executeWithRetry(func() error {
+		results, nextCursor = rd.cache.HScan(hash, cursor, pattern, count)
+		return nil
+	})
+
+	return results, nextCursor
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }

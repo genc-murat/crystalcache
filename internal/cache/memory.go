@@ -239,9 +239,15 @@ func (c *MemoryCache) HSet(hash string, key string, value string) error {
 	c.hsetsMu.Lock()
 	defer c.hsetsMu.Unlock()
 
-	if _, exists := c.hsets[hash]; !exists {
-		c.hsets[hash] = make(map[string]string)
+	if c.hsets == nil {
+		c.hsets = hashMapPool.Get().(map[string]map[string]string)
 	}
+
+	if _, exists := c.hsets[hash]; !exists {
+		newMap := stringMapPool.Get().(map[string]string)
+		c.hsets[hash] = newMap
+	}
+
 	c.hsets[hash][key] = value
 	c.incrementKeyVersion(hash)
 	return nil
@@ -263,13 +269,78 @@ func (c *MemoryCache) HGetAll(hash string) map[string]string {
 	defer c.hsetsMu.RUnlock()
 
 	if hashMap, ok := c.hsets[hash]; ok {
-		result := make(map[string]string, len(hashMap))
+		// Get new map from pool
+		result := stringMapPool.Get().(map[string]string)
+
+		// Clear map before use
+		for k := range result {
+			delete(result, k)
+		}
+
+		// Copy values
 		for k, v := range hashMap {
 			result[k] = v
 		}
+
 		return result
 	}
-	return make(map[string]string)
+
+	// Return empty map from pool
+	result := stringMapPool.Get().(map[string]string)
+	return result
+}
+
+func (c *MemoryCache) HScan(hash string, cursor int, pattern string, count int) ([]string, int) {
+	c.hsetsMu.RLock()
+	defer c.hsetsMu.RUnlock()
+
+	hashMap, exists := c.hsets[hash]
+	if !exists {
+		return []string{}, 0
+	}
+
+	// Get fields slice from pool
+	fields := stringSlicePool.Get().([]string)
+	fields = fields[:0]
+
+	for field := range hashMap {
+		if matchPattern(pattern, field) {
+			fields = append(fields, field)
+		}
+	}
+	sort.Strings(fields)
+
+	if cursor >= len(fields) {
+		stringSlicePool.Put(fields)
+		return []string{}, 0
+	}
+
+	// Get result slice from pool
+	result := stringSlicePool.Get().([]string)
+	result = result[:0]
+
+	nextCursor := cursor
+	for i := cursor; i < len(fields) && len(result) < count*2; i++ {
+		field := fields[i]
+		result = append(result, field, hashMap[field])
+		nextCursor = i + 1
+	}
+
+	if nextCursor >= len(fields) {
+		nextCursor = 0
+	}
+
+	// Return slices to pool
+	stringSlicePool.Put(fields)
+
+	// Create final result to return (since we can't return pooled slice)
+	finalResult := make([]string, len(result))
+	copy(finalResult, result)
+
+	// Return result slice to pool
+	stringSlicePool.Put(result)
+
+	return finalResult, nextCursor
 }
 
 func (c *MemoryCache) Keys(pattern string) []string {
@@ -319,9 +390,15 @@ func (c *MemoryCache) LPush(key string, value string) (int, error) {
 	c.listsMu.Lock()
 	defer c.listsMu.Unlock()
 
-	if _, exists := c.lists[key]; !exists {
-		c.lists[key] = make([]string, 0)
+	if c.lists == nil {
+		c.lists = listMapPool.Get().(map[string][]string)
 	}
+	if _, exists := c.lists[key]; !exists {
+		list := stringListPool.Get().([]string)
+		list = list[:0]
+		c.lists[key] = list
+	}
+
 	c.lists[key] = append([]string{value}, c.lists[key]...)
 	c.incrementKeyVersion(key)
 	return len(c.lists[key]), nil
@@ -374,6 +451,9 @@ func (c *MemoryCache) SAdd(key string, member string) (bool, error) {
 	c.setsMu_.Lock()
 	defer c.setsMu_.Unlock()
 
+	if c.sets_ == nil {
+		c.sets_ = setMapPool.Get().(map[string]map[string]bool)
+	}
 	if _, exists := c.sets_[key]; !exists {
 		c.sets_[key] = make(map[string]bool)
 	}
@@ -1152,10 +1232,14 @@ func (c *MemoryCache) Pipeline() *models.Pipeline {
 	}
 }
 
+// Sorted Set Operations
 func (c *MemoryCache) ZAdd(key string, score float64, member string) error {
 	c.zsetsMu.Lock()
 	defer c.zsetsMu.Unlock()
 
+	if c.zsets == nil {
+		c.zsets = zsetMapPool.Get().(map[string]map[string]float64)
+	}
 	if _, exists := c.zsets[key]; !exists {
 		c.zsets[key] = make(map[string]float64)
 	}
@@ -1301,7 +1385,9 @@ func (c *MemoryCache) getSortedMembers(key string) []models.ZSetMember {
 		return []models.ZSetMember{}
 	}
 
-	members := make([]models.ZSetMember, 0, len(set))
+	members := zsetMemberPool.Get().([]models.ZSetMember)
+	members = members[:0]
+
 	for member, score := range set {
 		members = append(members, models.ZSetMember{
 			Member: member,
@@ -1316,7 +1402,11 @@ func (c *MemoryCache) getSortedMembers(key string) []models.ZSetMember {
 		return members[i].Score < members[j].Score
 	})
 
-	return members
+	result := make([]models.ZSetMember, len(members))
+	copy(result, members)
+
+	zsetMemberPool.Put(members)
+	return result
 }
 
 func (c *MemoryCache) ZRevRange(key string, start, stop int) []string {
@@ -1536,6 +1626,10 @@ func (c *MemoryCache) PFAdd(key string, elements ...string) (bool, error) {
 	c.hllsMu.Lock()
 	defer c.hllsMu.Unlock()
 
+	if c.hlls == nil {
+		c.hlls = hllMapPool.Get().(map[string]*models.HyperLogLog)
+	}
+
 	hll, exists := c.hlls[key]
 	if !exists {
 		hll = models.NewHyperLogLog()
@@ -1545,7 +1639,6 @@ func (c *MemoryCache) PFAdd(key string, elements ...string) (bool, error) {
 	modified := false
 	for _, element := range elements {
 		hash := c.murmur3([]byte(element))
-
 		if hll.Add(hash) {
 			modified = true
 		}
@@ -1818,7 +1911,10 @@ func (c *MemoryCache) HDel(hash string, field string) (bool, error) {
 	if hashMap, exists := c.hsets[hash]; exists {
 		if _, fieldExists := hashMap[field]; fieldExists {
 			delete(hashMap, field)
+
+			// If hash is empty, return map to pool
 			if len(hashMap) == 0 {
+				stringMapPool.Put(hashMap)
 				delete(c.hsets, hash)
 			}
 			return true, nil

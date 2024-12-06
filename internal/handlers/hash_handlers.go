@@ -1,8 +1,6 @@
 package handlers
 
 import (
-	"log"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -92,6 +90,7 @@ func (h *HashHandlers) HandleHScan(args []models.Value) models.Value {
 	pattern := "*"
 	count := 10
 
+	// Parse optional arguments
 	for i := 2; i < len(args); i += 2 {
 		if i+1 >= len(args) {
 			return models.Value{Type: "error", Str: "ERR syntax error"}
@@ -110,53 +109,22 @@ func (h *HashHandlers) HandleHScan(args []models.Value) models.Value {
 		}
 	}
 
-	hashMap := h.cache.HGetAll(key)
-	if len(hashMap) == 0 {
-		return models.Value{Type: "array", Array: []models.Value{
-			{Type: "string", Str: "0"},
-			{Type: "array", Array: []models.Value{}},
-		}}
+	// Kullan MemoryCache'deki HScan metodunu
+	results, nextCursor := h.cache.HScan(key, cursor, pattern, count)
+
+	// Convert string slice to Value array
+	resultArray := make([]models.Value, len(results))
+	for i, str := range results {
+		resultArray[i] = models.Value{Type: "string", Str: str}
 	}
 
-	// Convert map to sorted slice for consistent iteration
-	fields := make([]string, 0, len(hashMap))
-	for field := range hashMap {
-		fields = append(fields, field)
+	return models.Value{
+		Type: "array",
+		Array: []models.Value{
+			{Type: "string", Str: strconv.Itoa(nextCursor)},
+			{Type: "array", Array: resultArray},
+		},
 	}
-	sort.Strings(fields)
-
-	if cursor >= len(fields) {
-		return models.Value{Type: "array", Array: []models.Value{
-			{Type: "string", Str: "0"},
-			{Type: "array", Array: []models.Value{}},
-		}}
-	}
-
-	resultArray := make([]models.Value, 0, count*2)
-	nextCursor := cursor
-
-	for i := cursor; i < len(fields) && len(resultArray) < count*2; i++ {
-		field := fields[i]
-		if matchPattern(pattern, field) {
-			resultArray = append(resultArray,
-				models.Value{Type: "string", Str: field},
-				models.Value{Type: "string", Str: hashMap[field]},
-			)
-		}
-		nextCursor = i + 1
-	}
-
-	if nextCursor >= len(fields) {
-		nextCursor = 0
-	}
-
-	log.Printf("[DEBUG] HSCAN hash=%s cursor=%d nextCursor=%d matches=%d",
-		key, cursor, nextCursor, len(resultArray)/2)
-
-	return models.Value{Type: "array", Array: []models.Value{
-		{Type: "string", Str: strconv.Itoa(nextCursor)},
-		{Type: "array", Array: resultArray},
-	}}
 }
 
 func (h *HashHandlers) HandleHDel(args []models.Value) models.Value {

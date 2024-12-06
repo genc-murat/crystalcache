@@ -74,4 +74,5 @@ type Cache interface {
 	Defragment()
 	Scan(cursor int, pattern string, count int) ([]string, int)
 	HDel(hash string, key string) (bool, error)
+	HScan(hash string, cursor int, pattern string, count int) ([]string, int)
 }
