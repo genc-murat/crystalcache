@@ -105,6 +105,11 @@ func (c *MemoryCache) cleanExpired() {
 	c.setsMu.Lock()
 	defer c.setsMu.Unlock()
 
+	// Get string maps from pool if needed
+	if c.expires == nil {
+		c.expires = stringMapPool.Get().(map[string]time.Time)
+	}
+
 	for key, expireTime := range c.expires {
 		if now.After(expireTime) {
 			delete(c.sets, key)
@@ -129,7 +134,15 @@ func (c *MemoryCache) Incr(key string) (int, error) {
 	}
 
 	num++
-	c.sets[key] = strconv.Itoa(num)
+	// Get builder from pool
+	builder := builderPool.Get().(*strings.Builder)
+	builder.Reset()
+	builder.WriteString(strconv.Itoa(num))
+	c.sets[key] = builder.String()
+
+	// Return builder to pool
+	builderPool.Put(builder)
+
 	return num, nil
 }
 
@@ -195,6 +208,11 @@ func (c *MemoryCache) Set(key string, value string) error {
 	c.setsMu.Lock()
 	defer c.setsMu.Unlock()
 
+	// Get stringMap from pool if needed to create new map
+	if c.sets == nil {
+		c.sets = stringMapPool.Get().(map[string]string)
+	}
+
 	c.sets[key] = value
 	c.incrementKeyVersion(key)
 	return nil
@@ -258,14 +276,23 @@ func (c *MemoryCache) Keys(pattern string) []string {
 	c.setsMu.RLock()
 	defer c.setsMu.RUnlock()
 
-	var keys []string
+	// Get slice from pool
+	keys := stringSlicePool.Get().([]string)
+	keys = keys[:0] // Reset length
+
 	for key := range c.sets {
 		if matchPattern(pattern, key) {
 			keys = append(keys, key)
 		}
 	}
 	sort.Strings(keys)
-	return keys
+
+	result := make([]string, len(keys))
+	copy(result, keys)
+
+	stringSlicePool.Put(keys)
+
+	return result
 }
 
 func (c *MemoryCache) TTL(key string) int {
@@ -604,10 +631,31 @@ func (c *MemoryCache) FlushAll() {
 	defer c.listsMu.Unlock()
 	defer c.setsMu_.Unlock()
 
-	c.sets = make(map[string]string)
-	c.hsets = make(map[string]map[string]string)
-	c.lists = make(map[string][]string)
-	c.sets_ = make(map[string]map[string]bool)
+	// Clear and return to pools
+	if c.sets != nil {
+		for k := range c.sets {
+			delete(c.sets, k)
+		}
+		stringMapPool.Put(c.sets)
+	}
+	if c.hsets != nil {
+		for k := range c.hsets {
+			delete(c.hsets, k)
+		}
+		hashMapPool.Put(c.hsets)
+	}
+	if c.sets_ != nil {
+		for k := range c.sets_ {
+			delete(c.sets_, k)
+		}
+		boolMapSetPool.Put(c.sets_)
+	}
+
+	// Get fresh maps from pools
+	c.sets = stringMapPool.Get().(map[string]string)
+	c.hsets = hashMapPool.Get().(map[string]map[string]string)
+	c.lists = make(map[string][]string) // We'll create a pool for this too if needed
+	c.sets_ = boolMapSetPool.Get().(map[string]map[string]bool)
 	c.expires = make(map[string]time.Time)
 }
 
