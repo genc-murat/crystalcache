@@ -115,9 +115,9 @@ func (r *Registry) registerHandlers() {
 	r.handlers["CLUSTER"] = r.clusterHandlers.HandleCluster
 
 	r.handlers["JSON.SET"] = r.jsonHandlers.HandleJSON
-	r.handlers["JSON.GET"] = r.jsonHandlers.HandleJSON
-	r.handlers["JSON.DEL"] = r.jsonHandlers.HandleJSON
-	r.handlers["JSON.TYPE"] = r.jsonHandlers.HandleJSON
+	r.handlers["JSON.GET"] = r.jsonHandlers.HandleJSONGet
+	r.handlers["JSON.DEL"] = r.jsonHandlers.HandleJSONDel
+	r.handlers["JSON.TYPE"] = r.jsonHandlers.HandleJSONType
 }
 
 func (r *Registry) GetHandler(cmd string) (CommandHandler, bool) {

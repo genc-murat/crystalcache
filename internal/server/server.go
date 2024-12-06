@@ -139,7 +139,18 @@ func (s *Server) handleCommand(value models.Value) models.Value {
 	}
 
 	cmd := strings.ToUpper(value.Array[0].Bulk)
-	log.Printf("[DEBUG] Received command: %s", strings.ToUpper(value.Array[0].Bulk))
+	log.Printf("[DEBUG] Received command: %s with args: %+v", cmd, value.Array[1:])
+
+	// Handle JSON commands
+	if strings.HasPrefix(cmd, "JSON.") {
+		handler, exists := s.registry.GetHandler(cmd)
+		if !exists {
+			return models.Value{Type: "error", Str: "ERR unknown JSON command"}
+		}
+		return handler(value.Array[1:])
+	}
+
+	// Handle regular commands
 	handler, exists := s.registry.GetHandler(cmd)
 	if !exists {
 		return models.Value{Type: "error", Str: "ERR unknown command"}
