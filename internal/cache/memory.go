@@ -909,32 +909,21 @@ func (c *MemoryCache) FlushAll() {
 	}
 }
 
+// DBSize returns the total number of keys in the cache
 func (c *MemoryCache) DBSize() int {
 	var total int64
 
-	// Count strings
-	c.sets.Range(func(_, _ interface{}) bool {
-		atomic.AddInt64(&total, 1)
-		return true
-	})
+	countMap := func(m *sync.Map) {
+		m.Range(func(_, _ interface{}) bool {
+			atomic.AddInt64(&total, 1)
+			return true
+		})
+	}
 
-	// Count hashes
-	c.hsets.Range(func(_, _ interface{}) bool {
-		atomic.AddInt64(&total, 1)
-		return true
-	})
-
-	// Count lists
-	c.lists.Range(func(_, _ interface{}) bool {
-		atomic.AddInt64(&total, 1)
-		return true
-	})
-
-	// Count sets
-	c.sets_.Range(func(_, _ interface{}) bool {
-		atomic.AddInt64(&total, 1)
-		return true
-	})
+	countMap(c.sets)
+	countMap(c.hsets)
+	countMap(c.lists)
+	countMap(c.sets_)
 
 	return int(total)
 }
