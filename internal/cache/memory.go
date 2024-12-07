@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"regexp"
 	"runtime"
 	"sort"
 	"strconv"
@@ -16,6 +15,7 @@ import (
 
 	"github.com/genc-murat/crystalcache/internal/core/models"
 	"github.com/genc-murat/crystalcache/internal/core/ports"
+	utils "github.com/genc-murat/crystalcache/pkg/utils/pattern"
 )
 
 type MemoryCache struct {
@@ -63,34 +63,6 @@ func NewMemoryCache() *MemoryCache {
 	}()
 
 	return mc
-}
-
-func matchPattern(pattern, str string) bool {
-	if pattern == "*" {
-		return true
-	}
-
-	regexPattern := strings.Builder{}
-	for i := 0; i < len(pattern); i++ {
-		switch pattern[i] {
-		case '*':
-			regexPattern.WriteString(".*")
-		case '?':
-			regexPattern.WriteString(".")
-		case '[', ']', '(', ')', '{', '}', '.', '+', '|', '^', '$':
-			regexPattern.WriteString("\\")
-			regexPattern.WriteByte(pattern[i])
-		default:
-			regexPattern.WriteByte(pattern[i])
-		}
-	}
-
-	regex, err := regexp.Compile("^" + regexPattern.String() + "$")
-	if err != nil {
-		return false
-	}
-
-	return regex.MatchString(str)
 }
 
 func (c *MemoryCache) cleanExpired() {
@@ -263,7 +235,7 @@ func (c *MemoryCache) HScan(hash string, cursor int, pattern string, count int) 
 	// Desene uyan alanları topla
 	hashMap.Range(func(key, _ interface{}) bool {
 		field := key.(string)
-		if matchPattern(pattern, field) { // Desen kontrolü
+		if utils.MatchPattern(pattern, field) { // Desen kontrolü
 			fields = append(fields, field)
 		}
 		return true // Tüm elemanları gezmeye devam et
@@ -313,8 +285,8 @@ func (c *MemoryCache) Keys(pattern string) []string {
 
 	// Anahtarları toplamak için iterasyon yap
 	c.sets.Range(func(key, _ interface{}) bool {
-		k := key.(string)             // Anahtarı string olarak al
-		if matchPattern(pattern, k) { // Deseni kontrol et
+		k := key.(string)                   // Anahtarı string olarak al
+		if utils.MatchPattern(pattern, k) { // Deseni kontrol et
 			keys = append(keys, k)
 		}
 		return true // Tüm elemanları gezmeye devam et
@@ -2306,7 +2278,7 @@ func (c *MemoryCache) Scan(cursor int, pattern string, count int) ([]string, int
 
 	// Collect matching keys up to count
 	for i := cursor; i < len(allKeys) && len(matches) < count; i++ {
-		if matchPattern(pattern, allKeys[i]) {
+		if utils.MatchPattern(pattern, allKeys[i]) {
 			matches = append(matches, allKeys[i])
 		}
 		nextCursor = i + 1
