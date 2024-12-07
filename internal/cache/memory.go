@@ -1,7 +1,6 @@
 package cache
 
 import (
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"log"
@@ -15,7 +14,8 @@ import (
 
 	"github.com/genc-murat/crystalcache/internal/core/models"
 	"github.com/genc-murat/crystalcache/internal/core/ports"
-	utils "github.com/genc-murat/crystalcache/pkg/utils/pattern"
+	"github.com/genc-murat/crystalcache/pkg/utils/hash"
+	"github.com/genc-murat/crystalcache/pkg/utils/pattern"
 )
 
 type MemoryCache struct {
@@ -216,92 +216,6 @@ func (c *MemoryCache) HGetAll(hash string) map[string]string {
 			return true
 		})
 	}
-	return result
-}
-
-// HScan implementation with sync.Map
-func (c *MemoryCache) HScan(hash string, cursor int, pattern string, count int) ([]string, int) {
-	// Hash haritasını yükle
-	hashMapI, exists := c.hsets.Load(hash)
-	if !exists {
-		return []string{}, 0 // Eğer hash bulunamazsa, boş sonuç döndür
-	}
-	hashMap := hashMapI.(*sync.Map)
-
-	// Havuzdan bir fields slice'ı al
-	fields := stringSlicePool.Get().([]string)
-	fields = fields[:0] // Sıfırla
-
-	// Desene uyan alanları topla
-	hashMap.Range(func(key, _ interface{}) bool {
-		field := key.(string)
-		if utils.MatchPattern(pattern, field) { // Desen kontrolü
-			fields = append(fields, field)
-		}
-		return true // Tüm elemanları gezmeye devam et
-	})
-	sort.Strings(fields) // Alanları alfabetik olarak sırala
-
-	// Cursor aralığını kontrol et
-	if cursor >= len(fields) {
-		stringSlicePool.Put(fields) // Havuzu geri koy
-		return []string{}, 0
-	}
-
-	// Havuzdan bir result slice'ı al
-	result := stringSlicePool.Get().([]string)
-	result = result[:0] // Sıfırla
-
-	nextCursor := cursor
-	for i := cursor; i < len(fields) && len(result) < count*2; i++ {
-		field := fields[i]
-		if value, ok := hashMap.Load(field); ok { // Alanın değerini yükle
-			result = append(result, field, value.(string)) // Alan ve değer ekle
-		}
-		nextCursor = i + 1
-	}
-
-	// Eğer cursor sona ulaştıysa, sıfırla
-	if nextCursor >= len(fields) {
-		nextCursor = 0
-	}
-
-	// Kullanılmış fields slice'ını havuza geri koy
-	stringSlicePool.Put(fields)
-
-	// Final sonucu oluştur ve havuzu geri koy
-	finalResult := make([]string, len(result))
-	copy(finalResult, result)
-	stringSlicePool.Put(result)
-
-	return finalResult, nextCursor
-}
-
-// Keys implementation with sync.Map
-func (c *MemoryCache) Keys(pattern string) []string {
-	// Havuzdan bir slice al
-	keys := stringSlicePool.Get().([]string)
-	keys = keys[:0] // Sıfırla, önceki verilerden kurtul
-
-	// Anahtarları toplamak için iterasyon yap
-	c.sets.Range(func(key, _ interface{}) bool {
-		k := key.(string)                   // Anahtarı string olarak al
-		if utils.MatchPattern(pattern, k) { // Deseni kontrol et
-			keys = append(keys, k)
-		}
-		return true // Tüm elemanları gezmeye devam et
-	})
-
-	// Anahtarları sıralı bir şekilde döndür
-	sort.Strings(keys)
-
-	// Sonuç slice'ını oluştur ve döndür
-	result := make([]string, len(keys))
-	copy(result, keys) // Havuzdan alınan slice'ı koruma altına al
-
-	// Havuzdan alınan slice'ı geri koy
-	stringSlicePool.Put(keys)
-
 	return result
 }
 
@@ -1938,47 +1852,15 @@ func (c *MemoryCache) ZUnionStore(destination string, keys []string, weights []f
 	return count, nil
 }
 
-func (c *MemoryCache) murmur3(data []byte) uint64 {
-	var h1, h2 uint64 = 0x9368e53c2f6af274, 0x586dcd208f7cd3fd
-	const c1, c2 uint64 = 0x87c37b91114253d5, 0x4cf5ad432745937f
-
-	length := len(data)
-	nblocks := length / 16
-
-	for i := 0; i < nblocks; i++ {
-		k1 := binary.LittleEndian.Uint64(data[i*16:])
-		k2 := binary.LittleEndian.Uint64(data[i*16+8:])
-
-		k1 *= c1
-		k1 = (k1 << 31) | (k1 >> 33)
-		k1 *= c2
-		h1 ^= k1
-
-		h1 = (h1 << 27) | (h1 >> 37)
-		h1 += h2
-		h1 = h1*5 + 0x52dce729
-
-		k2 *= c2
-		k2 = (k2 << 33) | (k2 >> 31)
-		k2 *= c1
-		h2 ^= k2
-
-		h2 = (h2 << 31) | (h2 >> 33)
-		h2 += h1
-		h2 = h2*5 + 0x38495ab5
-	}
-
-	return h1 ^ h2
-}
-
 func (c *MemoryCache) PFAdd(key string, elements ...string) (bool, error) {
 	value, _ := c.hlls.LoadOrStore(key, models.NewHyperLogLog())
 	hll := value.(*models.HyperLogLog)
 
 	modified := false
 	for _, element := range elements {
-		hash := c.murmur3([]byte(element))
-		if hll.Add(hash) {
+		// Use the renamed function
+		hashValue := hash.Hash64([]byte(element))
+		if hll.Add(hashValue) {
 			modified = true
 		}
 	}
@@ -2232,38 +2114,116 @@ func (c *MemoryCache) GetMemoryStats() models.MemoryStats {
 	}
 }
 
-func (c *MemoryCache) Scan(cursor int, pattern string, count int) ([]string, int) {
-	// Get keys from all data structures
-	allKeys := make([]string, 0)
+// HScan implements Redis HSCAN command with optimized pattern matching
+func (c *MemoryCache) HScan(hash string, cursor int, matchPattern string, count int) ([]string, int) {
+	hashMapI, exists := c.hsets.Load(hash)
+	if !exists {
+		return []string{}, 0
+	}
+	hashMap := hashMapI.(*sync.Map)
 
-	// String keys
+	// Get fields slice from pool
+	fields := stringSlicePool.Get().([]string)
+	fields = fields[:0] // Reset slice keeping capacity
+
+	// Collect matching fields
+	hashMap.Range(func(key, _ interface{}) bool {
+		field := key.(string)
+		if pattern.Match(matchPattern, field) {
+			fields = append(fields, field)
+		}
+		return true
+	})
+	sort.Strings(fields)
+
+	// Check cursor bounds
+	if cursor >= len(fields) {
+		stringSlicePool.Put(fields)
+		return []string{}, 0
+	}
+
+	// Get result slice from pool
+	result := stringSlicePool.Get().([]string)
+	result = result[:0]
+
+	// Collect results with field-value pairs
+	nextCursor := cursor
+	for i := cursor; i < len(fields) && len(result) < count*2; i++ {
+		field := fields[i]
+		if value, ok := hashMap.Load(field); ok {
+			result = append(result, field, value.(string))
+		}
+		nextCursor = i + 1
+	}
+
+	// Reset cursor if we've reached the end
+	if nextCursor >= len(fields) {
+		nextCursor = 0
+	}
+
+	// Create final result
+	finalResult := make([]string, len(result))
+	copy(finalResult, result)
+
+	// Return slices to pool
+	stringSlicePool.Put(fields)
+	stringSlicePool.Put(result)
+
+	return finalResult, nextCursor
+}
+
+// Keys implements Redis KEYS command with optimized pattern matching
+func (c *MemoryCache) Keys(matchPattern string) []string {
+	// Get slice from pool
+	keys := stringSlicePool.Get().([]string)
+	keys = keys[:0]
+
+	// Collect matching keys
 	c.sets.Range(func(key, _ interface{}) bool {
-		allKeys = append(allKeys, key.(string))
+		k := key.(string)
+		if pattern.Match(matchPattern, k) {
+			keys = append(keys, k)
+		}
 		return true
 	})
 
-	// Set keys
-	c.sets_.Range(func(key, _ interface{}) bool {
-		allKeys = append(allKeys, key.(string))
-		return true
-	})
+	sort.Strings(keys)
 
-	// Hash keys
-	c.hsets.Range(func(key, _ interface{}) bool {
-		allKeys = append(allKeys, key.(string))
-		return true
-	})
+	// Create final result
+	result := make([]string, len(keys))
+	copy(result, keys)
 
-	// List keys
-	c.lists.Range(func(key, _ interface{}) bool {
-		allKeys = append(allKeys, key.(string))
-		return true
-	})
+	// Return slice to pool
+	stringSlicePool.Put(keys)
 
-	// Sort keys for consistent iteration
+	return result
+}
+
+// Scan implements Redis SCAN command with optimized iteration over all key types
+func (c *MemoryCache) Scan(cursor int, matchPattern string, count int) ([]string, int) {
+	// Get keys slice from pool
+	allKeys := stringSlicePool.Get().([]string)
+	allKeys = allKeys[:0]
+
+	// Collect keys from all data structures
+	collectKeys := func(m *sync.Map) {
+		m.Range(func(key, _ interface{}) bool {
+			allKeys = append(allKeys, key.(string))
+			return true
+		})
+	}
+
+	// Collect keys from all data structures
+	collectKeys(c.sets)
+	collectKeys(c.sets_)
+	collectKeys(c.hsets)
+	collectKeys(c.lists)
+
+	// Sort for consistent iteration
 	sort.Strings(allKeys)
 
 	if len(allKeys) == 0 {
+		stringSlicePool.Put(allKeys)
 		return []string{}, 0
 	}
 
@@ -2272,13 +2232,14 @@ func (c *MemoryCache) Scan(cursor int, pattern string, count int) ([]string, int
 		cursor = 0
 	}
 
-	// Pre-allocate matches slice with capacity
-	matches := make([]string, 0, count)
-	nextCursor := cursor
+	// Get matches slice from pool
+	matches := stringSlicePool.Get().([]string)
+	matches = matches[:0]
 
-	// Collect matching keys up to count
+	// Collect matching keys
+	nextCursor := cursor
 	for i := cursor; i < len(allKeys) && len(matches) < count; i++ {
-		if utils.MatchPattern(pattern, allKeys[i]) {
+		if pattern.Match(matchPattern, allKeys[i]) {
 			matches = append(matches, allKeys[i])
 		}
 		nextCursor = i + 1
@@ -2289,8 +2250,16 @@ func (c *MemoryCache) Scan(cursor int, pattern string, count int) ([]string, int
 		nextCursor = 0
 	}
 
-	log.Printf("[DEBUG] SCAN found %d keys, nextCursor: %d", len(matches), nextCursor)
-	return matches, nextCursor
+	// Create final result
+	result := make([]string, len(matches))
+	copy(result, matches)
+
+	// Return slices to pool
+	stringSlicePool.Put(allKeys)
+	stringSlicePool.Put(matches)
+
+	log.Printf("[DEBUG] SCAN found %d keys, nextCursor: %d", len(result), nextCursor)
+	return result, nextCursor
 }
 
 func (c *MemoryCache) HDel(hash string, field string) (bool, error) {

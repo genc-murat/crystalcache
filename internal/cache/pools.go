@@ -55,9 +55,9 @@ var (
 		},
 	}
 
-	stringSlicePool = sync.Pool{
+	stringSlicePool = &sync.Pool{
 		New: func() interface{} {
-			return make([]string, 0, 100) // 100 kapasiteyle başlatılabilir
+			return make([]string, 0, 64)
 		},
 	}
 )
