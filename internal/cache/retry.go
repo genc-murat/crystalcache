@@ -948,6 +948,25 @@ func (rd *RetryDecorator) ZRevRank(key string, member string) (int, bool) {
 	return rank, finalExists
 }
 
+func (rd *RetryDecorator) ZScan(key string, cursor int, match string, count int) ([]models.ZSetMember, int) {
+	var members []models.ZSetMember
+	var nextCursor int
+	rd.executeWithRetry(func() error {
+		members, nextCursor = rd.cache.ZScan(key, cursor, match, count)
+		return nil
+	})
+	return members, nextCursor
+}
+
+func (rd *RetryDecorator) ZUnion(keys ...string) []models.ZSetMember {
+	var result []models.ZSetMember
+	rd.executeWithRetry(func() error {
+		result = rd.cache.ZUnion(keys...)
+		return nil
+	})
+	return result
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }

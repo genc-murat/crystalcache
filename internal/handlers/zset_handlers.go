@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"math/rand"
+	"strconv"
 	"time"
 
 	"github.com/genc-murat/crystalcache/internal/core/models"
@@ -984,4 +985,147 @@ func (h *ZSetHandlers) HandleZRevRank(args []models.Value) models.Value {
 	}
 
 	return models.Value{Type: "integer", Num: rank}
+}
+
+func (h *ZSetHandlers) HandleZScan(args []models.Value) models.Value {
+	if len(args) < 2 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'zscan' command"}
+	}
+
+	cursor, err := util.ParseInt(args[1])
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR invalid cursor"}
+	}
+
+	match := "*"
+	count := 10
+
+	// Parse optional MATCH and COUNT
+	for i := 2; i < len(args); i++ {
+		if args[i].Bulk == "MATCH" && i+1 < len(args) {
+			match = args[i+1].Bulk
+			i++
+		} else if args[i].Bulk == "COUNT" && i+1 < len(args) {
+			count, err = util.ParseInt(args[i+1])
+			if err != nil {
+				return models.Value{Type: "error", Str: "ERR value is not an integer"}
+			}
+			i++
+		}
+	}
+
+	members, nextCursor := h.cache.ZScan(args[0].Bulk, cursor, match, count)
+
+	// Format response
+	response := make([]models.Value, 2)
+	response[0] = models.Value{Type: "bulk", Bulk: strconv.Itoa(nextCursor)}
+
+	// Add members and scores
+	result := make([]models.Value, len(members)*2)
+	for i, member := range members {
+		result[i*2] = models.Value{Type: "bulk", Bulk: member.Member}
+		result[i*2+1] = models.Value{Type: "bulk", Bulk: util.FormatFloat(member.Score)}
+	}
+	response[1] = models.Value{Type: "array", Array: result}
+
+	return models.Value{Type: "array", Array: response}
+}
+
+func (h *ZSetHandlers) HandleZScore(args []models.Value) models.Value {
+	if len(args) < 2 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'zscore' command"}
+	}
+
+	score, exists := h.cache.ZScore(args[0].Bulk, args[1].Bulk)
+	if !exists {
+		return models.Value{Type: "null"}
+	}
+
+	return models.Value{Type: "bulk", Bulk: util.FormatFloat(score)}
+}
+
+func (h *ZSetHandlers) HandleZUnion(args []models.Value) models.Value {
+	if len(args) < 1 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'zunion' command"}
+	}
+
+	numKeys, err := util.ParseInt(args[0])
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR value is not an integer"}
+	}
+
+	if len(args) < numKeys+1 {
+		return models.Value{Type: "error", Str: "ERR not enough keys specified"}
+	}
+
+	keys := make([]string, numKeys)
+	for i := 0; i < numKeys; i++ {
+		keys[i] = args[i+1].Bulk
+	}
+
+	withScores := false
+	if len(args) > numKeys+1 && args[numKeys+1].Bulk == "WITHSCORES" {
+		withScores = true
+	}
+
+	members := h.cache.ZUnion(keys...)
+
+	if withScores {
+		result := make([]models.Value, len(members)*2)
+		for i, member := range members {
+			result[i*2] = models.Value{Type: "bulk", Bulk: member.Member}
+			result[i*2+1] = models.Value{Type: "bulk", Bulk: util.FormatFloat(member.Score)}
+		}
+		return models.Value{Type: "array", Array: result}
+	}
+
+	result := make([]models.Value, len(members))
+	for i, member := range members {
+		result[i] = models.Value{Type: "bulk", Bulk: member.Member}
+	}
+	return models.Value{Type: "array", Array: result}
+}
+
+func (h *ZSetHandlers) HandleZUnionStore(args []models.Value) models.Value {
+	if len(args) < 2 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'zunionstore' command"}
+	}
+
+	numKeys, err := util.ParseInt(args[1])
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR value is not an integer"}
+	}
+
+	if len(args) < numKeys+2 {
+		return models.Value{Type: "error", Str: "ERR not enough keys specified"}
+	}
+
+	keys := make([]string, numKeys)
+	for i := 0; i < numKeys; i++ {
+		keys[i] = args[i+2].Bulk
+	}
+
+	// Parse optional WEIGHTS
+	var weights []float64
+	currentArg := numKeys + 2
+	if currentArg < len(args) && args[currentArg].Bulk == "WEIGHTS" {
+		if len(args) < currentArg+numKeys+1 {
+			return models.Value{Type: "error", Str: "ERR syntax error"}
+		}
+		weights = make([]float64, numKeys)
+		for i := 0; i < numKeys; i++ {
+			weight, err := util.ParseFloat(args[currentArg+1+i])
+			if err != nil {
+				return models.Value{Type: "error", Str: "ERR weight value is not a float"}
+			}
+			weights[i] = weight
+		}
+	}
+
+	count, err := h.cache.ZUnionStore(args[0].Bulk, keys, weights)
+	if err != nil {
+		return util.ToValue(err)
+	}
+
+	return models.Value{Type: "integer", Num: count}
 }

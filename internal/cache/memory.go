@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"math"
 	"runtime"
 	"sort"
 	"strconv"
@@ -2806,6 +2807,97 @@ func (c *MemoryCache) ZRevRank(key string, member string) (int, bool) {
 		}
 	}
 	return 0, false
+}
+
+func (c *MemoryCache) ZScan(key string, cursor int, match string, count int) ([]models.ZSetMember, int) {
+	setI, exists := c.zsets.Load(key)
+	if !exists {
+		return []models.ZSetMember{}, 0
+	}
+	set := setI.(*sync.Map)
+
+	// Get all members first
+	var members []models.ZSetMember
+	set.Range(func(member, score interface{}) bool {
+		if pattern.Match(match, member.(string)) {
+			members = append(members, models.ZSetMember{
+				Member: member.(string),
+				Score:  score.(float64),
+			})
+		}
+		return true
+	})
+
+	// Sort for consistent iteration
+	sort.Slice(members, func(i, j int) bool {
+		return members[i].Member < members[j].Member
+	})
+
+	if len(members) == 0 {
+		return []models.ZSetMember{}, 0
+	}
+
+	// Handle cursor and count
+	if cursor >= len(members) {
+		return []models.ZSetMember{}, 0
+	}
+
+	end := cursor + count
+	if end > len(members) {
+		end = len(members)
+	}
+
+	nextCursor := end
+	if nextCursor >= len(members) {
+		nextCursor = 0
+	}
+
+	return members[cursor:end], nextCursor
+}
+
+func (c *MemoryCache) ZUnion(keys ...string) []models.ZSetMember {
+	if len(keys) == 0 {
+		return []models.ZSetMember{}
+	}
+
+	// Use map to accumulate scores
+	unionMap := make(map[string]float64)
+
+	for _, key := range keys {
+		if setI, exists := c.zsets.Load(key); exists {
+			set := setI.(*sync.Map)
+			set.Range(func(member, score interface{}) bool {
+				memberStr := member.(string)
+				scoreFloat := score.(float64)
+
+				if existingScore, ok := unionMap[memberStr]; ok {
+					unionMap[memberStr] = math.Max(existingScore, scoreFloat)
+				} else {
+					unionMap[memberStr] = scoreFloat
+				}
+				return true
+			})
+		}
+	}
+
+	// Convert map to sorted slice
+	result := make([]models.ZSetMember, 0, len(unionMap))
+	for member, score := range unionMap {
+		result = append(result, models.ZSetMember{
+			Member: member,
+			Score:  score,
+		})
+	}
+
+	// Sort by score and member
+	sort.Slice(result, func(i, j int) bool {
+		if result[i].Score == result[j].Score {
+			return result[i].Member < result[j].Member
+		}
+		return result[i].Score < result[j].Score
+	})
+
+	return result
 }
 
 func (c *MemoryCache) WithRetry(strategy models.RetryStrategy) ports.Cache {

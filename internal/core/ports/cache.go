@@ -91,4 +91,6 @@ type Cache interface {
 	ZRevRangeByLex(key string, max, min string) []string
 	ZRevRangeByScore(key string, max, min float64) []string
 	ZRevRank(key string, member string) (int, bool)
+	ZScan(key string, cursor int, match string, count int) ([]models.ZSetMember, int)
+	ZUnion(keys ...string) []models.ZSetMember
 }
