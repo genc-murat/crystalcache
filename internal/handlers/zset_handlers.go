@@ -171,5 +171,3 @@ func (h *ZSetHandlers) HandleZInterStore(args []models.Value) models.Value {
 
 	return models.Value{Type: "integer", Num: count}
 }
-
-// Diğer ZSet komutları...

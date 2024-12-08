@@ -9,14 +9,28 @@ import (
 	"github.com/genc-murat/crystalcache/internal/util"
 )
 
+// HashHandlers implements handlers for hash operations in the cache
 type HashHandlers struct {
 	cache ports.Cache
 }
 
+// NewHashHandlers creates a new instance of HashHandlers
+// Parameters:
+//   - cache: The cache implementation to be used for hash operations
+//
+// Returns:
+//   - *HashHandlers: A pointer to the newly created HashHandlers instance
 func NewHashHandlers(cache ports.Cache) *HashHandlers {
 	return &HashHandlers{cache: cache}
 }
 
+// HandleHSet handles the HSET command which sets field-value pairs in a hash
+// Parameters:
+//   - args: Array of Values containing the key followed by field-value pairs
+//
+// Returns:
+//   - models.Value: Number of fields that were added as an integer response
+//     Returns error if wrong number of arguments or if operation fails
 func (h *HashHandlers) HandleHSet(args []models.Value) models.Value {
 	if len(args) < 3 || len(args)%2 != 1 {
 		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'hset' command"}
@@ -36,6 +50,13 @@ func (h *HashHandlers) HandleHSet(args []models.Value) models.Value {
 	return models.Value{Type: "integer", Num: fieldsAdded}
 }
 
+// HandleHGet handles the HGET command which retrieves the value of a field in a hash
+// Parameters:
+//   - args: Array of Values containing the key and field name
+//
+// Returns:
+//   - models.Value: The value associated with field, or null if field doesn't exist
+//     Returns error if wrong number of arguments
 func (h *HashHandlers) HandleHGet(args []models.Value) models.Value {
 	if err := util.ValidateArgs(args, 2); err != nil {
 		return util.ToValue(err)
@@ -49,6 +70,13 @@ func (h *HashHandlers) HandleHGet(args []models.Value) models.Value {
 	return models.Value{Type: "bulk", Bulk: value}
 }
 
+// HandleHGetAll handles the HGETALL command which retrieves all field-value pairs in a hash
+// Parameters:
+//   - args: Array of Values containing the key
+//
+// Returns:
+//   - models.Value: Array of alternating field names and values
+//     Returns error if wrong number of arguments
 func (h *HashHandlers) HandleHGetAll(args []models.Value) models.Value {
 	if err := util.ValidateArgs(args, 1); err != nil {
 		return util.ToValue(err)
@@ -67,6 +95,13 @@ func (h *HashHandlers) HandleHGetAll(args []models.Value) models.Value {
 	return models.Value{Type: "array", Array: result}
 }
 
+// HandleHLen handles the HLEN command which returns the number of fields in a hash
+// Parameters:
+//   - args: Array of Values containing the key
+//
+// Returns:
+//   - models.Value: Number of fields in the hash as an integer
+//     Returns error if wrong number of arguments
 func (h *HashHandlers) HandleHLen(args []models.Value) models.Value {
 	if err := util.ValidateArgs(args, 1); err != nil {
 		return util.ToValue(err)
@@ -76,6 +111,17 @@ func (h *HashHandlers) HandleHLen(args []models.Value) models.Value {
 	return models.Value{Type: "integer", Num: len(pairs)}
 }
 
+// HandleHScan handles the HSCAN command which incrementally iterates over a hash
+// Parameters:
+//   - args: Array of Values containing:
+//   - key: Hash key to scan
+//   - cursor: Starting position
+//   - Optional MATCH pattern
+//   - Optional COUNT count
+//
+// Returns:
+//   - models.Value: Array containing next cursor and array of elements
+//     Returns error if invalid arguments or syntax error
 func (h *HashHandlers) HandleHScan(args []models.Value) models.Value {
 	if len(args) < 2 {
 		return models.Value{Type: "error", Str: "ERR wrong number of arguments for HSCAN"}
@@ -109,10 +155,8 @@ func (h *HashHandlers) HandleHScan(args []models.Value) models.Value {
 		}
 	}
 
-	// Kullan MemoryCache'deki HScan metodunu
 	results, nextCursor := h.cache.HScan(key, cursor, pattern, count)
 
-	// Convert string slice to Value array
 	resultArray := make([]models.Value, len(results))
 	for i, str := range results {
 		resultArray[i] = models.Value{Type: "string", Str: str}
@@ -127,6 +171,13 @@ func (h *HashHandlers) HandleHScan(args []models.Value) models.Value {
 	}
 }
 
+// HandleHDel handles the HDEL command which removes one or more fields from a hash
+// Parameters:
+//   - args: Array of Values containing the key followed by one or more fields
+//
+// Returns:
+//   - models.Value: Number of fields that were removed as an integer
+//     Returns error if wrong number of arguments
 func (h *HashHandlers) HandleHDel(args []models.Value) models.Value {
 	if len(args) < 2 {
 		return models.Value{Type: "error", Str: "ERR wrong number of arguments for HDEL"}
