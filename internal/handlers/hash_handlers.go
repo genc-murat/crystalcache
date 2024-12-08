@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"math/rand"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/genc-murat/crystalcache/internal/core/models"
 	"github.com/genc-murat/crystalcache/internal/core/ports"
@@ -350,4 +352,444 @@ func (h *HashHandlers) HandleHIncrByFloat(args []models.Value) models.Value {
 
 	// Convert float to string with proper precision
 	return models.Value{Type: "bulk", Bulk: strconv.FormatFloat(newVal, 'f', -1, 64)}
+}
+
+// HandleHKeys handles the HKEYS command which returns all field names in a hash
+// Parameters:
+//   - args: Array of Values containing the hash key
+//
+// Returns:
+//   - models.Value: Array of field names
+//     Returns error if wrong number of arguments
+func (h *HashHandlers) HandleHKeys(args []models.Value) models.Value {
+	if err := util.ValidateArgs(args, 1); err != nil {
+		return util.ToValue(err)
+	}
+
+	// Get all key-value pairs
+	pairs := h.cache.HGetAll(args[0].Bulk)
+
+	// Extract keys
+	result := make([]models.Value, 0, len(pairs))
+	for key := range pairs {
+		result = append(result, models.Value{Type: "bulk", Bulk: key})
+	}
+
+	return models.Value{Type: "array", Array: result}
+}
+
+// HandleHMGet handles the HMGET command which gets values for multiple fields in a hash
+// Parameters:
+//   - args: Array of Values containing the hash key followed by field names
+//
+// Returns:
+//   - models.Value: Array of values for the requested fields (nil for non-existing fields)
+//     Returns error if wrong number of arguments
+func (h *HashHandlers) HandleHMGet(args []models.Value) models.Value {
+	if len(args) < 2 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for HMGET command"}
+	}
+
+	hashKey := args[0].Bulk
+	result := make([]models.Value, len(args)-1)
+
+	// Get value for each field
+	for i := 1; i < len(args); i++ {
+		value, exists := h.cache.HGet(hashKey, args[i].Bulk)
+		if exists {
+			result[i-1] = models.Value{Type: "bulk", Bulk: value}
+		} else {
+			result[i-1] = models.Value{Type: "null"}
+		}
+	}
+
+	return models.Value{Type: "array", Array: result}
+}
+
+// HandleHPersist handles the HPERSIST command which removes the expiration from a hash
+// Parameters:
+//   - args: Array of Values containing the hash key
+//
+// Returns:
+//   - models.Value: 1 if the timeout was removed, 0 if key doesn't exist or has no timeout
+//     Returns error if wrong number of arguments
+func (h *HashHandlers) HandleHPersist(args []models.Value) models.Value {
+	if err := util.ValidateArgs(args, 1); err != nil {
+		return util.ToValue(err)
+	}
+
+	// Check if hash exists and has a timeout
+	expireTime, err := h.cache.ExpireTime(args[0].Bulk)
+	if err != nil || expireTime < 0 {
+		return models.Value{Type: "integer", Num: 0}
+	}
+
+	// Remove timeout by setting it to -1
+	err = h.cache.ExpireAt(args[0].Bulk, -1)
+	if err != nil {
+		return models.Value{Type: "integer", Num: 0}
+	}
+
+	return models.Value{Type: "integer", Num: 1}
+}
+
+// HandleHSetNX handles the HSETNX command which sets a field only if it does not exist
+// Parameters:
+//   - args: Array of Values containing the hash key, field name, and value
+//
+// Returns:
+//   - models.Value: 1 if field was set, 0 if field exists
+//     Returns error if wrong number of arguments
+func (h *HashHandlers) HandleHSetNX(args []models.Value) models.Value {
+	if err := util.ValidateArgs(args, 3); err != nil {
+		return util.ToValue(err)
+	}
+
+	// Check if field exists
+	_, exists := h.cache.HGet(args[0].Bulk, args[1].Bulk)
+	if exists {
+		return models.Value{Type: "integer", Num: 0}
+	}
+
+	// Set field if it doesn't exist
+	err := h.cache.HSet(args[0].Bulk, args[1].Bulk, args[2].Bulk)
+	if err != nil {
+		return util.ToValue(err)
+	}
+
+	return models.Value{Type: "integer", Num: 1}
+}
+
+// HandleHStrLen handles the HSTRLEN command which returns the string length of a hash field's value
+// Parameters:
+//   - args: Array of Values containing the hash key and field name
+//
+// Returns:
+//   - models.Value: Length of the field value, 0 if field doesn't exist
+//     Returns error if wrong number of arguments
+func (h *HashHandlers) HandleHStrLen(args []models.Value) models.Value {
+	if err := util.ValidateArgs(args, 2); err != nil {
+		return util.ToValue(err)
+	}
+
+	value, exists := h.cache.HGet(args[0].Bulk, args[1].Bulk)
+	if !exists {
+		return models.Value{Type: "integer", Num: 0}
+	}
+
+	return models.Value{Type: "integer", Num: len(value)}
+}
+
+// HandleHTTL handles the HTTL command which returns the remaining time to live of a hash
+// Parameters:
+//   - args: Array of Values containing the hash key
+//
+// Returns:
+//   - models.Value: Remaining TTL in seconds, -2 if key doesn't exist, -1 if no TTL
+//     Returns error if wrong number of arguments
+func (h *HashHandlers) HandleHTTL(args []models.Value) models.Value {
+	if err := util.ValidateArgs(args, 1); err != nil {
+		return util.ToValue(err)
+	}
+
+	expireTime, err := h.cache.ExpireTime(args[0].Bulk)
+	if err != nil {
+		return models.Value{Type: "integer", Num: -2}
+	}
+
+	// Check if the hash exists
+	pairs := h.cache.HGetAll(args[0].Bulk)
+	if len(pairs) == 0 {
+		return models.Value{Type: "integer", Num: -2}
+	}
+
+	// If no expiration
+	if expireTime < 0 {
+		return models.Value{Type: "integer", Num: -1}
+	}
+
+	// Calculate remaining time
+	remaining := expireTime - time.Now().Unix()
+	if remaining < 0 {
+		return models.Value{Type: "integer", Num: -2}
+	}
+
+	return models.Value{Type: "integer", Num: int(remaining)}
+}
+
+// HandleHVals handles the HVALS command which returns all values in a hash
+// Parameters:
+//   - args: Array of Values containing the hash key
+//
+// Returns:
+//   - models.Value: Array of all values in the hash
+//     Returns error if wrong number of arguments
+func (h *HashHandlers) HandleHVals(args []models.Value) models.Value {
+	if err := util.ValidateArgs(args, 1); err != nil {
+		return util.ToValue(err)
+	}
+
+	// Get all key-value pairs
+	pairs := h.cache.HGetAll(args[0].Bulk)
+
+	// Extract values
+	result := make([]models.Value, 0, len(pairs))
+	for _, value := range pairs {
+		result = append(result, models.Value{Type: "bulk", Bulk: value})
+	}
+
+	return models.Value{Type: "array", Array: result}
+}
+
+// HandleHPTTL handles the HPTTL command which returns the remaining time to live of a hash in milliseconds
+// Parameters:
+//   - args: Array of Values containing the hash key
+//
+// Returns:
+//   - models.Value: Remaining TTL in milliseconds, -2 if key doesn't exist, -1 if no TTL
+//     Returns error if wrong number of arguments
+func (h *HashHandlers) HandleHPTTL(args []models.Value) models.Value {
+	if err := util.ValidateArgs(args, 1); err != nil {
+		return util.ToValue(err)
+	}
+
+	expireTime, err := h.cache.ExpireTime(args[0].Bulk)
+	if err != nil {
+		return models.Value{Type: "integer", Num: -2}
+	}
+
+	// Check if the hash exists
+	pairs := h.cache.HGetAll(args[0].Bulk)
+	if len(pairs) == 0 {
+		return models.Value{Type: "integer", Num: -2}
+	}
+
+	// If no expiration
+	if expireTime < 0 {
+		return models.Value{Type: "integer", Num: -1}
+	}
+
+	// Calculate remaining time in milliseconds
+	remaining := (expireTime - time.Now().Unix()) * 1000
+	if remaining < 0 {
+		return models.Value{Type: "integer", Num: -2}
+	}
+
+	return models.Value{Type: "integer", Num: int(remaining)}
+}
+
+// HandleHRandField handles the HRANDFIELD command which returns random fields from a hash
+// Parameters:
+//   - args: Array of Values containing:
+//   - key: hash key
+//   - count (optional): number of fields to return (default 1)
+//   - withvalues (optional): "WITHVALUES" flag to include values
+//
+// Returns:
+//   - models.Value: Single field name if no count specified,
+//     Array of field names if count specified,
+//     Array of field-value pairs if WITHVALUES specified
+//     Returns error if wrong arguments or key doesn't exist
+func (h *HashHandlers) HandleHRandField(args []models.Value) models.Value {
+	if len(args) < 1 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'hrandfield' command"}
+	}
+
+	// Get all key-value pairs
+	pairs := h.cache.HGetAll(args[0].Bulk)
+	if len(pairs) == 0 {
+		return models.Value{Type: "null"}
+	}
+
+	// Convert map to slice of keys for random selection
+	keys := make([]string, 0, len(pairs))
+	for k := range pairs {
+		keys = append(keys, k)
+	}
+
+	// Default to returning one field
+	count := 1
+	withValues := false
+
+	// Parse optional arguments
+	if len(args) > 1 {
+		var err error
+		count, err = strconv.Atoi(args[1].Bulk)
+		if err != nil {
+			return models.Value{Type: "error", Str: "ERR value is not an integer"}
+		}
+
+		// Check for WITHVALUES flag
+		if len(args) > 2 && strings.ToUpper(args[2].Bulk) == "WITHVALUES" {
+			withValues = true
+		}
+	}
+
+	// Handle negative count (absolute value without duplicates)
+	allowDuplicates := true
+	if count < 0 {
+		count = -count
+		allowDuplicates = false
+	}
+
+	// Generate random fields
+	var result []models.Value
+	if allowDuplicates {
+		// With duplicates
+		result = make([]models.Value, 0, count)
+		for i := 0; i < count; i++ {
+			idx := rand.Intn(len(keys))
+			if withValues {
+				result = append(result,
+					models.Value{Type: "bulk", Bulk: keys[idx]},
+					models.Value{Type: "bulk", Bulk: pairs[keys[idx]]},
+				)
+			} else {
+				result = append(result, models.Value{Type: "bulk", Bulk: keys[idx]})
+			}
+		}
+	} else {
+		// Without duplicates
+		if count > len(keys) {
+			count = len(keys)
+		}
+		// Fisher-Yates shuffle
+		for i := len(keys) - 1; i > 0; i-- {
+			j := rand.Intn(i + 1)
+			keys[i], keys[j] = keys[j], keys[i]
+		}
+		result = make([]models.Value, 0, count*2)
+		for i := 0; i < count; i++ {
+			if withValues {
+				result = append(result,
+					models.Value{Type: "bulk", Bulk: keys[i]},
+					models.Value{Type: "bulk", Bulk: pairs[keys[i]]},
+				)
+			} else {
+				result = append(result, models.Value{Type: "bulk", Bulk: keys[i]})
+			}
+		}
+	}
+
+	// Return single field if no count was specified
+	if len(args) == 1 && len(result) > 0 {
+		return result[0]
+	}
+
+	return models.Value{Type: "array", Array: result}
+}
+
+// HandleHPExpire handles the HPEXPIRE command which sets expiration time in milliseconds for a hash
+// Parameters:
+//   - args: Array of Values containing:
+//   - key: hash key
+//   - milliseconds: time to live in milliseconds
+//
+// Returns:
+//   - models.Value: 1 if timeout was set, 0 if key doesn't exist
+//     Returns error if wrong number of arguments or invalid timeout
+func (h *HashHandlers) HandleHPExpire(args []models.Value) models.Value {
+	if err := util.ValidateArgs(args, 2); err != nil {
+		return util.ToValue(err)
+	}
+
+	// Check if the hash exists
+	pairs := h.cache.HGetAll(args[0].Bulk)
+	if len(pairs) == 0 {
+		return models.Value{Type: "integer", Num: 0}
+	}
+
+	// Parse milliseconds
+	milliseconds, err := strconv.ParseInt(args[1].Bulk, 10, 64)
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR timeout is not an integer or out of range"}
+	}
+
+	if milliseconds <= 0 {
+		return models.Value{Type: "error", Str: "ERR timeout must be positive"}
+	}
+
+	// Convert milliseconds to Unix timestamp
+	expireAt := time.Now().UnixNano()/1e6 + milliseconds // Current time in ms + duration in ms
+
+	// Set expiration using ExpireAt with the calculated timestamp
+	err = h.cache.ExpireAt(args[0].Bulk, expireAt/1000) // Convert ms to seconds for ExpireAt
+	if err != nil {
+		return util.ToValue(err)
+	}
+
+	return models.Value{Type: "integer", Num: 1}
+}
+
+// HandleHPExpireAt handles the HPEXPIREAT command which sets an absolute Unix timestamp in milliseconds for expiration
+// Parameters:
+//   - args: Array of Values containing:
+//   - key: hash key
+//   - timestamp_ms: Unix timestamp in milliseconds
+//
+// Returns:
+//   - models.Value: 1 if timeout was set, 0 if key doesn't exist
+//     Returns error if wrong number of arguments or invalid timestamp
+func (h *HashHandlers) HandleHPExpireAt(args []models.Value) models.Value {
+	if err := util.ValidateArgs(args, 2); err != nil {
+		return util.ToValue(err)
+	}
+
+	// Check if the hash exists
+	pairs := h.cache.HGetAll(args[0].Bulk)
+	if len(pairs) == 0 {
+		return models.Value{Type: "integer", Num: 0}
+	}
+
+	// Parse timestamp in milliseconds
+	timestampMs, err := strconv.ParseInt(args[1].Bulk, 10, 64)
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR timestamp is not an integer or out of range"}
+	}
+
+	if timestampMs < 0 {
+		return models.Value{Type: "error", Str: "ERR timestamp must be positive"}
+	}
+
+	// Convert milliseconds timestamp to seconds for ExpireAt
+	err = h.cache.ExpireAt(args[0].Bulk, timestampMs/1000)
+	if err != nil {
+		return util.ToValue(err)
+	}
+
+	return models.Value{Type: "integer", Num: 1}
+}
+
+// HandleHPExpireTime handles the HPEXPIRETIME command which returns the absolute Unix timestamp in milliseconds when the key will expire
+// Parameters:
+//   - args: Array of Values containing the hash key
+//
+// Returns:
+//   - models.Value: Timestamp in milliseconds when the key will expire
+//     -1 if the key has no expiration, -2 if the key does not exist
+//     Returns error if wrong number of arguments
+func (h *HashHandlers) HandleHPExpireTime(args []models.Value) models.Value {
+	if err := util.ValidateArgs(args, 1); err != nil {
+		return util.ToValue(err)
+	}
+
+	// Get expiration time in seconds
+	expireTime, err := h.cache.ExpireTime(args[0].Bulk)
+	if err != nil {
+		return models.Value{Type: "integer", Num: -2}
+	}
+
+	// Check if the hash exists
+	pairs := h.cache.HGetAll(args[0].Bulk)
+	if len(pairs) == 0 {
+		return models.Value{Type: "integer", Num: -2}
+	}
+
+	// If no expiration
+	if expireTime < 0 {
+		return models.Value{Type: "integer", Num: -1}
+	}
+
+	// Convert seconds to milliseconds
+	return models.Value{Type: "integer", Num: int(expireTime * 1000)}
 }

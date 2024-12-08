@@ -79,6 +79,18 @@ func (r *Registry) registerHandlers() {
 	r.handlers["HINCRBY"] = r.hashHandlers.HandleHIncrBy
 	r.handlers["HEXPIRETIME"] = r.hashHandlers.HandleHExpireTime
 	r.handlers["HINCRBYFLOAT"] = r.hashHandlers.HandleHIncrByFloat
+	r.handlers["HKEYS"] = r.hashHandlers.HandleHKeys
+	r.handlers["HMGET"] = r.hashHandlers.HandleHMGet
+	r.handlers["HPERSIST"] = r.hashHandlers.HandleHPersist
+	r.handlers["HSETNX"] = r.hashHandlers.HandleHSetNX
+	r.handlers["HSTRLEN"] = r.hashHandlers.HandleHStrLen
+	r.handlers["HTTL"] = r.hashHandlers.HandleHTTL
+	r.handlers["HVALS"] = r.hashHandlers.HandleHVals
+	r.handlers["HPTTL"] = r.hashHandlers.HandleHPTTL
+	r.handlers["HRANDFIELD"] = r.hashHandlers.HandleHRandField
+	r.handlers["HPEXPIRE"] = r.hashHandlers.HandleHPExpire
+	r.handlers["HPEXPIREAT"] = r.hashHandlers.HandleHPExpireAt
+	r.handlers["HPEXPIRETIME"] = r.hashHandlers.HandleHPExpireTime
 
 	// List Commands
 	r.handlers["LPUSH"] = r.listHandlers.HandleLPush
