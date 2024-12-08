@@ -3,6 +3,7 @@ package handlers
 import (
 	"log"
 	"strings"
+	"time"
 
 	"github.com/genc-murat/crystalcache/internal/core/models"
 	"github.com/genc-murat/crystalcache/internal/core/ports"
@@ -396,4 +397,91 @@ func (h *StringHandlers) HandleSetRange(args []models.Value) models.Value {
 	}
 
 	return models.Value{Type: "integer", Num: len(result)}
+}
+
+func (h *StringHandlers) HandleGetEx(args []models.Value) models.Value {
+	if len(args) < 1 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'getex' command"}
+	}
+
+	key := args[0].Bulk
+
+	// Get the value first
+	value, exists := h.cache.Get(key)
+	if !exists {
+		return models.Value{Type: "null"}
+	}
+
+	// If no expiry arguments provided, just return the value
+	if len(args) == 1 {
+		return models.Value{Type: "bulk", Bulk: value}
+	}
+
+	// Handle expiry options
+	if len(args) >= 2 {
+		switch strings.ToUpper(args[1].Bulk) {
+		case "EX", "PX", "EXAT", "PXAT":
+			if len(args) != 3 {
+				return models.Value{Type: "error", Str: "ERR syntax error"}
+			}
+
+			timeValue, err := util.ParseInt(args[2])
+			if err != nil {
+				return models.Value{Type: "error", Str: "ERR value is not an integer or out of range"}
+			}
+
+			switch strings.ToUpper(args[1].Bulk) {
+			case "EX":
+				// Seconds from now
+				if timeValue <= 0 {
+					return models.Value{Type: "error", Str: "ERR invalid expire time in getex"}
+				}
+				err = h.cache.Expire(key, timeValue)
+
+			case "PX":
+				// Milliseconds from now - convert to seconds (rounded up)
+				if timeValue <= 0 {
+					return models.Value{Type: "error", Str: "ERR invalid expire time in getex"}
+				}
+				seconds := (timeValue + 999) / 1000 // Round up milliseconds to seconds
+				err = h.cache.Expire(key, seconds)
+
+			case "EXAT":
+				// Unix timestamp in seconds
+				now := time.Now().Unix()
+				if int64(timeValue) <= now {
+					return models.Value{Type: "error", Str: "ERR invalid expire time in getex"}
+				}
+				seconds := int(int64(timeValue) - now)
+				err = h.cache.Expire(key, seconds)
+
+			case "PXAT":
+				// Unix timestamp in milliseconds
+				nowMs := time.Now().UnixMilli()
+				if int64(timeValue) <= nowMs {
+					return models.Value{Type: "error", Str: "ERR invalid expire time in getex"}
+				}
+				seconds := int((int64(timeValue) - nowMs + 999) / 1000) // Round up to seconds
+				err = h.cache.Expire(key, seconds)
+			}
+
+			if err != nil {
+				return util.ToValue(err)
+			}
+
+		case "PERSIST":
+			if len(args) != 2 {
+				return models.Value{Type: "error", Str: "ERR syntax error"}
+			}
+			err := h.cache.Expire(key, -1) // Remove expiration
+			if err != nil {
+				return util.ToValue(err)
+			}
+
+		default:
+			return models.Value{Type: "error", Str: "ERR syntax error"}
+		}
+	}
+
+	return models.Value{Type: "bulk", Bulk: value}
 }
