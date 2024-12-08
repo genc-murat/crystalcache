@@ -194,3 +194,59 @@ func (h *HashHandlers) HandleHDel(args []models.Value) models.Value {
 
 	return models.Value{Type: "integer", Num: deleted}
 }
+
+// HandleHExists handles the HEXISTS command which checks if a field exists in a hash
+// Parameters:
+//   - args: Array of Values containing the key and field name
+//
+// Returns:
+//   - models.Value: 1 if the field exists, 0 if it doesn't
+//     Returns error if wrong number of arguments
+func (h *HashHandlers) HandleHExists(args []models.Value) models.Value {
+	if err := util.ValidateArgs(args, 2); err != nil {
+		return util.ToValue(err)
+	}
+
+	_, exists := h.cache.HGet(args[0].Bulk, args[1].Bulk)
+	if exists {
+		return models.Value{Type: "integer", Num: 1}
+	}
+	return models.Value{Type: "integer", Num: 0}
+}
+
+// HandleHExpire handles the HEXPIRE command which sets an expiration time for a hash
+// Parameters:
+//   - args: Array of Values containing the key and expiration time in seconds
+//
+// Returns:
+//   - models.Value: 1 if timeout was set, 0 if key doesn't exist
+//     Returns error if wrong number of arguments or invalid timeout
+func (h *HashHandlers) HandleHExpire(args []models.Value) models.Value {
+	if err := util.ValidateArgs(args, 2); err != nil {
+		return util.ToValue(err)
+	}
+
+	// Check if the hash exists by trying to get its length
+	pairs := h.cache.HGetAll(args[0].Bulk)
+	if len(pairs) == 0 {
+		return models.Value{Type: "integer", Num: 0}
+	}
+
+	// Parse the timeout value
+	seconds, err := strconv.Atoi(args[1].Bulk)
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR timeout is not an integer or out of range"}
+	}
+
+	if seconds <= 0 {
+		return models.Value{Type: "error", Str: "ERR timeout must be positive"}
+	}
+
+	// Assuming the Cache interface has an Expire method
+	err = h.cache.Expire(args[0].Bulk, seconds)
+	if err != nil {
+		return util.ToValue(err)
+	}
+
+	return models.Value{Type: "integer", Num: 1}
+}

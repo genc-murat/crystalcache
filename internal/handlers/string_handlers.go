@@ -485,3 +485,26 @@ func (h *StringHandlers) HandleGetEx(args []models.Value) models.Value {
 
 	return models.Value{Type: "bulk", Bulk: value}
 }
+
+func (h *StringHandlers) HandleGetDel(args []models.Value) models.Value {
+	if err := util.ValidateArgs(args, 1); err != nil {
+		return util.ToValue(err)
+	}
+
+	key := args[0].Bulk
+
+	// Get value first
+	value, exists := h.cache.Get(key)
+	if !exists {
+		return models.Value{Type: "null"}
+	}
+
+	// Delete the key
+	_, err := h.cache.Del(key)
+	if err != nil {
+		return util.ToValue(err)
+	}
+
+	// Return the value that was deleted
+	return models.Value{Type: "bulk", Bulk: value}
+}
