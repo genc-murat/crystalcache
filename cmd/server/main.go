@@ -40,7 +40,6 @@ func main() {
 		IdleTimeout:    60 * time.Second,
 	}
 
-	// Cache ve storage
 	memCache := cache.NewMemoryCache()
 	memCache.StartDefragmentation(5*time.Minute, 0.25)
 
@@ -50,11 +49,10 @@ func main() {
 	}
 	defer aofStorage.Close()
 
-	// Ana server'ı başlat
 	server := server.NewServer(memCache, aofStorage, nil, serverConfig)
-	server.SetMaster(true) // Start as master by default
+	server.SetMaster(true)
 	go server.Start(":6379")
-	time.Sleep(1 * time.Second) // Server başlamasını bekle
+	time.Sleep(1 * time.Second)
 
 	// Connection pool
 	poolConfig := pool.Config{
