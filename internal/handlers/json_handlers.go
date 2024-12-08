@@ -10,14 +10,29 @@ import (
 	"github.com/genc-murat/crystalcache/internal/core/models"
 	"github.com/genc-murat/crystalcache/internal/core/ports"
 	"github.com/genc-murat/crystalcache/internal/util"
+	jsonUtil "github.com/genc-murat/crystalcache/pkg/utils/json"
 )
 
 type JSONHandlers struct {
-	cache ports.Cache
+	cache          ports.Cache
+	compare        *jsonUtil.Compare
+	merge          *jsonUtil.Merge
+	pathUtil       *jsonUtil.PathUtil
+	respUtil       *jsonUtil.RespUtil
+	searchUtil     *jsonUtil.SearchUtil
+	validationUtil *jsonUtil.ValidationUtil
 }
 
 func NewJSONHandlers(cache ports.Cache) *JSONHandlers {
-	return &JSONHandlers{cache: cache}
+	return &JSONHandlers{
+		cache:          cache,
+		compare:        jsonUtil.NewCompare(),
+		merge:          jsonUtil.NewMerge(),
+		pathUtil:       jsonUtil.NewPathUtil(),
+		respUtil:       jsonUtil.NewRespUtil(),
+		searchUtil:     jsonUtil.NewSearchUtil(),
+		validationUtil: jsonUtil.NewValidationUtil(),
+	}
 }
 
 func (h *JSONHandlers) HandleJSON(args []models.Value) models.Value {
@@ -70,12 +85,12 @@ func (h *JSONHandlers) HandleJSON(args []models.Value) models.Value {
 }
 
 func (h *JSONHandlers) setNestedValue(data map[string]interface{}, path string, value interface{}) error {
-	parts := parsePath(path)
+	parts := h.pathUtil.ParsePath(path)
 	current := data
 
 	for i := 0; i < len(parts)-1; i++ {
 		part := parts[i]
-		arrayIndex, isArray := parseArrayIndex(part)
+		arrayIndex, isArray := h.pathUtil.ParseArrayIndex(part)
 
 		if isArray {
 			arr, ok := current[parts[i-1]].([]interface{})
@@ -107,7 +122,7 @@ func (h *JSONHandlers) setNestedValue(data map[string]interface{}, path string, 
 	}
 
 	lastPart := parts[len(parts)-1]
-	arrayIndex, isArray := parseArrayIndex(lastPart)
+	arrayIndex, isArray := h.pathUtil.ParseArrayIndex(lastPart)
 
 	if isArray {
 		arr, ok := current[parts[len(parts)-2]].([]interface{})
@@ -126,47 +141,6 @@ func (h *JSONHandlers) setNestedValue(data map[string]interface{}, path string, 
 	}
 
 	return nil
-}
-
-func parsePath(path string) []string {
-	parts := make([]string, 0)
-	current := ""
-	escaped := false
-
-	for _, c := range path {
-		if c == '\\' && !escaped {
-			escaped = true
-			continue
-		}
-		if c == '.' && !escaped {
-			if current != "" {
-				parts = append(parts, current)
-				current = ""
-			}
-		} else {
-			current += string(c)
-			escaped = false
-		}
-	}
-	if current != "" {
-		parts = append(parts, current)
-	}
-
-	return parts
-}
-
-func parseArrayIndex(part string) (int, bool) {
-	if len(part) < 3 || part[0] != '[' || part[len(part)-1] != ']' {
-		return 0, false
-	}
-
-	indexStr := part[1 : len(part)-1]
-	index, err := strconv.Atoi(indexStr)
-	if err != nil {
-		return 0, false
-	}
-
-	return index, true
 }
 
 func (h *JSONHandlers) HandleJSONGet(args []models.Value) models.Value {
@@ -257,7 +231,7 @@ func (h *JSONHandlers) HandleJSONDel(args []models.Value) models.Value {
 
 // Helper method to delete values at nested paths (keep existing implementation)
 func (h *JSONHandlers) deleteNestedValue(data map[string]interface{}, path string) (bool, error) {
-	parts := parsePath(path)
+	parts := h.pathUtil.ParsePath(path)
 	if len(parts) == 0 {
 		return false, fmt.Errorf("ERR invalid path")
 	}
@@ -275,7 +249,7 @@ func (h *JSONHandlers) deleteNestedValue(data map[string]interface{}, path strin
 	current := data
 	for i := 0; i < len(parts)-1; i++ {
 		part := parts[i]
-		arrayIndex, isArray := parseArrayIndex(part)
+		arrayIndex, isArray := h.pathUtil.ParseArrayIndex(part)
 
 		if isArray {
 			// Handle array access
@@ -309,7 +283,7 @@ func (h *JSONHandlers) deleteNestedValue(data map[string]interface{}, path strin
 
 	// Delete the target
 	lastPart := parts[len(parts)-1]
-	arrayIndex, isArray := parseArrayIndex(lastPart)
+	arrayIndex, isArray := h.pathUtil.ParseArrayIndex(lastPart)
 
 	if isArray {
 		// Handle array element deletion
@@ -393,11 +367,11 @@ func (h *JSONHandlers) HandleJSONType(args []models.Value) models.Value {
 
 // Keep the existing getNestedValue helper as it works with interface{} types
 func (h *JSONHandlers) getNestedValue(data interface{}, path string) (interface{}, error) {
-	parts := parsePath(path)
+	parts := h.pathUtil.ParsePath(path)
 	current := data
 
 	for _, part := range parts {
-		arrayIndex, isArray := parseArrayIndex(part)
+		arrayIndex, isArray := h.pathUtil.ParseArrayIndex(part)
 
 		if isArray {
 			// Handle array access
@@ -629,7 +603,7 @@ func (h *JSONHandlers) HandleJSONArrIndex(args []models.Value) models.Value {
 
 	// Search for value in array
 	for i, item := range arr {
-		if equalJSON(item, searchItem) {
+		if h.compare.Equal(item, searchItem) {
 			return models.Value{Type: "integer", Num: i}
 		}
 	}
@@ -772,41 +746,6 @@ func (h *JSONHandlers) HandleJSONNumIncrBy(args []models.Value) models.Value {
 	return models.Value{Type: "bulk", Bulk: string(result)}
 }
 
-// Helper function to compare JSON values
-func equalJSON(a, b interface{}) bool {
-	switch v := a.(type) {
-	case map[string]interface{}:
-		bMap, ok := b.(map[string]interface{})
-		if !ok {
-			return false
-		}
-		if len(v) != len(bMap) {
-			return false
-		}
-		for key, value := range v {
-			if !equalJSON(value, bMap[key]) {
-				return false
-			}
-		}
-		return true
-	case []interface{}:
-		bArr, ok := b.([]interface{})
-		if !ok {
-			return false
-		}
-		if len(v) != len(bArr) {
-			return false
-		}
-		for i, value := range v {
-			if !equalJSON(value, bArr[i]) {
-				return false
-			}
-		}
-		return true
-	default:
-		return a == b
-	}
-}
 func (h *JSONHandlers) HandleJSONObjKeys(args []models.Value) models.Value {
 	if len(args) < 1 {
 		return models.Value{Type: "error", Str: "ERR wrong number of arguments for JSON.OBJKEYS command"}
@@ -1008,7 +947,7 @@ func (h *JSONHandlers) HandleJSONMerge(args []models.Value) models.Value {
 	}
 
 	// Perform deep merge
-	merged := deepMerge(targetObj, mergeObj)
+	merged := h.merge.DeepMerge(targetObj, mergeObj)
 
 	// Update the object
 	data, ok := value.(map[string]interface{})
@@ -1025,33 +964,6 @@ func (h *JSONHandlers) HandleJSONMerge(args []models.Value) models.Value {
 	}
 
 	return models.Value{Type: "string", Str: "OK"}
-}
-
-// Helper function for deep merging objects
-func deepMerge(target, source map[string]interface{}) map[string]interface{} {
-	result := make(map[string]interface{})
-
-	// Copy target
-	for k, v := range target {
-		result[k] = v
-	}
-
-	// Merge source
-	for k, v := range source {
-		if targetVal, ok := target[k]; ok {
-			// If both are maps, merge recursively
-			if targetMap, isTargetMap := targetVal.(map[string]interface{}); isTargetMap {
-				if sourceMap, isSourceMap := v.(map[string]interface{}); isSourceMap {
-					result[k] = deepMerge(targetMap, sourceMap)
-					continue
-				}
-			}
-		}
-		// Otherwise just overwrite
-		result[k] = v
-	}
-
-	return result
 }
 
 func (h *JSONHandlers) HandleJSONArrInsert(args []models.Value) models.Value {
@@ -1271,15 +1183,15 @@ func (h *JSONHandlers) HandleJSONCompare(args []models.Value) models.Value {
 	result := 0
 	switch op {
 	case "eq":
-		if equalJSON(target, compareObj) {
+		if h.compare.Equal(target, compareObj) {
 			result = 1
 		}
 	case "lt", "gt":
-		comp, err := compareJSON(target, compareObj)
+		comp, err := h.compare.Compare(target, compareObj)
 		if err != nil {
 			return models.Value{Type: "error", Str: err.Error()}
 		}
-		if (op == "lt" && comp < 0) || (op == "gt" && comp > 0) {
+		if (op == "lt" && comp == jsonUtil.Less) || (op == "gt" && comp == jsonUtil.Greater) {
 			result = 1
 		}
 	default:
@@ -1287,47 +1199,6 @@ func (h *JSONHandlers) HandleJSONCompare(args []models.Value) models.Value {
 	}
 
 	return models.Value{Type: "integer", Num: result}
-}
-
-// Helper function to compare JSON values
-func compareJSON(a, b interface{}) (int, error) {
-	// Convert to same type for comparison
-	switch va := a.(type) {
-	case float64:
-		switch vb := b.(type) {
-		case float64:
-			if va < vb {
-				return -1, nil
-			} else if va > vb {
-				return 1, nil
-			}
-			return 0, nil
-		case int:
-			return compareJSON(va, float64(vb))
-		}
-	case int:
-		switch vb := b.(type) {
-		case float64:
-			return compareJSON(float64(va), vb)
-		case int:
-			if va < vb {
-				return -1, nil
-			} else if va > vb {
-				return 1, nil
-			}
-			return 0, nil
-		}
-	case string:
-		if vb, ok := b.(string); ok {
-			if va < vb {
-				return -1, nil
-			} else if va > vb {
-				return 1, nil
-			}
-			return 0, nil
-		}
-	}
-	return 0, fmt.Errorf("ERR cannot compare values of different types")
 }
 
 func (h *JSONHandlers) HandleJSONStrAppend(args []models.Value) models.Value {
@@ -1410,7 +1281,7 @@ func (h *JSONHandlers) HandleJSONContains(args []models.Value) models.Value {
 
 	// Check if array contains the value
 	for _, item := range arr {
-		if equalJSON(item, searchItem) {
+		if h.compare.Equal(item, searchItem) {
 			return models.Value{Type: "integer", Num: 1}
 		}
 	}
@@ -1505,14 +1376,14 @@ func (h *JSONHandlers) HandleJSONArrSort(args []models.Value) models.Value {
 
 	// Sort the array
 	sort.Slice(arr, func(i, j int) bool {
-		comp, err := compareJSON(arr[i], arr[j])
+		comp, err := h.compare.Compare(arr[i], arr[j])
 		if err != nil {
 			return false
 		}
 		if sortOrder == "ASC" {
-			return comp < 0
+			return comp == jsonUtil.Less
 		}
-		return comp > 0
+		return comp == jsonUtil.Greater
 	})
 
 	// Update the array at path
@@ -1620,7 +1491,7 @@ func (h *JSONHandlers) HandleJSONCount(args []models.Value) models.Value {
 	// Count occurrences
 	count := 0
 	for _, item := range arr {
-		if equalJSON(item, searchItem) {
+		if h.compare.Equal(item, searchItem) {
 			count++
 		}
 	}
@@ -1678,7 +1549,7 @@ func (h *JSONHandlers) HandleJSONValidate(args []models.Value) models.Value {
 	}
 
 	key := args[0].Bulk
-	schema := args[1].Bulk
+	schemaStr := args[1].Bulk
 
 	// Get existing JSON
 	value, exists := h.cache.GetJSON(key)
@@ -1687,80 +1558,17 @@ func (h *JSONHandlers) HandleJSONValidate(args []models.Value) models.Value {
 	}
 
 	// Parse schema
-	var schemaObj interface{}
-	if err := json.Unmarshal([]byte(schema), &schemaObj); err != nil {
+	var schema jsonUtil.Schema
+	if err := json.Unmarshal([]byte(schemaStr), &schema); err != nil {
 		return models.Value{Type: "error", Str: "ERR invalid schema"}
 	}
 
 	// Validate against schema
-	if err := validateJSON(value, schemaObj); err != nil {
+	if err := h.validationUtil.Validate(value, &schema); err != nil {
 		return models.Value{Type: "error", Str: err.Error()}
 	}
 
 	return models.Value{Type: "integer", Num: 1}
-}
-
-// Helper function to validate JSON against a simple schema
-func validateJSON(value, schema interface{}) error {
-	schemaMap, ok := schema.(map[string]interface{})
-	if !ok {
-		return fmt.Errorf("ERR schema must be an object")
-	}
-
-	return validateType(value, schemaMap)
-}
-
-func validateType(value interface{}, schema map[string]interface{}) error {
-	requiredType, ok := schema["type"].(string)
-	if !ok {
-		return fmt.Errorf("ERR schema must specify type")
-	}
-
-	switch requiredType {
-	case "string":
-		if _, ok := value.(string); !ok {
-			return fmt.Errorf("ERR value must be string")
-		}
-	case "number":
-		if _, ok := value.(float64); !ok {
-			if _, ok := value.(int); !ok {
-				return fmt.Errorf("ERR value must be number")
-			}
-		}
-	case "boolean":
-		if _, ok := value.(bool); !ok {
-			return fmt.Errorf("ERR value must be boolean")
-		}
-	case "array":
-		arr, ok := value.([]interface{})
-		if !ok {
-			return fmt.Errorf("ERR value must be array")
-		}
-		if items, ok := schema["items"].(map[string]interface{}); ok {
-			for _, item := range arr {
-				if err := validateType(item, items); err != nil {
-					return err
-				}
-			}
-		}
-	case "object":
-		obj, ok := value.(map[string]interface{})
-		if !ok {
-			return fmt.Errorf("ERR value must be object")
-		}
-		if properties, ok := schema["properties"].(map[string]interface{}); ok {
-			for key, propSchema := range properties {
-				if propMap, ok := propSchema.(map[string]interface{}); ok {
-					if propValue, exists := obj[key]; exists {
-						if err := validateType(propValue, propMap); err != nil {
-							return err
-						}
-					}
-				}
-			}
-		}
-	}
-	return nil
 }
 
 func (h *JSONHandlers) HandleJSONArrSum(args []models.Value) models.Value {
@@ -1887,8 +1695,12 @@ func (h *JSONHandlers) HandleJSONSearch(args []models.Value) models.Value {
 	}
 
 	// Search in value
-	paths := make([]string, 0)
-	searchJSON(target, keyword, caseSensitive, "", &paths)
+	opts := &jsonUtil.SearchOptions{
+		CaseSensitive: caseSensitive,
+		IncludeKeys:   true,
+		IncludeValues: true,
+	}
+	paths := h.searchUtil.Search(target, keyword, opts)
 
 	// Convert result to JSON array
 	result, err := json.Marshal(paths)
@@ -1897,42 +1709,6 @@ func (h *JSONHandlers) HandleJSONSearch(args []models.Value) models.Value {
 	}
 
 	return models.Value{Type: "bulk", Bulk: string(result)}
-}
-
-// Helper function for recursive JSON search
-func searchJSON(value interface{}, keyword string, caseSensitive bool, currentPath string, paths *[]string) {
-	switch v := value.(type) {
-	case map[string]interface{}:
-		for key, val := range v {
-			newPath := currentPath
-			if newPath != "" {
-				newPath += "."
-			}
-			newPath += key
-
-			if searchValue(key, keyword, caseSensitive) {
-				*paths = append(*paths, newPath)
-			}
-			searchJSON(val, keyword, caseSensitive, newPath, paths)
-		}
-	case []interface{}:
-		for i, val := range v {
-			newPath := fmt.Sprintf("%s[%d]", currentPath, i)
-			searchJSON(val, keyword, caseSensitive, newPath, paths)
-		}
-	case string:
-		if searchValue(v, keyword, caseSensitive) && currentPath != "" {
-			*paths = append(*paths, currentPath)
-		}
-	}
-}
-
-func searchValue(value, keyword string, caseSensitive bool) bool {
-	if !caseSensitive {
-		value = strings.ToLower(value)
-		keyword = strings.ToLower(keyword)
-	}
-	return strings.Contains(value, keyword)
 }
 
 func (h *JSONHandlers) HandleJSONMinMax(args []models.Value) models.Value {
@@ -1972,11 +1748,11 @@ func (h *JSONHandlers) HandleJSONMinMax(args []models.Value) models.Value {
 	// Find min/max value
 	var result interface{} = arr[0]
 	for _, item := range arr[1:] {
-		comp, err := compareJSON(item, result)
+		comp, err := h.compare.Compare(item, result)
 		if err != nil {
 			continue
 		}
-		if (op == "MIN" && comp < 0) || (op == "MAX" && comp > 0) {
+		if (op == "MIN" && comp == jsonUtil.Less) || (op == "MAX" && comp == jsonUtil.Greater) {
 			result = item
 		}
 	}
@@ -2116,39 +1892,5 @@ func (h *JSONHandlers) HandleJSONResp(args []models.Value) models.Value {
 	}
 
 	// Convert to RESP format
-	return jsonToResp(target)
-}
-
-// Helper function to convert JSON values to RESP format
-func jsonToResp(value interface{}) models.Value {
-	switch v := value.(type) {
-	case nil:
-		return models.Value{Type: "null"}
-	case bool:
-		if v {
-			return models.Value{Type: "integer", Num: 1}
-		}
-		return models.Value{Type: "integer", Num: 0}
-	case float64:
-		return models.Value{Type: "bulk", Bulk: strconv.FormatFloat(v, 'f', -1, 64)}
-	case int:
-		return models.Value{Type: "integer", Num: v}
-	case string:
-		return models.Value{Type: "bulk", Bulk: v}
-	case []interface{}:
-		array := make([]models.Value, len(v))
-		for i, item := range v {
-			array[i] = jsonToResp(item)
-		}
-		return models.Value{Type: "array", Array: array}
-	case map[string]interface{}:
-		array := make([]models.Value, 0, len(v)*2)
-		for key, val := range v {
-			array = append(array, models.Value{Type: "bulk", Bulk: key})
-			array = append(array, jsonToResp(val))
-		}
-		return models.Value{Type: "array", Array: array}
-	default:
-		return models.Value{Type: "error", Str: "ERR unsupported JSON type"}
-	}
+	return h.respUtil.JSONToRESP(target)
 }
