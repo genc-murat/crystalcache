@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/genc-murat/crystalcache/config"
 	"github.com/genc-murat/crystalcache/internal/cache"
 	"github.com/genc-murat/crystalcache/internal/pool"
 	"github.com/genc-murat/crystalcache/internal/server"
@@ -25,6 +26,11 @@ func main() {
 	// 		log.Printf("Pprof server error: %v", err)
 	// 	}
 	// }()
+
+	_, err := config.LoadConfig("development")
+	if err != nil {
+		log.Fatalf("Error loading config: %v", err)
+	}
 
 	// Server config
 	serverConfig := server.ServerConfig{

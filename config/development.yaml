@@ -1,0 +1,103 @@
+server:
+  host: "0.0.0.0"
+  port: 6379
+  max_connections: 1000
+  timeouts:
+    read: 10s
+    write: 10s
+    idle: 60s
+  debug: true
+
+cache:
+  type: "memory"  # memory, redis
+  max_size: "1GB"
+  eviction_policy: "lru"  # lru, lfu, random
+  defragmentation:
+    enabled: true
+    interval: 5m
+    threshold: 0.25
+
+storage:
+  type: "aof"  # aof, rdb
+  path: "data/"
+  file_name: "database.aof"
+  sync_strategy: "everysec"  # always, everysec, no
+  compression: true
+  max_file_size: "1GB"
+  backup:
+    enabled: true
+    interval: 24h
+    keep_days: 7
+    path: "backup/"
+
+cluster:
+  enabled: false
+  role: "master"  # master, slave
+  replication:
+    master_host: "localhost"
+    master_port: 6379
+    sync_interval: 1s
+  nodes:
+    - host: "node1.cache.local"
+      port: 6379
+    - host: "node2.cache.local"
+      port: 6379
+
+pool:
+  initial_size: 10
+  max_size: 100
+  min_idle: 5
+  max_idle: 20
+  timeouts:
+    acquire: 5s
+    read: 5000s
+    write: 5000s
+    idle: 6000s
+  retry:
+    attempts: 3
+    delay: 100ms
+    max_delay: 1s
+
+security:
+  auth_enabled: false
+  password: ""
+  tls:
+    enabled: false
+    cert_file: "cert/server.crt"
+    key_file: "cert/server.key"
+    ca_file: "cert/ca.crt"
+  acl:
+    enabled: false
+    rules_file: "config/acl.yaml"
+
+metrics:
+  enabled: true
+  port: 2112
+  path: "/metrics"
+  collectors:
+    - memory
+    - connections
+    - operations
+    - latency
+  prometheus:
+    enabled: true
+    push_gateway: ""
+
+logging:
+  level: "info"  # debug, info, warn, error
+  format: "json"  # json, text
+  output: "stdout"  # stdout, file
+  file:
+    path: "logs/"
+    max_size: "100MB"
+    max_age: 7
+    max_backups: 5
+    compress: true
+
+limits:
+  max_item_size: "50MB"
+  max_request_size: "100MB"
+  rate_limit:
+    enabled: true
+    requests_per_second: 1000
+    burst: 2000
