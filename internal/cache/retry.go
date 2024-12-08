@@ -910,6 +910,44 @@ func (rd *RetryDecorator) ZRemRangeByScore(key string, min, max float64) (int, e
 	return count, err
 }
 
+func (rd *RetryDecorator) ZRevRangeByLex(key string, max, min string) []string {
+	var result []string
+	rd.executeWithRetry(func() error {
+		result = rd.cache.ZRevRangeByLex(key, max, min)
+		return nil
+	})
+	return result
+}
+
+func (rd *RetryDecorator) ZRevRangeByScore(key string, max, min float64) []string {
+	var result []string
+	rd.executeWithRetry(func() error {
+		result = rd.cache.ZRevRangeByScore(key, max, min)
+		return nil
+	})
+	return result
+}
+
+func (rd *RetryDecorator) ZRevRank(key string, member string) (int, bool) {
+	var rank int
+	var exists bool
+	var finalExists bool
+
+	err := rd.executeWithRetry(func() error {
+		rank, exists = rd.cache.ZRevRank(key, member)
+		if exists {
+			finalExists = true
+			return nil
+		}
+		return errors.New("member not found")
+	})
+
+	if err != nil {
+		return 0, false
+	}
+	return rank, finalExists
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }

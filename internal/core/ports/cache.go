@@ -88,4 +88,7 @@ type Cache interface {
 	ZRemRangeByLex(key string, min, max string) (int, error)
 	ZRemRangeByRank(key string, start, stop int) (int, error)
 	ZRemRangeByScore(key string, min, max float64) (int, error)
+	ZRevRangeByLex(key string, max, min string) []string
+	ZRevRangeByScore(key string, max, min float64) []string
+	ZRevRank(key string, member string) (int, bool)
 }

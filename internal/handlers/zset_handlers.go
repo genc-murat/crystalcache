@@ -799,3 +799,189 @@ func (h *ZSetHandlers) HandleZRank(args []models.Value) models.Value {
 
 	return models.Value{Type: "integer", Num: rank}
 }
+
+func (h *ZSetHandlers) HandleZRevRange(args []models.Value) models.Value {
+	if len(args) < 3 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'zrevrange' command"}
+	}
+
+	start, err := util.ParseInt(args[1])
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR value is not an integer"}
+	}
+
+	stop, err := util.ParseInt(args[2])
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR value is not an integer"}
+	}
+
+	withScores := false
+	if len(args) == 4 && args[3].Bulk == "WITHSCORES" {
+		withScores = true
+	}
+
+	if withScores {
+		members := h.cache.ZRevRangeWithScores(args[0].Bulk, start, stop)
+		result := make([]models.Value, len(members)*2)
+		for i, member := range members {
+			result[i*2] = models.Value{Type: "bulk", Bulk: member.Member}
+			result[i*2+1] = models.Value{Type: "bulk", Bulk: util.FormatFloat(member.Score)}
+		}
+		return models.Value{Type: "array", Array: result}
+	}
+
+	members := h.cache.ZRevRange(args[0].Bulk, start, stop)
+	result := make([]models.Value, len(members))
+	for i, member := range members {
+		result[i] = models.Value{Type: "bulk", Bulk: member}
+	}
+	return models.Value{Type: "array", Array: result}
+}
+
+func (h *ZSetHandlers) HandleZRevRangeByLex(args []models.Value) models.Value {
+	if len(args) < 3 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'zrevrangebylex' command"}
+	}
+
+	key := args[0].Bulk
+	max := args[1].Bulk
+	min := args[2].Bulk
+
+	// Optional LIMIT offset count
+	var offset, count int
+	hasLimit := false
+
+	if len(args) > 3 {
+		if args[3].Bulk != "LIMIT" {
+			return models.Value{Type: "error", Str: "ERR syntax error"}
+		}
+		if len(args) != 6 {
+			return models.Value{Type: "error", Str: "ERR syntax error"}
+		}
+		var err error
+		offset, err = util.ParseInt(args[4])
+		if err != nil {
+			return models.Value{Type: "error", Str: "ERR value is not an integer or out of range"}
+		}
+		count, err = util.ParseInt(args[5])
+		if err != nil {
+			return models.Value{Type: "error", Str: "ERR value is not an integer or out of range"}
+		}
+		hasLimit = true
+	}
+
+	members := h.cache.ZRevRangeByLex(key, max, min)
+
+	// Apply LIMIT if specified
+	if hasLimit && len(members) > 0 {
+		if offset >= len(members) {
+			members = []string{}
+		} else {
+			end := offset + count
+			if end > len(members) {
+				end = len(members)
+			}
+			members = members[offset:end]
+		}
+	}
+
+	result := make([]models.Value, len(members))
+	for i, member := range members {
+		result[i] = models.Value{Type: "bulk", Bulk: member}
+	}
+	return models.Value{Type: "array", Array: result}
+}
+
+func (h *ZSetHandlers) HandleZRevRangeByScore(args []models.Value) models.Value {
+	if len(args) < 3 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'zrevrangebyscore' command"}
+	}
+
+	key := args[0].Bulk
+	max, err := util.ParseFloat(args[1])
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR max value is not a valid float"}
+	}
+
+	min, err := util.ParseFloat(args[2])
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR min value is not a valid float"}
+	}
+
+	withScores := false
+	var offset, count int
+	hasLimit := false
+
+	// Parse optional WITHSCORES and LIMIT
+	idx := 3
+	for idx < len(args) {
+		if args[idx].Bulk == "WITHSCORES" {
+			withScores = true
+			idx++
+			continue
+		}
+		if args[idx].Bulk == "LIMIT" {
+			if idx+2 >= len(args) {
+				return models.Value{Type: "error", Str: "ERR syntax error"}
+			}
+			var err error
+			offset, err = util.ParseInt(args[idx+1])
+			if err != nil {
+				return models.Value{Type: "error", Str: "ERR value is not an integer or out of range"}
+			}
+			count, err = util.ParseInt(args[idx+2])
+			if err != nil {
+				return models.Value{Type: "error", Str: "ERR value is not an integer or out of range"}
+			}
+			hasLimit = true
+			idx += 3
+			continue
+		}
+		return models.Value{Type: "error", Str: "ERR syntax error"}
+	}
+
+	members := h.cache.ZRevRangeByScore(key, max, min)
+
+	// Apply LIMIT if specified
+	if hasLimit && len(members) > 0 {
+		if offset >= len(members) {
+			members = []string{}
+		} else {
+			end := offset + count
+			if end > len(members) {
+				end = len(members)
+			}
+			members = members[offset:end]
+		}
+	}
+
+	var result []models.Value
+	if withScores {
+		result = make([]models.Value, len(members)*2)
+		for i, member := range members {
+			result[i*2] = models.Value{Type: "bulk", Bulk: member}
+			score, _ := h.cache.ZScore(key, member)
+			result[i*2+1] = models.Value{Type: "bulk", Bulk: util.FormatFloat(score)}
+		}
+	} else {
+		result = make([]models.Value, len(members))
+		for i, member := range members {
+			result[i] = models.Value{Type: "bulk", Bulk: member}
+		}
+	}
+
+	return models.Value{Type: "array", Array: result}
+}
+
+func (h *ZSetHandlers) HandleZRevRank(args []models.Value) models.Value {
+	if len(args) < 2 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'zrevrank' command"}
+	}
+
+	rank, exists := h.cache.ZRevRank(args[0].Bulk, args[1].Bulk)
+	if !exists {
+		return models.Value{Type: "null"}
+	}
+
+	return models.Value{Type: "integer", Num: rank}
+}

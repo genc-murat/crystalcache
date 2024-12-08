@@ -2742,6 +2742,72 @@ func (c *MemoryCache) ZRemRangeByScore(key string, min, max float64) (int, error
 	return len(members), nil
 }
 
+func (c *MemoryCache) ZRevRangeByLex(key string, max, min string) []string {
+	setI, exists := c.zsets.Load(key)
+	if !exists {
+		return []string{}
+	}
+	set := setI.(*sync.Map)
+
+	// Parse range specifications
+	minInclusive := true
+	maxInclusive := true
+	if strings.HasPrefix(min, "(") {
+		minInclusive = false
+		min = min[1:]
+	} else if strings.HasPrefix(min, "[") {
+		min = min[1:]
+	}
+	if strings.HasPrefix(max, "(") {
+		maxInclusive = false
+		max = max[1:]
+	} else if strings.HasPrefix(max, "[") {
+		max = max[1:]
+	}
+
+	// Special cases for infinity
+	minIsInf := min == "-"
+	maxIsInf := max == "+"
+
+	// Collect matching members
+	var members []string
+	set.Range(func(member, _ interface{}) bool {
+		memberStr := member.(string)
+
+		// Check if member is within range
+		if minIsInf || (minInclusive && memberStr >= min) || (!minInclusive && memberStr > min) {
+			if maxIsInf || (maxInclusive && memberStr <= max) || (!maxInclusive && memberStr < max) {
+				members = append(members, memberStr)
+			}
+		}
+		return true
+	})
+
+	// Sort lexicographically in reverse order
+	sort.Sort(sort.Reverse(sort.StringSlice(members)))
+	return members
+}
+
+func (c *MemoryCache) ZRevRangeByScore(key string, max, min float64) []string {
+	members := c.ZRangeByScore(key, min, max)
+	// Reverse the order
+	for i, j := 0, len(members)-1; i < j; i, j = i+1, j-1 {
+		members[i], members[j] = members[j], members[i]
+	}
+	return members
+}
+
+func (c *MemoryCache) ZRevRank(key string, member string) (int, bool) {
+	members := c.ZRange(key, 0, -1)
+	// Search from the end
+	for i := len(members) - 1; i >= 0; i-- {
+		if members[i] == member {
+			return len(members) - 1 - i, true
+		}
+	}
+	return 0, false
+}
+
 func (c *MemoryCache) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(c, strategy)
 }
