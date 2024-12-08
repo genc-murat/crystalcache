@@ -73,6 +73,21 @@ func (h *AdminHandlers) HandleInfo(args []models.Value) models.Value {
 	return models.Value{Type: "bulk", Bulk: builder.String()}
 }
 
+func (h *AdminHandlers) HandlePing(args []models.Value) models.Value {
+	// If no argument is provided, return PONG
+	if len(args) == 0 {
+		return models.Value{Type: "string", Str: "PONG"}
+	}
+
+	// If one argument is provided, echo it back
+	if len(args) == 1 {
+		return args[0]
+	}
+
+	// If more arguments are provided, return error
+	return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'ping' command"}
+}
+
 func (h *AdminHandlers) HandleDBSize(args []models.Value) models.Value {
 	if err := util.ValidateArgs(args, 0); err != nil {
 		return util.ToValue(err)

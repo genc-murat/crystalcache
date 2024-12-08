@@ -22,6 +22,7 @@ type Registry struct {
 	memoryHandlers  *MemoryHandlers
 	clusterHandlers *ClusterHandlers
 	jsonHandlers    *JSONHandlers
+	replicaHandlers *ReplicaHandlers
 }
 
 func NewRegistry(cache ports.Cache, clientManager *client.Manager) *Registry {
@@ -39,6 +40,7 @@ func NewRegistry(cache ports.Cache, clientManager *client.Manager) *Registry {
 		memoryHandlers:  NewMemoryHandlers(cache),
 		clusterHandlers: NewClusterHandlers(cache),
 		jsonHandlers:    NewJSONHandlers(cache),
+		replicaHandlers: NewReplicaHandlers(cache, nil),
 	}
 
 	r.registerHandlers()
@@ -107,7 +109,7 @@ func (r *Registry) registerHandlers() {
 	r.handlers["MODULE"] = r.moduleHandlers.HandleModule
 	r.handlers["CONFIG"] = r.configHandlers.HandleConfig
 	r.handlers["SCAN"] = r.scanHandlers.HandleScan
-
+	r.handlers["PING"] = r.adminHandlers.HandlePing
 	r.handlers["MEMORY"] = r.memoryHandlers.HandleMemory
 	r.handlers["TYPE"] = r.memoryHandlers.HandleType
 	r.handlers["TTL"] = r.memoryHandlers.HandleTTL
@@ -150,6 +152,9 @@ func (r *Registry) registerHandlers() {
 	r.handlers["JSON.MGET"] = r.jsonHandlers.HandleJSONMGet
 	r.handlers["JSON.MSET"] = r.jsonHandlers.HandleJSONMSet
 	r.handlers["JSON.RESP"] = r.jsonHandlers.HandleJSONResp
+
+	// In NewRegistry
+	r.handlers["REPLICAOF"] = r.replicaHandlers.HandleReplicaOf
 }
 
 func (r *Registry) GetHandler(cmd string) (CommandHandler, bool) {

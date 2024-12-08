@@ -46,6 +46,7 @@ func main() {
 
 	// Ana server'ı başlat
 	server := server.NewServer(memCache, aofStorage, nil, serverConfig)
+	server.SetMaster(true) // Start as master by default
 	go server.Start(":6379")
 	time.Sleep(1 * time.Second) // Server başlamasını bekle
 
