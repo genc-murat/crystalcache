@@ -271,3 +271,111 @@ func (h *ZSetHandlers) HandleZLexCount(args []models.Value) models.Value {
 
 	return models.Value{Type: "integer", Num: count}
 }
+
+// HandleZMScore returns the scores of the specified members in a sorted set
+func (h *ZSetHandlers) HandleZMScore(args []models.Value) models.Value {
+	if len(args) < 2 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'zmscore' command"}
+	}
+
+	key := args[0].Bulk
+	members := args[1:]
+	result := make([]models.Value, len(members))
+
+	for i, member := range members {
+		score, exists := h.cache.ZScore(key, member.Bulk)
+		if !exists {
+			result[i] = models.Value{Type: "null"}
+		} else {
+			result[i] = models.Value{Type: "bulk", Bulk: util.FormatFloat(score)}
+		}
+	}
+
+	return models.Value{Type: "array", Array: result}
+}
+
+// HandleZMPop removes and returns multiple elements from sorted sets
+func (h *ZSetHandlers) HandleZMPop(args []models.Value) models.Value {
+	if len(args) < 3 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'zmpop' command"}
+	}
+
+	// Parse number of keys
+	numKeys, err := util.ParseInt(args[0])
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR value is not an integer or out of range"}
+	}
+
+	if len(args) < numKeys+2 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'zmpop' command"}
+	}
+
+	// Get keys
+	keys := make([]string, numKeys)
+	for i := 0; i < numKeys; i++ {
+		keys[i] = args[i+1].Bulk
+	}
+
+	// Parse direction (MIN/MAX)
+	direction := args[numKeys+1].Bulk
+	if direction != "MIN" && direction != "MAX" {
+		return models.Value{Type: "error", Str: "ERR syntax error"}
+	}
+
+	// Parse count if provided
+	count := 1
+	if len(args) > numKeys+2 {
+		if args[numKeys+2].Bulk != "COUNT" {
+			return models.Value{Type: "error", Str: "ERR syntax error"}
+		}
+		if len(args) <= numKeys+3 {
+			return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'zmpop' command"}
+		}
+		parsedCount, err := util.ParseInt(args[numKeys+3])
+		if err != nil || parsedCount <= 0 {
+			return models.Value{Type: "error", Str: "ERR value is not a valid integer or out of range"}
+		}
+		count = parsedCount
+	}
+
+	// Try to pop from each key until successful
+	for _, key := range keys {
+		// Check if the key exists and has elements
+		if h.cache.ZCard(key) > 0 {
+			var members []models.ZSetMember
+			if direction == "MIN" {
+				members = h.cache.ZRangeWithScores(key, 0, count-1)
+			} else {
+				members = h.cache.ZRevRangeWithScores(key, 0, count-1)
+			}
+
+			if len(members) == 0 {
+				continue
+			}
+
+			// Remove the popped members
+			for _, member := range members {
+				err := h.cache.ZRem(key, member.Member)
+				if err != nil {
+					return util.ToValue(err)
+				}
+			}
+
+			// Format result
+			result := make([]models.Value, 2)
+			result[0] = models.Value{Type: "bulk", Bulk: key}
+
+			membersArray := make([]models.Value, len(members)*2)
+			for i, member := range members {
+				membersArray[i*2] = models.Value{Type: "bulk", Bulk: member.Member}
+				membersArray[i*2+1] = models.Value{Type: "bulk", Bulk: util.FormatFloat(member.Score)}
+			}
+			result[1] = models.Value{Type: "array", Array: membersArray}
+
+			return models.Value{Type: "array", Array: result}
+		}
+	}
+
+	// No elements found in any key
+	return models.Value{Type: "null"}
+}

@@ -100,6 +100,8 @@ func (r *Registry) registerHandlers() {
 	r.handlers["ZINTER"] = r.zsetHandlers.HandleZInter
 	r.handlers["ZINTERCARD"] = r.zsetHandlers.HandleZInterCard
 	r.handlers["ZLEXCOUNT"] = r.zsetHandlers.HandleZLexCount
+	r.handlers["ZMSCORE"] = r.zsetHandlers.HandleZMScore
+	r.handlers["ZMPOP"] = r.zsetHandlers.HandleZMPop
 
 	// Admin Commands
 	r.handlers["FLUSHALL"] = r.adminHandlers.HandleFlushAll
