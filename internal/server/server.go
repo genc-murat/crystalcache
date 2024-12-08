@@ -1,11 +1,11 @@
 package server
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"log"
 	"net"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -16,6 +16,7 @@ import (
 	"github.com/genc-murat/crystalcache/internal/handlers"
 	"github.com/genc-murat/crystalcache/internal/metrics"
 	"github.com/genc-murat/crystalcache/pkg/resp"
+	util "github.com/genc-murat/crystalcache/pkg/utils"
 )
 
 type Server struct {
@@ -404,31 +405,30 @@ func (s *Server) handleCommand(value models.Value) models.Value {
 	log.Printf("[DEBUG] Received command: %s with args: %+v", cmd, value.Array[1:])
 
 	// Special handling for INFO command to combine cache and replication info
+	if len(value.Array) == 0 {
+		return models.Value{Type: "error", Str: "ERR empty command"}
+	}
+
+	// Special handling for INFO command to combine cache and replication info
 	if cmd == "INFO" {
-		cacheInfo := s.cache.Info()
+		cacheInfo := s.adminHandlers.HandleInfo(value.Array[1:])
+		if cacheInfo.Type == "error" {
+			return cacheInfo
+		}
+
+		// Parse the cache info string back into a map
+		cacheInfoMap := parseInfoString(cacheInfo.Bulk)
+
+		// Merge with replication info
 		replInfo := s.GetReplicationInfo()
-
-		// Merge the two maps
 		for k, v := range replInfo {
-			cacheInfo[k] = v
+			cacheInfoMap[k] = v
 		}
 
-		// Build the response string
-		var builder strings.Builder
-		keys := make([]string, 0, len(cacheInfo))
-		for k := range cacheInfo {
-			keys = append(keys, k)
+		return models.Value{
+			Type: "bulk",
+			Bulk: util.FormatInfoResponse(cacheInfoMap),
 		}
-		sort.Strings(keys)
-
-		for _, k := range keys {
-			builder.WriteString(k)
-			builder.WriteString(":")
-			builder.WriteString(cacheInfo[k])
-			builder.WriteString("\r\n")
-		}
-
-		return models.Value{Type: "bulk", Bulk: builder.String()}
 	}
 
 	// Handle regular commands
@@ -449,6 +449,18 @@ func (s *Server) handleCommand(value models.Value) models.Value {
 		s.propagateToReplicas(value)
 	}
 
+	return result
+}
+
+func parseInfoString(info string) map[string]string {
+	result := make(map[string]string)
+	scanner := bufio.NewScanner(strings.NewReader(info))
+	for scanner.Scan() {
+		line := scanner.Text()
+		if parts := strings.SplitN(line, ":", 2); len(parts) == 2 {
+			result[parts[0]] = parts[1]
+		}
+	}
 	return result
 }
 
