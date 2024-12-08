@@ -772,6 +772,47 @@ func (rd *RetryDecorator) HScan(hash string, cursor int, pattern string, count i
 	return results, nextCursor
 }
 
+// Add GetJSON with retry logic
+func (rd *RetryDecorator) GetJSON(key string) (interface{}, bool) {
+	var value interface{}
+	var exists bool
+	var finalExists bool
+
+	err := rd.executeWithRetry(func() error {
+		value, exists = rd.cache.GetJSON(key)
+		if exists {
+			finalExists = true
+			return nil
+		}
+		return errors.New("json key not found")
+	})
+
+	if err != nil {
+		return nil, false
+	}
+	return value, finalExists
+}
+
+// Add SetJSON with retry logic
+func (rd *RetryDecorator) SetJSON(key string, value interface{}) error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.SetJSON(key, value)
+	})
+}
+
+// Add DeleteJSON with retry logic
+func (rd *RetryDecorator) DeleteJSON(key string) bool {
+	var deleted bool
+	rd.executeWithRetry(func() error {
+		deleted = rd.cache.DeleteJSON(key)
+		if deleted {
+			return nil
+		}
+		return errors.New("json key not found")
+	})
+	return deleted
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }

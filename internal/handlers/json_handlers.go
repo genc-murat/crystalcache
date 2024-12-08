@@ -3,9 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"strconv"
-	"strings"
 
 	"github.com/genc-murat/crystalcache/internal/core/models"
 	"github.com/genc-murat/crystalcache/internal/core/ports"
@@ -21,8 +19,6 @@ func NewJSONHandlers(cache ports.Cache) *JSONHandlers {
 }
 
 func (h *JSONHandlers) HandleJSON(args []models.Value) models.Value {
-	log.Printf("[DEBUG] JSON.SET args: %+v", args)
-
 	if len(args) < 3 {
 		return models.Value{Type: "error", Str: "ERR wrong number of arguments for JSON.SET command"}
 	}
@@ -31,79 +27,43 @@ func (h *JSONHandlers) HandleJSON(args []models.Value) models.Value {
 	path := args[1].Bulk
 	jsonStr := args[2].Bulk
 
-	// Parse options (NX/XX)
-	var nx, xx bool
-	for i := 3; i < len(args); i++ {
-		switch strings.ToUpper(args[i].Bulk) {
-		case "NX":
-			nx = true
-		case "XX":
-			xx = true
-		}
-	}
-
-	// Check NX/XX conditions
-	exists := h.cache.Exists(key)
-	if (nx && exists) || (xx && !exists) {
-		log.Printf("[DEBUG] JSON.SET NX/XX condition not met: nx=%v, xx=%v, exists=%v", nx, xx, exists)
-		return models.Value{Type: "null"}
+	var value interface{}
+	if err := json.Unmarshal([]byte(jsonStr), &value); err != nil {
+		return models.Value{Type: "error", Str: "ERR invalid JSON string"}
 	}
 
 	// Handle root path
 	if path == "." {
-		if !json.Valid([]byte(jsonStr)) {
-			return models.Value{Type: "error", Str: "ERR invalid JSON string"}
-		}
-
-		err := h.cache.Set(key, jsonStr)
-		if err != nil {
-			log.Printf("[ERROR] JSON.SET root path error: %v", err)
+		if err := h.cache.SetJSON(key, value); err != nil {
 			return util.ToValue(err)
 		}
-
-		log.Printf("[DEBUG] JSON.SET success at root path for key: %s", key)
 		return models.Value{Type: "string", Str: "OK"}
 	}
 
 	// Get existing JSON if exists
-	var existingData map[string]interface{}
+	existingValue, exists := h.cache.GetJSON(key)
+	var data map[string]interface{}
+
 	if exists {
-		existingValue, _ := h.cache.Get(key)
-		if err := json.Unmarshal([]byte(existingValue), &existingData); err != nil {
-			log.Printf("[ERROR] JSON.SET existing JSON parse error: %v", err)
-			return models.Value{Type: "error", Str: "ERR key contains invalid JSON"}
+		if existingMap, ok := existingValue.(map[string]interface{}); ok {
+			data = existingMap
+		} else {
+			data = make(map[string]interface{})
 		}
 	} else {
-		existingData = make(map[string]interface{})
-	}
-
-	// Parse new value
-	var newValue interface{}
-	if err := json.Unmarshal([]byte(jsonStr), &newValue); err != nil {
-		log.Printf("[ERROR] JSON.SET new value parse error: %v", err)
-		return models.Value{Type: "error", Str: "ERR invalid JSON value"}
+		data = make(map[string]interface{})
 	}
 
 	// Set value at path
-	if err := h.setNestedValue(existingData, path, newValue); err != nil {
-		log.Printf("[ERROR] JSON.SET nested path error: %v", err)
+	if err := h.setNestedValue(data, path, value); err != nil {
 		return models.Value{Type: "error", Str: err.Error()}
 	}
 
-	// Marshal full object
-	resultJSON, err := json.Marshal(existingData)
-	if err != nil {
-		log.Printf("[ERROR] JSON.SET marshal error: %v", err)
-		return models.Value{Type: "error", Str: "ERR failed to encode JSON"}
-	}
-
-	// Save to cache
-	if err := h.cache.Set(key, string(resultJSON)); err != nil {
-		log.Printf("[ERROR] JSON.SET cache set error: %v", err)
+	// Store updated data
+	if err := h.cache.SetJSON(key, data); err != nil {
 		return util.ToValue(err)
 	}
 
-	log.Printf("[DEBUG] JSON.SET success for key: %s, path: %s", key, path)
 	return models.Value{Type: "string", Str: "OK"}
 }
 
@@ -218,48 +178,32 @@ func (h *JSONHandlers) HandleJSONGet(args []models.Value) models.Value {
 		path = args[1].Bulk
 	}
 
-	// Check if key exists
-	exists := h.cache.Exists(key)
+	value, exists := h.cache.GetJSON(key)
 	if !exists {
 		return models.Value{Type: "null"}
 	}
 
-	// Get value from cache
-	value, _ := h.cache.Get(key)
-	if value == "" {
-		return models.Value{Type: "null"}
-	}
-
-	// Parse stored JSON
-	var data interface{}
-	if unmarshalErr := json.Unmarshal([]byte(value), &data); unmarshalErr != nil {
-		log.Printf("[ERROR] JSON.GET parse error: %v", unmarshalErr)
-		return models.Value{Type: "error", Str: "ERR key contains invalid JSON"}
-	}
-
-	// Handle root path
 	if path == "." {
-		result, marshalErr := json.Marshal(data)
-		if marshalErr != nil {
+		result, err := json.Marshal(value)
+		if err != nil {
 			return models.Value{Type: "error", Str: "ERR failed to encode JSON"}
 		}
 		return models.Value{Type: "bulk", Bulk: string(result)}
 	}
 
-	// Navigate to path
-	result, pathErr := h.getNestedValue(data, path)
-	if pathErr != nil {
-		return models.Value{Type: "error", Str: pathErr.Error()}
+	result, err := h.getNestedValue(value, path)
+	if err != nil {
+		return models.Value{Type: "error", Str: err.Error()}
 	}
 
-	// Marshal result
-	resultJSON, marshalErr := json.Marshal(result)
-	if marshalErr != nil {
+	resultJSON, err := json.Marshal(result)
+	if err != nil {
 		return models.Value{Type: "error", Str: "ERR failed to encode JSON"}
 	}
 
 	return models.Value{Type: "bulk", Bulk: string(resultJSON)}
 }
+
 func (h *JSONHandlers) HandleJSONDel(args []models.Value) models.Value {
 	if len(args) < 1 {
 		return models.Value{Type: "error", Str: "ERR wrong number of arguments for JSON.DEL command"}
@@ -272,29 +216,24 @@ func (h *JSONHandlers) HandleJSONDel(args []models.Value) models.Value {
 	}
 
 	// If key doesn't exist, return 0
-	exists := h.cache.Exists(key)
+	value, exists := h.cache.GetJSON(key)
 	if !exists {
 		return models.Value{Type: "integer", Num: 0}
 	}
 
 	// If root path, delete entire key
 	if path == "." {
-		deleted, _ := h.cache.Del(key)
+		deleted := h.cache.DeleteJSON(key)
 		if deleted {
 			return models.Value{Type: "integer", Num: 1}
 		}
 		return models.Value{Type: "integer", Num: 0}
 	}
 
-	// Get and parse existing JSON
-	value, _ := h.cache.Get(key)
-	if value == "" {
-		return models.Value{Type: "integer", Num: 0}
-	}
-
-	var data map[string]interface{}
-	if unmarshalErr := json.Unmarshal([]byte(value), &data); unmarshalErr != nil {
-		return models.Value{Type: "error", Str: "ERR key contains invalid JSON"}
+	// Handle nested deletion
+	data, ok := value.(map[string]interface{})
+	if !ok {
+		return models.Value{Type: "error", Str: "ERR key contains non-object JSON"}
 	}
 
 	// Delete at path
@@ -306,115 +245,15 @@ func (h *JSONHandlers) HandleJSONDel(args []models.Value) models.Value {
 		return models.Value{Type: "integer", Num: 0}
 	}
 
-	// Marshal and save updated JSON
-	resultJSON, marshalErr := json.Marshal(data)
-	if marshalErr != nil {
-		return models.Value{Type: "error", Str: "ERR failed to encode JSON"}
-	}
-
-	if err := h.cache.Set(key, string(resultJSON)); err != nil {
+	// Store updated data
+	if err := h.cache.SetJSON(key, data); err != nil {
 		return util.ToValue(err)
 	}
 
 	return models.Value{Type: "integer", Num: 1}
 }
 
-func (h *JSONHandlers) HandleJSONType(args []models.Value) models.Value {
-	if len(args) < 1 {
-		return models.Value{Type: "error", Str: "ERR wrong number of arguments for JSON.TYPE command"}
-	}
-
-	key := args[0].Bulk
-	path := "."
-	if len(args) > 1 {
-		path = args[1].Bulk
-	}
-
-	// Get value from cache
-	exists := h.cache.Exists(key)
-	if !exists {
-		return models.Value{Type: "null"}
-	}
-
-	value, _ := h.cache.Get(key)
-	if value == "" {
-		return models.Value{Type: "null"}
-	}
-
-	// Parse stored JSON
-	var data interface{}
-	if unmarshalErr := json.Unmarshal([]byte(value), &data); unmarshalErr != nil {
-		return models.Value{Type: "error", Str: "ERR key contains invalid JSON"}
-	}
-
-	// Get value at path
-	var target interface{}
-	if path == "." {
-		target = data
-	} else {
-		var pathErr error
-		target, pathErr = h.getNestedValue(data, path)
-		if pathErr != nil {
-			return models.Value{Type: "error", Str: pathErr.Error()}
-		}
-	}
-
-	// Determine type
-	jsonType := "none"
-	switch target.(type) {
-	case nil:
-		jsonType = "null"
-	case bool:
-		jsonType = "boolean"
-	case float64:
-		jsonType = "number"
-	case string:
-		jsonType = "string"
-	case []interface{}:
-		jsonType = "array"
-	case map[string]interface{}:
-		jsonType = "object"
-	default:
-		return models.Value{Type: "error", Str: fmt.Sprintf("ERR unknown JSON type: %T", target)}
-	}
-
-	return models.Value{Type: "bulk", Bulk: jsonType}
-}
-
-func (h *JSONHandlers) getNestedValue(data interface{}, path string) (interface{}, error) {
-	parts := parsePath(path)
-	current := data
-
-	for _, part := range parts {
-		arrayIndex, isArray := parseArrayIndex(part)
-
-		if isArray {
-			// Handle array access
-			arr, ok := current.([]interface{})
-			if !ok {
-				return nil, fmt.Errorf("ERR path element is not an array")
-			}
-			if arrayIndex >= len(arr) {
-				return nil, fmt.Errorf("ERR array index out of range")
-			}
-			current = arr[arrayIndex]
-		} else {
-			// Handle object access
-			obj, ok := current.(map[string]interface{})
-			if !ok {
-				return nil, fmt.Errorf("ERR path element is not an object")
-			}
-			var exists bool
-			current, exists = obj[part]
-			if !exists {
-				return nil, fmt.Errorf("ERR path does not exist")
-			}
-		}
-	}
-
-	return current, nil
-}
-
+// Helper method to delete values at nested paths (keep existing implementation)
 func (h *JSONHandlers) deleteNestedValue(data map[string]interface{}, path string) (bool, error) {
 	parts := parsePath(path)
 	if len(parts) == 0 {
@@ -493,4 +332,94 @@ func (h *JSONHandlers) deleteNestedValue(data map[string]interface{}, path strin
 		delete(current, lastPart)
 		return true, nil
 	}
+}
+
+func (h *JSONHandlers) HandleJSONType(args []models.Value) models.Value {
+	if len(args) < 1 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for JSON.TYPE command"}
+	}
+
+	key := args[0].Bulk
+	path := "."
+	if len(args) > 1 {
+		path = args[1].Bulk
+	}
+
+	// Get value from cache using native JSON storage
+	value, exists := h.cache.GetJSON(key)
+	if !exists {
+		return models.Value{Type: "null"}
+	}
+
+	// Get value at path
+	var target interface{}
+	if path == "." {
+		target = value
+	} else {
+		var pathErr error
+		target, pathErr = h.getNestedValue(value, path)
+		if pathErr != nil {
+			return models.Value{Type: "error", Str: pathErr.Error()}
+		}
+	}
+
+	// Determine type
+	jsonType := "none"
+	switch v := target.(type) {
+	case nil:
+		jsonType = "null"
+	case bool:
+		jsonType = "boolean"
+	case float64:
+		jsonType = "number"
+	case int:
+		jsonType = "number"
+	case int64:
+		jsonType = "number"
+	case string:
+		jsonType = "string"
+	case []interface{}:
+		jsonType = "array"
+	case map[string]interface{}:
+		jsonType = "object"
+	default:
+		return models.Value{Type: "error", Str: fmt.Sprintf("ERR unknown JSON type: %T", v)}
+	}
+
+	return models.Value{Type: "bulk", Bulk: jsonType}
+}
+
+// Keep the existing getNestedValue helper as it works with interface{} types
+func (h *JSONHandlers) getNestedValue(data interface{}, path string) (interface{}, error) {
+	parts := parsePath(path)
+	current := data
+
+	for _, part := range parts {
+		arrayIndex, isArray := parseArrayIndex(part)
+
+		if isArray {
+			// Handle array access
+			arr, ok := current.([]interface{})
+			if !ok {
+				return nil, fmt.Errorf("ERR path element is not an array")
+			}
+			if arrayIndex >= len(arr) {
+				return nil, fmt.Errorf("ERR array index out of range")
+			}
+			current = arr[arrayIndex]
+		} else {
+			// Handle object access
+			obj, ok := current.(map[string]interface{})
+			if !ok {
+				return nil, fmt.Errorf("ERR path element is not an object")
+			}
+			var exists bool
+			current, exists = obj[part]
+			if !exists {
+				return nil, fmt.Errorf("ERR path does not exist")
+			}
+		}
+	}
+
+	return current, nil
 }

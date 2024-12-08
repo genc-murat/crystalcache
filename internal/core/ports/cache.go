@@ -75,4 +75,7 @@ type Cache interface {
 	Scan(cursor int, pattern string, count int) ([]string, int)
 	HDel(hash string, key string) (bool, error)
 	HScan(hash string, cursor int, pattern string, count int) ([]string, int)
+	SetJSON(key string, value interface{}) error
+	GetJSON(key string) (interface{}, bool)
+	DeleteJSON(key string) bool
 }

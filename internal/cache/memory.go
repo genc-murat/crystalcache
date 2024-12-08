@@ -29,6 +29,7 @@ type MemoryCache struct {
 	keyVersions  *sync.Map
 	zsets        *sync.Map
 	hlls         *sync.Map
+	jsonData     *sync.Map
 	bloomFilter  *models.BloomFilter
 	lastDefrag   time.Time
 	defragMu     sync.Mutex
@@ -51,6 +52,7 @@ func NewMemoryCache() *MemoryCache {
 		keyVersions:  &sync.Map{},
 		zsets:        &sync.Map{},
 		hlls:         &sync.Map{},
+		jsonData:     &sync.Map{},
 		bloomFilter:  models.NewBloomFilter(config),
 	}
 
@@ -74,6 +76,24 @@ func (c *MemoryCache) cleanExpired() {
 		}
 		return true
 	})
+}
+
+func (c *MemoryCache) SetJSON(key string, value interface{}) error {
+	c.jsonData.Store(key, value)
+	c.incrementKeyVersion(key)
+	return nil
+}
+
+func (c *MemoryCache) GetJSON(key string) (interface{}, bool) {
+	return c.jsonData.Load(key)
+}
+
+func (c *MemoryCache) DeleteJSON(key string) bool {
+	_, existed := c.jsonData.LoadAndDelete(key)
+	if existed {
+		c.incrementKeyVersion(key)
+	}
+	return existed
 }
 
 func (c *MemoryCache) Incr(key string) (int, error) {
@@ -153,6 +173,10 @@ func (c *MemoryCache) Del(key string) (bool, error) {
 	}
 
 	if _, ok := c.lists.LoadAndDelete(key); ok {
+		deleted = true
+	}
+
+	if _, ok := c.jsonData.LoadAndDelete(key); ok {
 		deleted = true
 	}
 
@@ -777,6 +801,9 @@ func (c *MemoryCache) SUnion(keys ...string) []string {
 }
 
 func (c *MemoryCache) Type(key string) string {
+	if _, exists := c.jsonData.Load(key); exists {
+		return "json"
+	}
 	if _, exists := c.sets.Load(key); exists {
 		return "string"
 	}
@@ -835,6 +862,9 @@ func (c *MemoryCache) BatchOp(ops []struct {
 }
 
 func (c *MemoryCache) Exists(key string) bool {
+	if _, exists := c.jsonData.Load(key); exists {
+		return true
+	}
 	return c.Type(key) != "none"
 }
 
@@ -1134,8 +1164,9 @@ func (c *MemoryCache) Info() map[string]string {
 	// Feature info
 	info["redis_version"] = "7.2.0"
 	info["redis_mode"] = "standalone"
-	info["modules"] = "json" // JSON module example
-	info["json_version"] = "2.0.0"
+	info["json_native_storage"] = "enabled"
+	info["json_version"] = "1.0"
+	info["modules"] = "json_native"
 
 	// Count keys in various maps
 	stringKeys := 0
@@ -1165,6 +1196,13 @@ func (c *MemoryCache) Info() map[string]string {
 		return true
 	})
 	info["set_keys"] = fmt.Sprintf("%d", setKeys)
+
+	jsonCount := 0
+	c.jsonData.Range(func(_, _ interface{}) bool {
+		jsonCount++
+		return true
+	})
+	info["json_keys"] = fmt.Sprintf("%d", jsonCount)
 
 	// Memory analytics
 	info["used_memory_human"] = fmt.Sprintf("%.2fMB", float64(memStats.Alloc)/(1024*1024))
