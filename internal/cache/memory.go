@@ -468,7 +468,6 @@ func (c *MemoryCache) checkListExists(key string) bool {
 	return ok
 }
 
-// Optional: Add batch operation support
 func (c *MemoryCache) execBatchListOps(ops []ListOp) []ListOpResult {
 	results := make([]ListOpResult, len(ops))
 
@@ -542,7 +541,6 @@ func (c *MemoryCache) LRange(key string, start, stop int) ([]string, error) {
 	return result, nil
 }
 
-// Optional: Add a batch version for multiple ranges
 func (c *MemoryCache) BatchLRange(ranges map[string][2]int) map[string][]string {
 	results := make(map[string][]string)
 	var mu sync.Mutex
@@ -852,7 +850,83 @@ func (c *MemoryCache) BatchOp(ops []struct {
 				} else {
 					results[idx] = BatchResult{Error: err}
 				}
-				// Add other operations as needed
+
+			case "SET":
+				if err := c.Set(operation.Key, operation.Value.(string)); err == nil {
+					results[idx] = BatchResult{Value: "OK"}
+				} else {
+					results[idx] = BatchResult{Error: err}
+				}
+
+			case "GET":
+				if value, exists := c.Get(operation.Key); exists {
+					results[idx] = BatchResult{Value: value}
+				} else {
+					results[idx] = BatchResult{Value: nil}
+				}
+
+			case "HSET":
+				if field, ok := operation.Value.(map[string]string); ok {
+					for k, v := range field {
+						if err := c.HSet(operation.Key, k, v); err != nil {
+							results[idx] = BatchResult{Error: err}
+							return
+						}
+					}
+					results[idx] = BatchResult{Value: "OK"}
+				} else {
+					results[idx] = BatchResult{Error: fmt.Errorf("invalid HSET value type")}
+				}
+
+			case "HGET":
+				if value, exists := c.HGet(operation.Key, operation.Value.(string)); exists {
+					results[idx] = BatchResult{Value: value}
+				} else {
+					results[idx] = BatchResult{Value: nil}
+				}
+
+			case "DEL":
+				if deleted, err := c.Del(operation.Key); err == nil {
+					results[idx] = BatchResult{Value: deleted}
+				} else {
+					results[idx] = BatchResult{Error: err}
+				}
+
+			case "SADD":
+				if member, ok := operation.Value.(string); ok {
+					if added, err := c.SAdd(operation.Key, member); err == nil {
+						results[idx] = BatchResult{Value: added}
+					} else {
+						results[idx] = BatchResult{Error: err}
+					}
+				} else {
+					results[idx] = BatchResult{Error: fmt.Errorf("invalid SADD value type")}
+				}
+
+			case "SREM":
+				if member, ok := operation.Value.(string); ok {
+					if removed, err := c.SRem(operation.Key, member); err == nil {
+						results[idx] = BatchResult{Value: removed}
+					} else {
+						results[idx] = BatchResult{Error: err}
+					}
+				} else {
+					results[idx] = BatchResult{Error: fmt.Errorf("invalid SREM value type")}
+				}
+
+			case "EXPIRE":
+				if seconds, ok := operation.Value.(int); ok {
+					if err := c.Expire(operation.Key, seconds); err == nil {
+						results[idx] = BatchResult{Value: true}
+					} else {
+						results[idx] = BatchResult{Error: err}
+					}
+				} else {
+					results[idx] = BatchResult{Error: fmt.Errorf("invalid EXPIRE value type")}
+				}
+
+			default:
+				results[idx] = BatchResult{Error: fmt.Errorf("unsupported operation: %s", operation.Op)}
 			}
 		}(i, op)
 	}
