@@ -118,6 +118,38 @@ func (r *Registry) registerHandlers() {
 	r.handlers["JSON.GET"] = r.jsonHandlers.HandleJSONGet
 	r.handlers["JSON.DEL"] = r.jsonHandlers.HandleJSONDel
 	r.handlers["JSON.TYPE"] = r.jsonHandlers.HandleJSONType
+	r.handlers["JSON.ARRAPPEND"] = r.jsonHandlers.HandleJSONArrAppend
+	r.handlers["JSON.ARRLEN"] = r.jsonHandlers.HandleJSONArrLen
+	r.handlers["JSON.STRLEN"] = r.jsonHandlers.HandleJSONStrLen
+	r.handlers["JSON.TOGGLE"] = r.jsonHandlers.HandleJSONToggle
+	r.handlers["JSON.ARRINDEX"] = r.jsonHandlers.HandleJSONArrIndex
+	r.handlers["JSON.ARRTRIM"] = r.jsonHandlers.HandleJSONArrTrim
+	r.handlers["JSON.NUMINCRBY"] = r.jsonHandlers.HandleJSONNumIncrBy
+	r.handlers["JSON.OBJKEYS"] = r.jsonHandlers.HandleJSONObjKeys
+	r.handlers["JSON.OBJLEN"] = r.jsonHandlers.HandleJSONObjLen
+	r.handlers["JSON.ARRPOP"] = r.jsonHandlers.HandleJSONArrPop
+	r.handlers["JSON.MERGE"] = r.jsonHandlers.HandleJSONMerge
+	r.handlers["JSON.ARRINSERT"] = r.jsonHandlers.HandleJSONArrInsert
+	r.handlers["JSON.NUMMULTBY"] = r.jsonHandlers.HandleJSONNumMultBy
+	r.handlers["JSON.CLEAR"] = r.jsonHandlers.HandleJSONClear
+	r.handlers["JSON.COMPARE"] = r.jsonHandlers.HandleJSONCompare
+	r.handlers["JSON.STRAPPEND"] = r.jsonHandlers.HandleJSONStrAppend
+	r.handlers["JSON.CONTAINS"] = r.jsonHandlers.HandleJSONContains
+	r.handlers["JSON.ARRREVERSE"] = r.jsonHandlers.HandleJSONArrReverse
+	r.handlers["JSON.ARRSORT"] = r.jsonHandlers.HandleJSONArrSort
+	r.handlers["JSON.ARRUNIQUE"] = r.jsonHandlers.HandleJSONArrUnique
+	r.handlers["JSON.COUNT"] = r.jsonHandlers.HandleJSONCount
+	r.handlers["JSON.SWAP"] = r.jsonHandlers.HandleJSONSwap
+	r.handlers["JSON.VALIDATE"] = r.jsonHandlers.HandleJSONValidate
+	r.handlers["JSON.ARRSUM"] = r.jsonHandlers.HandleJSONArrSum
+	r.handlers["JSON.ARRAVG"] = r.jsonHandlers.HandleJSONArrAvg
+	r.handlers["JSON.SEARCH"] = r.jsonHandlers.HandleJSONSearch
+	r.handlers["JSON.MINMAX"] = r.jsonHandlers.HandleJSONMinMax
+	r.handlers["JSON.DEBUG"] = r.jsonHandlers.HandleJSONDebug
+	r.handlers["JSON.FORGET"] = r.jsonHandlers.HandleJSONForget
+	r.handlers["JSON.MGET"] = r.jsonHandlers.HandleJSONMGet
+	r.handlers["JSON.MSET"] = r.jsonHandlers.HandleJSONMSet
+	r.handlers["JSON.RESP"] = r.jsonHandlers.HandleJSONResp
 }
 
 func (r *Registry) GetHandler(cmd string) (CommandHandler, bool) {
