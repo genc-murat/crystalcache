@@ -63,6 +63,7 @@ func (r *Registry) registerHandlers() {
 	r.handlers["MGET"] = r.stringHandlers.HandleMGet
 	r.handlers["LCS"] = r.stringHandlers.HandleLCS
 	r.handlers["MSETNX"] = r.stringHandlers.HandleMSetNX
+	r.handlers["GETEX"] = r.stringHandlers.HandleGetEx
 
 	// Hash Commands
 	r.handlers["HSET"] = r.hashHandlers.HandleHSet
