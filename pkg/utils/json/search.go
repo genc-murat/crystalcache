@@ -57,60 +57,6 @@ func (s *SearchUtil) Search(value interface{}, keyword string, opts *SearchOptio
 	return paths
 }
 
-// SearchWithOptions performs a search with custom options
-func (s *SearchUtil) SearchWithOptions(value interface{}, keyword string, opts *SearchOptions, currentPath string, paths *[]string) {
-	// Check depth limit
-	if opts.MaxDepth == 0 {
-		return
-	}
-
-	switch v := value.(type) {
-	case map[string]interface{}:
-		s.searchInObject(v, keyword, opts, currentPath, paths)
-	case []interface{}:
-		s.searchInArray(v, keyword, opts, currentPath, paths)
-	case string:
-		if opts.IncludeValues && s.isMatch(v, keyword, opts.CaseSensitive) {
-			if currentPath != "" {
-				*paths = append(*paths, currentPath)
-			}
-		}
-	}
-}
-
-// searchInObject searches within a JSON object
-func (s *SearchUtil) searchInObject(obj map[string]interface{}, keyword string, opts *SearchOptions, currentPath string, paths *[]string) {
-	newOpts := *opts
-	if newOpts.MaxDepth > 0 {
-		newOpts.MaxDepth--
-	}
-
-	for key, val := range obj {
-		newPath := s.buildPath(currentPath, key)
-
-		// Check key if enabled
-		if opts.IncludeKeys && s.isMatch(key, keyword, opts.CaseSensitive) {
-			*paths = append(*paths, newPath)
-		}
-
-		// Recursively search in value
-		s.SearchWithOptions(val, keyword, &newOpts, newPath, paths)
-	}
-}
-
-// searchInArray searches within a JSON array
-func (s *SearchUtil) searchInArray(arr []interface{}, keyword string, opts *SearchOptions, currentPath string, paths *[]string) {
-	newOpts := *opts
-	if newOpts.MaxDepth > 0 {
-		newOpts.MaxDepth--
-	}
-
-	for i, val := range arr {
-		newPath := fmt.Sprintf("%s[%d]", currentPath, i)
-		s.SearchWithOptions(val, keyword, &newOpts, newPath, paths)
-	}
-}
-
 // SearchDetailed performs a detailed search and returns SearchResult objects
 func (s *SearchUtil) SearchDetailed(value interface{}, keyword string, opts *SearchOptions) []SearchResult {
 	results := make([]SearchResult, 0)
@@ -150,6 +96,7 @@ func (s *SearchUtil) searchDetailedInObject(obj map[string]interface{}, keyword 
 	for key, val := range obj {
 		newPath := s.buildPath(currentPath, key)
 
+		// First check key match
 		if opts.IncludeKeys && s.isMatch(key, keyword, opts.CaseSensitive) {
 			*results = append(*results, SearchResult{
 				Path:       newPath,
@@ -159,6 +106,16 @@ func (s *SearchUtil) searchDetailedInObject(obj map[string]interface{}, keyword 
 			})
 		}
 
+		// Then check value match for strings
+		if str, ok := val.(string); ok && opts.IncludeValues && s.isMatch(str, keyword, opts.CaseSensitive) {
+			*results = append(*results, SearchResult{
+				Path:       newPath,
+				Value:      val,
+				IsKeyMatch: false,
+			})
+		}
+
+		// Continue searching deeper
 		s.searchDetailed(val, keyword, &newOpts, newPath, results)
 	}
 }
@@ -172,17 +129,102 @@ func (s *SearchUtil) searchDetailedInArray(arr []interface{}, keyword string, op
 
 	for i, val := range arr {
 		newPath := fmt.Sprintf("%s[%d]", currentPath, i)
+
+		// Check string values in array
+		if str, ok := val.(string); ok && opts.IncludeValues && s.isMatch(str, keyword, opts.CaseSensitive) {
+			*results = append(*results, SearchResult{
+				Path:       newPath,
+				Value:      val,
+				IsKeyMatch: false,
+			})
+		}
+
+		// Continue searching deeper
 		s.searchDetailed(val, keyword, &newOpts, newPath, results)
 	}
 }
 
 // isMatch checks if a string matches the search keyword
 func (s *SearchUtil) isMatch(value, keyword string, caseSensitive bool) bool {
+	// For empty strings, no match
+	if keyword == "" || value == "" {
+		return false
+	}
+
 	if !caseSensitive {
 		value = strings.ToLower(value)
 		keyword = strings.ToLower(keyword)
 	}
-	return strings.Contains(value, keyword)
+
+	// For exact word match, split the value into words and check each
+	words := strings.Fields(value)
+	for _, word := range words {
+		if word == keyword {
+			return true
+		}
+	}
+
+	return false
+}
+
+// SearchWithOptions performs a search with custom options
+func (s *SearchUtil) SearchWithOptions(value interface{}, keyword string, opts *SearchOptions, currentPath string, paths *[]string) {
+	// Don't search if keyword is empty
+	if keyword == "" {
+		return
+	}
+
+	// Check depth limit
+	if opts.MaxDepth == 0 {
+		return
+	}
+
+	switch v := value.(type) {
+	case map[string]interface{}:
+		s.searchInObject(v, keyword, opts, currentPath, paths)
+	case []interface{}:
+		s.searchInArray(v, keyword, opts, currentPath, paths)
+	case string:
+		// Only check string values if we are including values and have a path
+		if opts.IncludeValues && currentPath != "" {
+			if s.isMatch(v, keyword, opts.CaseSensitive) {
+				*paths = append(*paths, currentPath)
+			}
+		}
+	}
+}
+
+// searchInObject searches within a JSON object
+func (s *SearchUtil) searchInObject(obj map[string]interface{}, keyword string, opts *SearchOptions, currentPath string, paths *[]string) {
+	newOpts := *opts
+	if newOpts.MaxDepth > 0 {
+		newOpts.MaxDepth--
+	}
+
+	for key, val := range obj {
+		newPath := s.buildPath(currentPath, key)
+
+		// Check key if enabled
+		if opts.IncludeKeys && s.isMatch(key, keyword, opts.CaseSensitive) {
+			*paths = append(*paths, newPath)
+		}
+
+		// Recursively search in value
+		s.SearchWithOptions(val, keyword, &newOpts, newPath, paths)
+	}
+}
+
+// searchInArray searches within a JSON array
+func (s *SearchUtil) searchInArray(arr []interface{}, keyword string, opts *SearchOptions, currentPath string, paths *[]string) {
+	newOpts := *opts
+	if newOpts.MaxDepth > 0 {
+		newOpts.MaxDepth--
+	}
+
+	for i, val := range arr {
+		newPath := fmt.Sprintf("%s[%d]", currentPath, i)
+		s.SearchWithOptions(val, keyword, &newOpts, newPath, paths)
+	}
 }
 
 // buildPath creates a path string from current path and key
