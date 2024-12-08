@@ -967,6 +967,67 @@ func (rd *RetryDecorator) ZUnion(keys ...string) []models.ZSetMember {
 	return result
 }
 
+// ExpireAt sets an absolute Unix timestamp when the key should expire
+func (rd *RetryDecorator) ExpireAt(key string, timestamp int64) error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.ExpireAt(key, timestamp)
+	})
+}
+
+// ExpireTime returns the absolute Unix timestamp when the key will expire
+func (rd *RetryDecorator) ExpireTime(key string) (int64, error) {
+	var expireTime int64
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		expireTime, err = rd.cache.ExpireTime(key)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return -2, err
+	}
+	return expireTime, finalErr
+}
+
+// HIncrBy increments the integer value of a hash field by the given increment
+func (rd *RetryDecorator) HIncrBy(key, field string, increment int64) (int64, error) {
+	var result int64
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		result, err = rd.cache.HIncrBy(key, field, increment)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return 0, err
+	}
+	return result, finalErr
+}
+
+// HIncrByFloat increments the float value of a hash field by the given increment
+func (rd *RetryDecorator) HIncrByFloat(key, field string, increment float64) (float64, error) {
+	var result float64
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		result, err = rd.cache.HIncrByFloat(key, field, increment)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return 0, err
+	}
+	return result, finalErr
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }

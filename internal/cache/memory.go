@@ -2900,6 +2900,132 @@ func (c *MemoryCache) ZUnion(keys ...string) []models.ZSetMember {
 	return result
 }
 
+// ExpireAt sets an absolute Unix timestamp when the key should expire
+func (c *MemoryCache) ExpireAt(key string, timestamp int64) error {
+	// Check if key exists
+	if !c.Exists(key) {
+		return nil
+	}
+
+	// Convert Unix timestamp to time.Time
+	expireTime := time.Unix(timestamp, 0)
+
+	// Store expiration time
+	c.expires.Store(key, expireTime)
+
+	// Start a background goroutine to handle expiration
+	go func() {
+		timer := time.NewTimer(time.Until(expireTime))
+		defer timer.Stop()
+
+		<-timer.C
+
+		// Check if the key still exists with the same expiration time
+		if expTime, exists := c.expires.Load(key); exists {
+			if expTime.(time.Time).Equal(expireTime) {
+				c.Del(key)
+				// Increment expired keys counter
+				if c.stats != nil {
+					atomic.AddInt64(&c.stats.expiredKeys, 1)
+				}
+			}
+		}
+	}()
+
+	return nil
+}
+
+// ExpireTime returns the absolute Unix timestamp when the key will expire
+// Returns:
+//   - timestamp: Unix timestamp when the key will expire
+//   - -1: if the key exists but has no associated expiry
+//   - -2: if the key does not exist
+func (c *MemoryCache) ExpireTime(key string) (int64, error) {
+	// Check if key exists
+	if !c.Exists(key) {
+		return -2, nil
+	}
+
+	// Check if key has expiration
+	expireTimeI, exists := c.expires.Load(key)
+	if !exists {
+		return -1, nil
+	}
+
+	expireTime := expireTimeI.(time.Time)
+	// If the key has already expired, remove it and return -2
+	if time.Now().After(expireTime) {
+		go func() {
+			c.Del(key)
+			if c.stats != nil {
+				atomic.AddInt64(&c.stats.expiredKeys, 1)
+			}
+		}()
+		return -2, nil
+	}
+
+	return expireTime.Unix(), nil
+}
+
+// HIncrBy increments the integer value of a hash field by the given increment
+func (c *MemoryCache) HIncrBy(key, field string, increment int64) (int64, error) {
+	var hashMap sync.Map
+	actual, _ := c.hsets.LoadOrStore(key, &hashMap)
+	actualMap := actual.(*sync.Map)
+
+	for {
+		// Get current value
+		currentI, _ := actualMap.LoadOrStore(field, "0")
+		current := currentI.(string)
+
+		// Convert current value to int64
+		currentVal, err := strconv.ParseInt(current, 10, 64)
+		if err != nil {
+			return 0, fmt.Errorf("ERR hash value is not an integer")
+		}
+
+		// Calculate new value
+		newVal := currentVal + increment
+
+		// Try to store new value
+		if actualMap.CompareAndSwap(field, current, strconv.FormatInt(newVal, 10)) {
+			c.incrementKeyVersion(key)
+			return newVal, nil
+		}
+	}
+}
+
+// HIncrByFloat increments the float value of a hash field by the given increment
+func (c *MemoryCache) HIncrByFloat(key, field string, increment float64) (float64, error) {
+	var hashMap sync.Map
+	actual, _ := c.hsets.LoadOrStore(key, &hashMap)
+	actualMap := actual.(*sync.Map)
+
+	for {
+		// Get current value
+		currentI, _ := actualMap.LoadOrStore(field, "0")
+		current := currentI.(string)
+
+		// Convert current value to float64
+		currentVal, err := strconv.ParseFloat(current, 64)
+		if err != nil {
+			return 0, fmt.Errorf("ERR hash value is not a float")
+		}
+
+		// Calculate new value
+		newVal := currentVal + increment
+
+		// Format new value with maximum precision
+		newValStr := strconv.FormatFloat(newVal, 'f', -1, 64)
+
+		// Try to store new value
+		if actualMap.CompareAndSwap(field, current, newValStr) {
+			c.incrementKeyVersion(key)
+			return newVal, nil
+		}
+	}
+}
+
 func (c *MemoryCache) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(c, strategy)
 }

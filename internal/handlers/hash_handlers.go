@@ -250,3 +250,104 @@ func (h *HashHandlers) HandleHExpire(args []models.Value) models.Value {
 
 	return models.Value{Type: "integer", Num: 1}
 }
+
+// HandleHExpireAt handles the HEXPIREAT command which sets an absolute Unix timestamp expiration
+// Parameters:
+//   - args: Array of Values containing the key and Unix timestamp
+//
+// Returns:
+//   - models.Value: 1 if timeout was set, 0 if key doesn't exist
+//     Returns error if wrong number of arguments or invalid timestamp
+func (h *HashHandlers) HandleHExpireAt(args []models.Value) models.Value {
+	if err := util.ValidateArgs(args, 2); err != nil {
+		return util.ToValue(err)
+	}
+
+	// Parse the timestamp
+	timestamp, err := strconv.ParseInt(args[1].Bulk, 10, 64)
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR timestamp is not an integer or out of range"}
+	}
+
+	// Set expiration at timestamp
+	err = h.cache.ExpireAt(args[0].Bulk, timestamp)
+	if err != nil {
+		return util.ToValue(err)
+	}
+
+	return models.Value{Type: "integer", Num: 1}
+}
+
+// HandleHExpireTime handles the HEXPIRETIME command which returns the absolute Unix timestamp
+// Parameters:
+//   - args: Array of Values containing the key
+//
+// Returns:
+//   - models.Value: Unix timestamp in seconds when the key will expire, or -1/-2 for no expiration/non-existent keys
+func (h *HashHandlers) HandleHExpireTime(args []models.Value) models.Value {
+	if err := util.ValidateArgs(args, 1); err != nil {
+		return util.ToValue(err)
+	}
+
+	timestamp, err := h.cache.ExpireTime(args[0].Bulk)
+	if err != nil {
+		return util.ToValue(err)
+	}
+
+	return models.Value{Type: "integer", Num: int(timestamp)}
+}
+
+// HandleHIncrBy handles the HINCRBY command which increments a hash field by an integer
+// Parameters:
+//   - args: Array of Values containing the key, field, and increment value
+//
+// Returns:
+//   - models.Value: The new value after increment
+//     Returns error if wrong number of arguments, non-integer field value, or overflow
+func (h *HashHandlers) HandleHIncrBy(args []models.Value) models.Value {
+	if err := util.ValidateArgs(args, 3); err != nil {
+		return util.ToValue(err)
+	}
+
+	// Parse increment
+	increment, err := strconv.ParseInt(args[2].Bulk, 10, 64)
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR increment is not an integer or out of range"}
+	}
+
+	// Increment the field
+	newVal, err := h.cache.HIncrBy(args[0].Bulk, args[1].Bulk, increment)
+	if err != nil {
+		return util.ToValue(err)
+	}
+
+	return models.Value{Type: "integer", Num: int(newVal)}
+}
+
+// HandleHIncrByFloat handles the HINCRBYFLOAT command which increments a hash field by a float
+// Parameters:
+//   - args: Array of Values containing the key, field, and increment value
+//
+// Returns:
+//   - models.Value: The new value after increment as a string
+//     Returns error if wrong number of arguments, non-numeric field value, or overflow
+func (h *HashHandlers) HandleHIncrByFloat(args []models.Value) models.Value {
+	if err := util.ValidateArgs(args, 3); err != nil {
+		return util.ToValue(err)
+	}
+
+	// Parse float increment
+	increment, err := strconv.ParseFloat(args[2].Bulk, 64)
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR increment is not a valid float"}
+	}
+
+	// Increment the field
+	newVal, err := h.cache.HIncrByFloat(args[0].Bulk, args[1].Bulk, increment)
+	if err != nil {
+		return util.ToValue(err)
+	}
+
+	// Convert float to string with proper precision
+	return models.Value{Type: "bulk", Bulk: strconv.FormatFloat(newVal, 'f', -1, 64)}
+}

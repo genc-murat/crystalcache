@@ -93,4 +93,8 @@ type Cache interface {
 	ZRevRank(key string, member string) (int, bool)
 	ZScan(key string, cursor int, match string, count int) ([]models.ZSetMember, int)
 	ZUnion(keys ...string) []models.ZSetMember
+	ExpireAt(key string, timestamp int64) error
+	ExpireTime(key string) (int64, error)
+	HIncrBy(key, field string, increment int64) (int64, error)
+	HIncrByFloat(key, field string, increment float64) (float64, error)
 }
