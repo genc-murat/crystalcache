@@ -692,3 +692,110 @@ func (h *ZSetHandlers) HandleZRangeByScore(args []models.Value) models.Value {
 
 	return models.Value{Type: "array", Array: result}
 }
+
+func (h *ZSetHandlers) HandleZRangeStore(args []models.Value) models.Value {
+	if len(args) < 4 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'zrangestore' command"}
+	}
+
+	destination := args[0].Bulk
+	source := args[1].Bulk
+
+	start, err := util.ParseInt(args[2])
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR value is not an integer"}
+	}
+
+	stop, err := util.ParseInt(args[3])
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR value is not an integer"}
+	}
+
+	withScores := false
+	if len(args) > 4 && args[4].Bulk == "WITHSCORES" {
+		withScores = true
+	}
+
+	count, err := h.cache.ZRangeStore(destination, source, start, stop, withScores)
+	if err != nil {
+		return util.ToValue(err)
+	}
+
+	return models.Value{Type: "integer", Num: count}
+}
+
+func (h *ZSetHandlers) HandleZRemRangeByLex(args []models.Value) models.Value {
+	if len(args) < 3 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'zremrangebylex' command"}
+	}
+
+	key := args[0].Bulk
+	min := args[1].Bulk
+	max := args[2].Bulk
+
+	count, err := h.cache.ZRemRangeByLex(key, min, max)
+	if err != nil {
+		return util.ToValue(err)
+	}
+
+	return models.Value{Type: "integer", Num: count}
+}
+
+func (h *ZSetHandlers) HandleZRemRangeByRank(args []models.Value) models.Value {
+	if len(args) < 3 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'zremrangebyrank' command"}
+	}
+
+	start, err := util.ParseInt(args[1])
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR value is not an integer"}
+	}
+
+	stop, err := util.ParseInt(args[2])
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR value is not an integer"}
+	}
+
+	count, err := h.cache.ZRemRangeByRank(args[0].Bulk, start, stop)
+	if err != nil {
+		return util.ToValue(err)
+	}
+
+	return models.Value{Type: "integer", Num: count}
+}
+
+func (h *ZSetHandlers) HandleZRemRangeByScore(args []models.Value) models.Value {
+	if len(args) < 3 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'zremrangebyscore' command"}
+	}
+
+	min, err := util.ParseFloat(args[1])
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR min value is not a valid float"}
+	}
+
+	max, err := util.ParseFloat(args[2])
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR max value is not a valid float"}
+	}
+
+	count, err := h.cache.ZRemRangeByScore(args[0].Bulk, min, max)
+	if err != nil {
+		return util.ToValue(err)
+	}
+
+	return models.Value{Type: "integer", Num: count}
+}
+
+func (h *ZSetHandlers) HandleZRank(args []models.Value) models.Value {
+	if len(args) < 2 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'zrank' command"}
+	}
+
+	rank, exists := h.cache.ZRank(args[0].Bulk, args[1].Bulk)
+	if !exists {
+		return models.Value{Type: "null"}
+	}
+
+	return models.Value{Type: "integer", Num: rank}
+}

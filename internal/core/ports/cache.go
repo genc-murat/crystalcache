@@ -84,4 +84,8 @@ type Cache interface {
 	ZInterCard(keys ...string) (int, error)
 	ZLexCount(key, min, max string) (int, error)
 	ZRangeByLex(key string, min, max string) []string
+	ZRangeStore(destination string, source string, start, stop int, withScores bool) (int, error)
+	ZRemRangeByLex(key string, min, max string) (int, error)
+	ZRemRangeByRank(key string, start, stop int) (int, error)
+	ZRemRangeByScore(key string, min, max float64) (int, error)
 }

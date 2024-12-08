@@ -870,6 +870,46 @@ func (rd *RetryDecorator) ZRangeByLex(key string, min, max string) []string {
 	return result
 }
 
+func (rd *RetryDecorator) ZRangeStore(destination string, source string, start, stop int, withScores bool) (int, error) {
+	var count int
+	err := rd.executeWithRetry(func() error {
+		var err error
+		count, err = rd.cache.ZRangeStore(destination, source, start, stop, withScores)
+		return err
+	})
+	return count, err
+}
+
+func (rd *RetryDecorator) ZRemRangeByLex(key string, min, max string) (int, error) {
+	var count int
+	err := rd.executeWithRetry(func() error {
+		var err error
+		count, err = rd.cache.ZRemRangeByLex(key, min, max)
+		return err
+	})
+	return count, err
+}
+
+func (rd *RetryDecorator) ZRemRangeByRank(key string, start, stop int) (int, error) {
+	var count int
+	err := rd.executeWithRetry(func() error {
+		var err error
+		count, err = rd.cache.ZRemRangeByRank(key, start, stop)
+		return err
+	})
+	return count, err
+}
+
+func (rd *RetryDecorator) ZRemRangeByScore(key string, min, max float64) (int, error) {
+	var count int
+	err := rd.executeWithRetry(func() error {
+		var err error
+		count, err = rd.cache.ZRemRangeByScore(key, min, max)
+		return err
+	})
+	return count, err
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }

@@ -2629,6 +2629,119 @@ func (c *MemoryCache) ZRangeByLex(key string, min, max string) []string {
 	return members
 }
 
+func (c *MemoryCache) ZRangeStore(destination string, source string, start, stop int, withScores bool) (int, error) {
+	// Get source members in range
+	var members []models.ZSetMember
+	if withScores {
+		members = c.ZRangeWithScores(source, start, stop)
+	} else {
+		stringMembers := c.ZRange(source, start, stop)
+		members = make([]models.ZSetMember, len(stringMembers))
+		for i, member := range stringMembers {
+			score, _ := c.ZScore(source, member)
+			members[i] = models.ZSetMember{Member: member, Score: score}
+		}
+	}
+
+	// Store results in destination
+	newSet := &sync.Map{}
+	for _, member := range members {
+		newSet.Store(member.Member, member.Score)
+	}
+	c.zsets.Store(destination, newSet)
+	c.incrementKeyVersion(destination)
+
+	return len(members), nil
+}
+
+func (c *MemoryCache) ZRemRangeByLex(key string, min, max string) (int, error) {
+	setI, exists := c.zsets.Load(key)
+	if !exists {
+		return 0, nil
+	}
+	set := setI.(*sync.Map)
+
+	// Parse range specifications
+	minInclusive := true
+	maxInclusive := true
+	if strings.HasPrefix(min, "(") {
+		minInclusive = false
+		min = min[1:]
+	} else if strings.HasPrefix(min, "[") {
+		min = min[1:]
+	}
+	if strings.HasPrefix(max, "(") {
+		maxInclusive = false
+		max = max[1:]
+	} else if strings.HasPrefix(max, "[") {
+		max = max[1:]
+	}
+
+	minIsInf := min == "-"
+	maxIsInf := max == "+"
+
+	toRemove := make([]string, 0)
+	set.Range(func(member, _ interface{}) bool {
+		memberStr := member.(string)
+		if minIsInf || (minInclusive && memberStr >= min) || (!minInclusive && memberStr > min) {
+			if maxIsInf || (maxInclusive && memberStr <= max) || (!maxInclusive && memberStr < max) {
+				toRemove = append(toRemove, memberStr)
+			}
+		}
+		return true
+	})
+
+	for _, member := range toRemove {
+		set.Delete(member)
+	}
+
+	if len(toRemove) > 0 {
+		c.incrementKeyVersion(key)
+	}
+
+	return len(toRemove), nil
+}
+
+func (c *MemoryCache) ZRemRangeByRank(key string, start, stop int) (int, error) {
+	members := c.ZRange(key, start, stop)
+	if len(members) == 0 {
+		return 0, nil
+	}
+
+	setI, exists := c.zsets.Load(key)
+	if !exists {
+		return 0, nil
+	}
+	set := setI.(*sync.Map)
+
+	for _, member := range members {
+		set.Delete(member)
+	}
+
+	c.incrementKeyVersion(key)
+	return len(members), nil
+}
+
+func (c *MemoryCache) ZRemRangeByScore(key string, min, max float64) (int, error) {
+	members := c.ZRangeByScore(key, min, max)
+	if len(members) == 0 {
+		return 0, nil
+	}
+
+	setI, exists := c.zsets.Load(key)
+	if !exists {
+		return 0, nil
+	}
+	set := setI.(*sync.Map)
+
+	for _, member := range members {
+		set.Delete(member)
+	}
+
+	c.incrementKeyVersion(key)
+	return len(members), nil
+}
+
 func (c *MemoryCache) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(c, strategy)
 }

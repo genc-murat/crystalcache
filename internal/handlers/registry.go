@@ -107,6 +107,11 @@ func (r *Registry) registerHandlers() {
 	r.handlers["ZRANDMEMBER"] = r.zsetHandlers.HandleZRandMember
 	r.handlers["ZRANGEBYLEX"] = r.zsetHandlers.HandleZRangeByLex
 	r.handlers["ZRANGEBYSCORE"] = r.zsetHandlers.HandleZRangeByScore
+	r.handlers["ZRANGESTORE"] = r.zsetHandlers.HandleZRangeStore
+	r.handlers["ZRANK"] = r.zsetHandlers.HandleZRank
+	r.handlers["ZREMRANGEBYLEX"] = r.zsetHandlers.HandleZRemRangeByLex
+	r.handlers["ZREMRANGEBYRANK"] = r.zsetHandlers.HandleZRemRangeByRank
+	r.handlers["ZREMRANGEBYSCORE"] = r.zsetHandlers.HandleZRemRangeByScore
 
 	// Admin Commands
 	r.handlers["FLUSHALL"] = r.adminHandlers.HandleFlushAll
