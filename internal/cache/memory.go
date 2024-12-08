@@ -2583,6 +2583,52 @@ func (c *MemoryCache) ZLexCount(key, min, max string) (int, error) {
 	return count, nil
 }
 
+func (c *MemoryCache) ZRangeByLex(key string, min, max string) []string {
+	setI, exists := c.zsets.Load(key)
+	if !exists {
+		return []string{}
+	}
+	set := setI.(*sync.Map)
+
+	// Parse range specifications
+	minInclusive := true
+	maxInclusive := true
+	if strings.HasPrefix(min, "(") {
+		minInclusive = false
+		min = min[1:]
+	} else if strings.HasPrefix(min, "[") {
+		min = min[1:]
+	}
+	if strings.HasPrefix(max, "(") {
+		maxInclusive = false
+		max = max[1:]
+	} else if strings.HasPrefix(max, "[") {
+		max = max[1:]
+	}
+
+	// Special cases for infinity
+	minIsInf := min == "-"
+	maxIsInf := max == "+"
+
+	// Collect matching members
+	var members []string
+	set.Range(func(member, _ interface{}) bool {
+		memberStr := member.(string)
+
+		// Check if member is within range
+		if minIsInf || (minInclusive && memberStr >= min) || (!minInclusive && memberStr > min) {
+			if maxIsInf || (maxInclusive && memberStr <= max) || (!maxInclusive && memberStr < max) {
+				members = append(members, memberStr)
+			}
+		}
+		return true
+	})
+
+	// Sort lexicographically
+	sort.Strings(members)
+	return members
+}
+
 func (c *MemoryCache) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(c, strategy)
 }

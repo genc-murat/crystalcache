@@ -861,6 +861,15 @@ func (rd *RetryDecorator) ZLexCount(key, min, max string) (int, error) {
 	return count, err
 }
 
+func (rd *RetryDecorator) ZRangeByLex(key string, min, max string) []string {
+	var result []string
+	rd.executeWithRetry(func() error {
+		result = rd.cache.ZRangeByLex(key, min, max)
+		return nil
+	})
+	return result
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }

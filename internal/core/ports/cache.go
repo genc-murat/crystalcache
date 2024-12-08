@@ -83,4 +83,5 @@ type Cache interface {
 	ZInter(keys ...string) []string
 	ZInterCard(keys ...string) (int, error)
 	ZLexCount(key, min, max string) (int, error)
+	ZRangeByLex(key string, min, max string) []string
 }

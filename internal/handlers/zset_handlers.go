@@ -1,6 +1,9 @@
 package handlers
 
 import (
+	"math/rand"
+	"time"
+
 	"github.com/genc-murat/crystalcache/internal/core/models"
 	"github.com/genc-murat/crystalcache/internal/core/ports"
 	"github.com/genc-murat/crystalcache/internal/util"
@@ -455,6 +458,236 @@ func (h *ZSetHandlers) HandleZPopMin(args []models.Value) models.Value {
 		}
 		result[i*2] = models.Value{Type: "bulk", Bulk: member.Member}
 		result[i*2+1] = models.Value{Type: "bulk", Bulk: util.FormatFloat(member.Score)}
+	}
+
+	return models.Value{Type: "array", Array: result}
+}
+
+// HandleZRandMember returns random members from a sorted set
+func (h *ZSetHandlers) HandleZRandMember(args []models.Value) models.Value {
+	if len(args) < 1 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'zrandmember' command"}
+	}
+
+	key := args[0].Bulk
+	count := 1
+	withScores := false
+
+	// Parse optional count and WITHSCORES
+	if len(args) > 1 {
+		parsedCount, err := util.ParseInt(args[1])
+		if err != nil {
+			return models.Value{Type: "error", Str: "ERR value is not an integer"}
+		}
+		count = parsedCount
+	}
+
+	if len(args) > 2 && args[2].Bulk == "WITHSCORES" {
+		withScores = true
+	}
+
+	// Get all members with scores
+	members := h.cache.ZRangeWithScores(key, 0, -1)
+	if len(members) == 0 {
+		return models.Value{Type: "null"}
+	}
+
+	// Handle negative count (sampling with replacement)
+	if count < 0 {
+		count = -count
+		var capacity int
+		if withScores {
+			capacity = count * 2
+		} else {
+			capacity = count
+		}
+		result := make([]models.Value, 0, capacity)
+		r := rand.New(rand.NewSource(time.Now().UnixNano()))
+
+		for i := 0; i < count; i++ {
+			idx := r.Intn(len(members))
+			result = append(result, models.Value{Type: "bulk", Bulk: members[idx].Member})
+			if withScores {
+				result = append(result, models.Value{Type: "bulk", Bulk: util.FormatFloat(members[idx].Score)})
+			}
+		}
+		return models.Value{Type: "array", Array: result}
+	}
+
+	// Handle positive count (sampling without replacement)
+	if count > len(members) {
+		count = len(members)
+	}
+
+	// Shuffle using Fisher-Yates algorithm
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	for i := len(members) - 1; i > 0; i-- {
+		j := r.Intn(i + 1)
+		members[i], members[j] = members[j], members[i]
+	}
+
+	var capacity int
+	if withScores {
+		capacity = count * 2
+	} else {
+		capacity = count
+	}
+	result := make([]models.Value, 0, capacity)
+
+	for i := 0; i < count; i++ {
+		result = append(result, models.Value{Type: "bulk", Bulk: members[i].Member})
+		if withScores {
+			result = append(result, models.Value{Type: "bulk", Bulk: util.FormatFloat(members[i].Score)})
+		}
+	}
+
+	return models.Value{Type: "array", Array: result}
+}
+
+// HandleZRangeByLex returns members between two lexicographical values
+func (h *ZSetHandlers) HandleZRangeByLex(args []models.Value) models.Value {
+	if len(args) < 3 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'zrangebylex' command"}
+	}
+
+	key := args[0].Bulk
+	min := args[1].Bulk
+	max := args[2].Bulk
+
+	// Optional LIMIT offset count
+	var offset, count int
+	hasLimit := false
+
+	if len(args) > 3 {
+		if args[3].Bulk != "LIMIT" {
+			return models.Value{Type: "error", Str: "ERR syntax error"}
+		}
+		if len(args) != 6 {
+			return models.Value{Type: "error", Str: "ERR syntax error"}
+		}
+		var err error
+		offset, err = util.ParseInt(args[4])
+		if err != nil {
+			return models.Value{Type: "error", Str: "ERR value is not an integer or out of range"}
+		}
+		count, err = util.ParseInt(args[5])
+		if err != nil {
+			return models.Value{Type: "error", Str: "ERR value is not an integer or out of range"}
+		}
+		hasLimit = true
+	}
+
+	members := h.cache.ZRangeByLex(key, min, max)
+
+	// Apply LIMIT if specified
+	if hasLimit && len(members) > 0 {
+		if offset >= len(members) {
+			members = []string{}
+		} else {
+			end := offset + count
+			if end > len(members) {
+				end = len(members)
+			}
+			members = members[offset:end]
+		}
+	}
+
+	// Format result
+	result := make([]models.Value, len(members))
+	for i, member := range members {
+		result[i] = models.Value{Type: "bulk", Bulk: member}
+	}
+
+	return models.Value{Type: "array", Array: result}
+}
+
+// HandleZRangeByScore returns members with scores between min and max
+func (h *ZSetHandlers) HandleZRangeByScore(args []models.Value) models.Value {
+	if len(args) < 3 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'zrangebyscore' command"}
+	}
+
+	key := args[0].Bulk
+	min, err := util.ParseFloat(args[1])
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR min value is not a valid float"}
+	}
+
+	max, err := util.ParseFloat(args[2])
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR max value is not a valid float"}
+	}
+
+	withScores := false
+	var offset, count int
+	hasLimit := false
+
+	// Parse optional WITHSCORES and LIMIT
+	idx := 3
+	for idx < len(args) {
+		if args[idx].Bulk == "WITHSCORES" {
+			withScores = true
+			idx++
+			continue
+		}
+		if args[idx].Bulk == "LIMIT" {
+			if idx+2 >= len(args) {
+				return models.Value{Type: "error", Str: "ERR syntax error"}
+			}
+			var err error
+			offset, err = util.ParseInt(args[idx+1])
+			if err != nil {
+				return models.Value{Type: "error", Str: "ERR value is not an integer or out of range"}
+			}
+			count, err = util.ParseInt(args[idx+2])
+			if err != nil {
+				return models.Value{Type: "error", Str: "ERR value is not an integer or out of range"}
+			}
+			hasLimit = true
+			idx += 3
+			continue
+		}
+		return models.Value{Type: "error", Str: "ERR syntax error"}
+	}
+
+	var members []models.ZSetMember
+	if withScores {
+		members = h.cache.ZRangeByScoreWithScores(key, min, max)
+	} else {
+		stringMembers := h.cache.ZRangeByScore(key, min, max)
+		members = make([]models.ZSetMember, len(stringMembers))
+		for i, member := range stringMembers {
+			score, _ := h.cache.ZScore(key, member)
+			members[i] = models.ZSetMember{Member: member, Score: score}
+		}
+	}
+
+	// Apply LIMIT if specified
+	if hasLimit && len(members) > 0 {
+		if offset >= len(members) {
+			members = []models.ZSetMember{}
+		} else {
+			end := offset + count
+			if end > len(members) {
+				end = len(members)
+			}
+			members = members[offset:end]
+		}
+	}
+
+	// Format result
+	var result []models.Value
+	if withScores {
+		result = make([]models.Value, len(members)*2)
+		for i, member := range members {
+			result[i*2] = models.Value{Type: "bulk", Bulk: member.Member}
+			result[i*2+1] = models.Value{Type: "bulk", Bulk: util.FormatFloat(member.Score)}
+		}
+	} else {
+		result = make([]models.Value, len(members))
+		for i, member := range members {
+			result[i] = models.Value{Type: "bulk", Bulk: member.Member}
+		}
 	}
 
 	return models.Value{Type: "array", Array: result}
