@@ -379,3 +379,83 @@ func (h *ZSetHandlers) HandleZMPop(args []models.Value) models.Value {
 	// No elements found in any key
 	return models.Value{Type: "null"}
 }
+
+// HandleZPopMax removes and returns the highest scoring members
+func (h *ZSetHandlers) HandleZPopMax(args []models.Value) models.Value {
+	if len(args) < 1 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'zpopmax' command"}
+	}
+
+	// Parse optional count parameter
+	count := 1
+	if len(args) > 1 {
+		parsedCount, err := util.ParseInt(args[1])
+		if err != nil {
+			return models.Value{Type: "error", Str: "ERR value is not an integer or out of range"}
+		}
+		if parsedCount <= 0 {
+			return models.Value{Type: "error", Str: "ERR value is negative or zero"}
+		}
+		count = parsedCount
+	}
+
+	// Get the highest scoring members
+	key := args[0].Bulk
+	members := h.cache.ZRevRangeWithScores(key, 0, count-1)
+	if len(members) == 0 {
+		return models.Value{Type: "array", Array: []models.Value{}}
+	}
+
+	// Remove the members and prepare result
+	result := make([]models.Value, len(members)*2)
+	for i, member := range members {
+		err := h.cache.ZRem(key, member.Member)
+		if err != nil {
+			return util.ToValue(err)
+		}
+		result[i*2] = models.Value{Type: "bulk", Bulk: member.Member}
+		result[i*2+1] = models.Value{Type: "bulk", Bulk: util.FormatFloat(member.Score)}
+	}
+
+	return models.Value{Type: "array", Array: result}
+}
+
+// HandleZPopMin removes and returns the lowest scoring members
+func (h *ZSetHandlers) HandleZPopMin(args []models.Value) models.Value {
+	if len(args) < 1 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'zpopmin' command"}
+	}
+
+	// Parse optional count parameter
+	count := 1
+	if len(args) > 1 {
+		parsedCount, err := util.ParseInt(args[1])
+		if err != nil {
+			return models.Value{Type: "error", Str: "ERR value is not an integer or out of range"}
+		}
+		if parsedCount <= 0 {
+			return models.Value{Type: "error", Str: "ERR value is negative or zero"}
+		}
+		count = parsedCount
+	}
+
+	// Get the lowest scoring members
+	key := args[0].Bulk
+	members := h.cache.ZRangeWithScores(key, 0, count-1)
+	if len(members) == 0 {
+		return models.Value{Type: "array", Array: []models.Value{}}
+	}
+
+	// Remove the members and prepare result
+	result := make([]models.Value, len(members)*2)
+	for i, member := range members {
+		err := h.cache.ZRem(key, member.Member)
+		if err != nil {
+			return util.ToValue(err)
+		}
+		result[i*2] = models.Value{Type: "bulk", Bulk: member.Member}
+		result[i*2+1] = models.Value{Type: "bulk", Bulk: util.FormatFloat(member.Score)}
+	}
+
+	return models.Value{Type: "array", Array: result}
+}

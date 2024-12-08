@@ -102,6 +102,8 @@ func (r *Registry) registerHandlers() {
 	r.handlers["ZLEXCOUNT"] = r.zsetHandlers.HandleZLexCount
 	r.handlers["ZMSCORE"] = r.zsetHandlers.HandleZMScore
 	r.handlers["ZMPOP"] = r.zsetHandlers.HandleZMPop
+	r.handlers["ZPOPMAX"] = r.zsetHandlers.HandleZPopMax
+	r.handlers["ZPOPMIN"] = r.zsetHandlers.HandleZPopMin
 
 	// Admin Commands
 	r.handlers["FLUSHALL"] = r.adminHandlers.HandleFlushAll
