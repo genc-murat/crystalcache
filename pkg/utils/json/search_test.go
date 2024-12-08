@@ -13,9 +13,9 @@ func TestSearchUtil(t *testing.T) {
 	testData := map[string]interface{}{
 		"user": map[string]interface{}{
 			"personalInfo": map[string]interface{}{
-				"firstName": "John",
-				"lastName":  "Doe",
-				"email":     "john.doe@example.com",
+				"firstName": "Murat",
+				"lastName":  "Genc",
+				"email":     "gencmurat@gencmurat.com",
 			},
 			"preferences": map[string]interface{}{
 				"theme": "dark",
@@ -36,7 +36,7 @@ func TestSearchUtil(t *testing.T) {
 			},
 		},
 		"settings": map[string]interface{}{
-			"email": "admin@example.com",
+			"email": "admin@gencmurat.com",
 		},
 	}
 
@@ -49,7 +49,7 @@ func TestSearchUtil(t *testing.T) {
 		}{
 			{
 				name:    "Simple Value Search",
-				keyword: "John",
+				keyword: "Murat",
 				opts:    DefaultSearchOptions(),
 				expected: []string{
 					"user.personalInfo.firstName",
