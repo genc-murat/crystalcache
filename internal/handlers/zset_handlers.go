@@ -171,3 +171,103 @@ func (h *ZSetHandlers) HandleZInterStore(args []models.Value) models.Value {
 
 	return models.Value{Type: "integer", Num: count}
 }
+
+func (h *ZSetHandlers) HandleZDiff(args []models.Value) models.Value {
+	if len(args) < 1 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'zdiff' command"}
+	}
+
+	// Convert all args to string slice for keys
+	keys := make([]string, len(args))
+	for i, arg := range args {
+		keys[i] = arg.Bulk
+	}
+
+	members := h.cache.ZDiff(keys...)
+
+	// Convert result to array of Values
+	result := make([]models.Value, len(members))
+	for i, member := range members {
+		result[i] = models.Value{Type: "bulk", Bulk: member}
+	}
+
+	return models.Value{Type: "array", Array: result}
+}
+
+func (h *ZSetHandlers) HandleZDiffStore(args []models.Value) models.Value {
+	if len(args) < 2 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'zdiffstore' command"}
+	}
+
+	destination := args[0].Bulk
+	// Convert remaining args to string slice for source keys
+	keys := make([]string, len(args)-1)
+	for i := 1; i < len(args); i++ {
+		keys[i-1] = args[i].Bulk
+	}
+
+	count, err := h.cache.ZDiffStore(destination, keys...)
+	if err != nil {
+		return util.ToValue(err)
+	}
+
+	return models.Value{Type: "integer", Num: count}
+}
+
+func (h *ZSetHandlers) HandleZInter(args []models.Value) models.Value {
+	if len(args) < 1 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'zinter' command"}
+	}
+
+	// Convert all args to string slice for keys
+	keys := make([]string, len(args))
+	for i, arg := range args {
+		keys[i] = arg.Bulk
+	}
+
+	members := h.cache.ZInter(keys...)
+
+	// Convert result to array of Values
+	result := make([]models.Value, len(members))
+	for i, member := range members {
+		result[i] = models.Value{Type: "bulk", Bulk: member}
+	}
+
+	return models.Value{Type: "array", Array: result}
+}
+
+func (h *ZSetHandlers) HandleZInterCard(args []models.Value) models.Value {
+	if len(args) < 1 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'zintercard' command"}
+	}
+
+	// Convert all args to string slice for keys
+	keys := make([]string, len(args))
+	for i, arg := range args {
+		keys[i] = arg.Bulk
+	}
+
+	count, err := h.cache.ZInterCard(keys...)
+	if err != nil {
+		return util.ToValue(err)
+	}
+
+	return models.Value{Type: "integer", Num: count}
+}
+
+func (h *ZSetHandlers) HandleZLexCount(args []models.Value) models.Value {
+	if err := util.ValidateArgs(args, 3); err != nil {
+		return util.ToValue(err)
+	}
+
+	key := args[0].Bulk
+	min := args[1].Bulk
+	max := args[2].Bulk
+
+	count, err := h.cache.ZLexCount(key, min, max)
+	if err != nil {
+		return util.ToValue(err)
+	}
+
+	return models.Value{Type: "integer", Num: count}
+}

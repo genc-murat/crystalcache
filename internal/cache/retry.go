@@ -813,6 +813,54 @@ func (rd *RetryDecorator) DeleteJSON(key string) bool {
 	return deleted
 }
 
+func (rd *RetryDecorator) ZDiff(keys ...string) []string {
+	var result []string
+	rd.executeWithRetry(func() error {
+		result = rd.cache.ZDiff(keys...)
+		return nil
+	})
+	return result
+}
+
+func (rd *RetryDecorator) ZDiffStore(destination string, keys ...string) (int, error) {
+	var count int
+	err := rd.executeWithRetry(func() error {
+		var err error
+		count, err = rd.cache.ZDiffStore(destination, keys...) // Fixed: spread the keys slice
+		return err
+	})
+	return count, err
+}
+
+func (rd *RetryDecorator) ZInter(keys ...string) []string {
+	var result []string
+	rd.executeWithRetry(func() error {
+		result = rd.cache.ZInter(keys...)
+		return nil
+	})
+	return result
+}
+
+func (rd *RetryDecorator) ZInterCard(keys ...string) (int, error) {
+	var count int
+	err := rd.executeWithRetry(func() error {
+		var err error
+		count, err = rd.cache.ZInterCard(keys...)
+		return err
+	})
+	return count, err
+}
+
+func (rd *RetryDecorator) ZLexCount(key, min, max string) (int, error) {
+	var count int
+	err := rd.executeWithRetry(func() error {
+		var err error
+		count, err = rd.cache.ZLexCount(key, min, max)
+		return err
+	})
+	return count, err
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }

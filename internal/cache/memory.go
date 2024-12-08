@@ -2392,6 +2392,197 @@ func (c *MemoryCache) HDel(hash string, field string) (bool, error) {
 	return true, nil
 }
 
+// ZDiff returns the members that exist in the first set but not in the subsequent sets
+func (c *MemoryCache) ZDiff(keys ...string) []string {
+	if len(keys) == 0 {
+		return []string{}
+	}
+
+	// Get first set
+	firstSetI, exists := c.zsets.Load(keys[0])
+	if !exists {
+		return []string{}
+	}
+	firstSet := firstSetI.(*sync.Map)
+
+	// Create result map to track members
+	result := make(map[string]bool)
+	firstSet.Range(func(member, _ interface{}) bool {
+		result[member.(string)] = true
+		return true
+	})
+
+	// Remove members that exist in other sets
+	for _, key := range keys[1:] {
+		if setI, exists := c.zsets.Load(key); exists {
+			set := setI.(*sync.Map)
+			set.Range(func(member, _ interface{}) bool {
+				delete(result, member.(string))
+				return true
+			})
+		}
+	}
+
+	// Convert result to sorted slice
+	diff := make([]string, 0, len(result))
+	for member := range result {
+		diff = append(diff, member)
+	}
+	sort.Strings(diff)
+	return diff
+}
+
+// ZDiffStore stores the difference of the sets in a new set at destination
+func (c *MemoryCache) ZDiffStore(destination string, keys ...string) (int, error) {
+	if len(keys) == 0 {
+		return 0, errors.New("ERR wrong number of arguments for 'zdiffstore' command")
+	}
+
+	// Get members and scores from first set
+	firstSetI, exists := c.zsets.Load(keys[0])
+	if !exists {
+		c.zsets.Delete(destination)
+		return 0, nil
+	}
+	firstSet := firstSetI.(*sync.Map)
+
+	// Create temporary map for result
+	resultMap := &sync.Map{}
+
+	// Copy members and scores from first set
+	firstSet.Range(func(member, score interface{}) bool {
+		resultMap.Store(member, score)
+		return true
+	})
+
+	// Remove members that exist in other sets
+	for _, key := range keys[1:] {
+		if setI, exists := c.zsets.Load(key); exists {
+			set := setI.(*sync.Map)
+			set.Range(func(member, _ interface{}) bool {
+				resultMap.Delete(member)
+				return true
+			})
+		}
+	}
+
+	// Store result in destination
+	c.zsets.Store(destination, resultMap)
+
+	// Count members in result
+	count := 0
+	resultMap.Range(func(_, _ interface{}) bool {
+		count++
+		return true
+	})
+
+	c.incrementKeyVersion(destination)
+	return count, nil
+}
+
+// ZInter returns the members that exist in all the sets
+func (c *MemoryCache) ZInter(keys ...string) []string {
+	if len(keys) == 0 {
+		return []string{}
+	}
+
+	// Get first set
+	firstSetI, exists := c.zsets.Load(keys[0])
+	if !exists {
+		return []string{}
+	}
+	firstSet := firstSetI.(*sync.Map)
+
+	// Create result map to track members
+	result := make(map[string]bool)
+	firstSet.Range(func(member, _ interface{}) bool {
+		result[member.(string)] = true
+		return true
+	})
+
+	// Keep only members that exist in all sets
+	for _, key := range keys[1:] {
+		if setI, exists := c.zsets.Load(key); exists {
+			set := setI.(*sync.Map)
+			tempResult := make(map[string]bool)
+
+			set.Range(func(member, _ interface{}) bool {
+				memberStr := member.(string)
+				if result[memberStr] {
+					tempResult[memberStr] = true
+				}
+				return true
+			})
+
+			result = tempResult
+		} else {
+			return []string{} // If any set doesn't exist, return empty result
+		}
+	}
+
+	// Convert result to sorted slice
+	intersection := make([]string, 0, len(result))
+	for member := range result {
+		intersection = append(intersection, member)
+	}
+	sort.Strings(intersection)
+	return intersection
+}
+
+// ZInterCard returns the number of members in the intersection of the sets
+func (c *MemoryCache) ZInterCard(keys ...string) (int, error) {
+	if len(keys) == 0 {
+		return 0, errors.New("ERR wrong number of arguments for 'zintercard' command")
+	}
+
+	members := c.ZInter(keys...)
+	return len(members), nil
+}
+
+// ZLexCount returns the number of elements in the sorted set between min and max lexicographical range
+func (c *MemoryCache) ZLexCount(key, min, max string) (int, error) {
+	setI, exists := c.zsets.Load(key)
+	if !exists {
+		return 0, nil
+	}
+	set := setI.(*sync.Map)
+
+	// Parse range specifications
+	minInclusive := true
+	maxInclusive := true
+	if strings.HasPrefix(min, "(") {
+		minInclusive = false
+		min = min[1:]
+	} else if strings.HasPrefix(min, "[") {
+		min = min[1:]
+	}
+	if strings.HasPrefix(max, "(") {
+		maxInclusive = false
+		max = max[1:]
+	} else if strings.HasPrefix(max, "[") {
+		max = max[1:]
+	}
+
+	// Special cases for infinity
+	minIsInf := min == "-"
+	maxIsInf := max == "+"
+
+	count := 0
+	set.Range(func(member, _ interface{}) bool {
+		memberStr := member.(string)
+
+		// Check if member is within range
+		if minIsInf || (minInclusive && memberStr >= min) || (!minInclusive && memberStr > min) {
+			if maxIsInf || (maxInclusive && memberStr <= max) || (!maxInclusive && memberStr < max) {
+				count++
+			}
+		}
+		return true
+	})
+
+	return count, nil
+}
+
 func (c *MemoryCache) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(c, strategy)
 }

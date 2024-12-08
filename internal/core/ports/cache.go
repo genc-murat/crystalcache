@@ -78,4 +78,9 @@ type Cache interface {
 	SetJSON(key string, value interface{}) error
 	GetJSON(key string) (interface{}, bool)
 	DeleteJSON(key string) bool
+	ZDiff(keys ...string) []string
+	ZDiffStore(destination string, keys ...string) (int, error)
+	ZInter(keys ...string) []string
+	ZInterCard(keys ...string) (int, error)
+	ZLexCount(key, min, max string) (int, error)
 }
