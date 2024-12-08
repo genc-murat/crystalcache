@@ -75,6 +75,10 @@ func (r *Registry) registerHandlers() {
 	r.handlers["HDEL"] = r.hashHandlers.HandleHDel
 	r.handlers["HEXISTS"] = r.hashHandlers.HandleHExists
 	r.handlers["HEXPIRE"] = r.hashHandlers.HandleHExpire
+	r.handlers["HEXPIREAT"] = r.hashHandlers.HandleHExpireAt
+	r.handlers["HINCRBY"] = r.hashHandlers.HandleHIncrBy
+	r.handlers["HEXPIRETIME"] = r.hashHandlers.HandleHExpireTime
+	r.handlers["HINCRBYFLOAT"] = r.hashHandlers.HandleHIncrByFloat
 
 	// List Commands
 	r.handlers["LPUSH"] = r.listHandlers.HandleLPush
