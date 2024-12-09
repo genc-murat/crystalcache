@@ -371,3 +371,152 @@ func (h *SetHandlers) HandleSMIsMember(args []models.Value) models.Value {
 
 	return models.Value{Type: "array", Array: result}
 }
+
+func (h *SetHandlers) HandleSMove(args []models.Value) models.Value {
+	if len(args) != 3 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'smove' command"}
+	}
+
+	source := args[0].Bulk
+	destination := args[1].Bulk
+	member := args[2].Bulk
+
+	// Check if member exists in source
+	if !h.cache.SIsMember(source, member) {
+		return models.Value{Type: "integer", Num: 0}
+	}
+
+	// Remove from source and add to destination
+	_, _ = h.cache.SRem(source, member)
+	_, _ = h.cache.SAdd(destination, member)
+
+	return models.Value{Type: "integer", Num: 1}
+}
+
+func (h *SetHandlers) HandleSPop(args []models.Value) models.Value {
+	if len(args) < 1 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'spop' command"}
+	}
+
+	count := 1
+	if len(args) > 1 {
+		var err error
+		count, err = strconv.Atoi(args[1].Bulk)
+		if err != nil || count < 0 {
+			return models.Value{Type: "error", Str: "ERR value is not an integer or out of range"}
+		}
+	}
+
+	members, err := h.cache.SMembers(args[0].Bulk)
+	if err != nil || len(members) == 0 {
+		if count == 1 {
+			return models.Value{Type: "null"}
+		}
+		return models.Value{Type: "array", Array: []models.Value{}}
+	}
+
+	// Shuffle members using Fisher-Yates algorithm
+	for i := len(members) - 1; i > 0; i-- {
+		j := util.RandomInt(i + 1)
+		members[i], members[j] = members[j], members[i]
+	}
+
+	// Limit count to available members
+	if count > len(members) {
+		count = len(members)
+	}
+
+	// Remove and collect popped members
+	result := make([]models.Value, count)
+	for i := 0; i < count; i++ {
+		_, _ = h.cache.SRem(args[0].Bulk, members[i])
+		result[i] = models.Value{Type: "bulk", Bulk: members[i]}
+	}
+
+	if count == 1 {
+		return result[0]
+	}
+	return models.Value{Type: "array", Array: result}
+}
+
+func (h *SetHandlers) HandleSRandMember(args []models.Value) models.Value {
+	if len(args) < 1 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'srandmember' command"}
+	}
+
+	count := 1
+	if len(args) > 1 {
+		var err error
+		count, err = strconv.Atoi(args[1].Bulk)
+		if err != nil {
+			return models.Value{Type: "error", Str: "ERR value is not an integer or out of range"}
+		}
+	}
+
+	members, err := h.cache.SMembers(args[0].Bulk)
+	if err != nil || len(members) == 0 {
+		if count == 1 {
+			return models.Value{Type: "null"}
+		}
+		return models.Value{Type: "array", Array: []models.Value{}}
+	}
+
+	if count >= 0 {
+		// Positive count: return unique elements
+		if count > len(members) {
+			count = len(members)
+		}
+		// Shuffle array
+		for i := len(members) - 1; i > 0; i-- {
+			j := util.RandomInt(i + 1)
+			members[i], members[j] = members[j], members[i]
+		}
+	} else {
+		// Negative count: allow duplicates
+		count = -count
+		result := make([]models.Value, count)
+		for i := 0; i < count; i++ {
+			idx := util.RandomInt(len(members))
+			result[i] = models.Value{Type: "bulk", Bulk: members[idx]}
+		}
+		return models.Value{Type: "array", Array: result}
+	}
+
+	if count == 1 {
+		return models.Value{Type: "bulk", Bulk: members[0]}
+	}
+
+	result := make([]models.Value, count)
+	for i := 0; i < count; i++ {
+		result[i] = models.Value{Type: "bulk", Bulk: members[i]}
+	}
+	return models.Value{Type: "array", Array: result}
+}
+
+func (h *SetHandlers) HandleSUnionStore(args []models.Value) models.Value {
+	if len(args) < 2 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'sunionstore' command"}
+	}
+
+	destination := args[0].Bulk
+	keys := make([]string, len(args)-1)
+	for i := 1; i < len(args); i++ {
+		keys[i-1] = args[i].Bulk
+	}
+
+	union := h.cache.SUnion(keys...)
+	h.cache.Del(destination)
+
+	stored := 0
+	for _, member := range union {
+		added, err := h.cache.SAdd(destination, member)
+		if err != nil {
+			return util.ToValue(err)
+		}
+		if added {
+			stored++
+		}
+	}
+
+	return models.Value{Type: "integer", Num: stored}
+}

@@ -129,6 +129,10 @@ func (r *Registry) registerHandlers() {
 	r.handlers["SINTERCARD"] = r.setHandlers.HandleSInterCard
 	r.handlers["SINTERSTORE"] = r.setHandlers.HandleSInterStore
 	r.handlers["SMISMEMBER"] = r.setHandlers.HandleSMIsMember
+	r.handlers["SMOVE"] = r.setHandlers.HandleSMove
+	r.handlers["SPOP"] = r.setHandlers.HandleSPop
+	r.handlers["SRANDMEMBER"] = r.setHandlers.HandleSRandMember
+	r.handlers["SUNIONSTORE"] = r.setHandlers.HandleSUnionStore
 
 	// ZSet Commands
 	r.handlers["ZADD"] = r.zsetHandlers.HandleZAdd
