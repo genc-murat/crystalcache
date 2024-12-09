@@ -118,4 +118,9 @@ type Cache interface {
 	XInfoGroups(key string) ([]models.StreamGroup, error)
 	XInfoConsumers(key, group string) ([]models.StreamConsumer, error)
 	XInfoStream(key string) (*models.StreamInfo, error)
+	XGroupCreate(key, group, id string) error
+	XGroupCreateConsumer(key, group, consumer string) (int64, error)
+	XGroupDelConsumer(key, group, consumer string) (int64, error)
+	XGroupDestroy(key, group string) (int64, error)
+	XGroupSetID(key, group, id string) error
 }

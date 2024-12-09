@@ -32,6 +32,7 @@ type MemoryCache struct {
 	hlls         *sync.Map
 	jsonData     *sync.Map
 	streams      *sync.Map // stream entries
+	streamGroups *sync.Map // stream consumer groups
 	bloomFilter  *models.BloomFilter
 	lastDefrag   time.Time
 	defragMu     sync.Mutex
@@ -56,6 +57,7 @@ func NewMemoryCache() *MemoryCache {
 		hlls:         &sync.Map{},
 		jsonData:     &sync.Map{},
 		streams:      &sync.Map{},
+		streamGroups: &sync.Map{},
 		bloomFilter:  models.NewBloomFilter(config),
 	}
 
@@ -3526,6 +3528,119 @@ func (c *MemoryCache) XInfoStream(key string) (*models.StreamInfo, error) {
 		Groups: 0,
 	}
 	return info, nil
+}
+
+func (c *MemoryCache) XGroupCreate(key, group, id string) error {
+	if _, exists := c.streams.Load(key); !exists {
+		return fmt.Errorf("ERR no such key")
+	}
+
+	groupsI, _ := c.streamGroups.LoadOrStore(key, &sync.Map{})
+	groups := groupsI.(*sync.Map)
+
+	if _, exists := groups.Load(group); exists {
+		return fmt.Errorf("ERR BUSYGROUP Consumer Group name already exists")
+	}
+
+	newGroup := &models.StreamConsumerGroup{
+		Consumers: make(map[string]*models.StreamConsumer),
+		LastID:    id,
+		Pending:   make(map[string]*models.PendingMessage),
+	}
+
+	groups.Store(group, newGroup)
+	c.incrementKeyVersion(key)
+	return nil
+}
+
+func (c *MemoryCache) XGroupCreateConsumer(key, group, consumer string) (int64, error) {
+	groupsI, exists := c.streamGroups.Load(key)
+	if !exists {
+		return 0, fmt.Errorf("ERR no such key")
+	}
+
+	groups := groupsI.(*sync.Map)
+	groupI, exists := groups.Load(group)
+	if !exists {
+		return 0, fmt.Errorf("ERR no such group")
+	}
+
+	streamGroup := groupI.(*models.StreamConsumerGroup)
+	if _, exists := streamGroup.Consumers[consumer]; exists {
+		return 0, nil
+	}
+
+	streamGroup.Consumers[consumer] = &models.StreamConsumer{
+		Name:     consumer,
+		Pending:  0,
+		IdleTime: 0,
+	}
+
+	c.incrementKeyVersion(key)
+	return 1, nil
+}
+
+func (c *MemoryCache) XGroupDelConsumer(key, group, consumer string) (int64, error) {
+	groupsI, exists := c.streamGroups.Load(key)
+	if !exists {
+		return 0, fmt.Errorf("ERR no such key")
+	}
+
+	groups := groupsI.(*sync.Map)
+	groupI, exists := groups.Load(group)
+	if !exists {
+		return 0, fmt.Errorf("ERR no such group")
+	}
+
+	streamGroup := groupI.(*models.StreamConsumerGroup)
+	if _, exists := streamGroup.Consumers[consumer]; !exists {
+		return 0, nil
+	}
+
+	pendingCount := int64(0)
+	for _, msg := range streamGroup.Pending {
+		if msg.Consumer == consumer {
+			pendingCount++
+		}
+	}
+
+	delete(streamGroup.Consumers, consumer)
+	c.incrementKeyVersion(key)
+	return pendingCount, nil
+}
+
+func (c *MemoryCache) XGroupDestroy(key, group string) (int64, error) {
+	groupsI, exists := c.streamGroups.Load(key)
+	if !exists {
+		return 0, fmt.Errorf("ERR no such key")
+	}
+
+	groups := groupsI.(*sync.Map)
+	if _, exists := groups.LoadAndDelete(group); !exists {
+		return 0, nil
+	}
+
+	c.incrementKeyVersion(key)
+	return 1, nil
+}
+
+func (c *MemoryCache) XGroupSetID(key, group, id string) error {
+	groupsI, exists := c.streamGroups.Load(key)
+	if !exists {
+		return fmt.Errorf("ERR no such key")
+	}
+
+	groups := groupsI.(*sync.Map)
+	groupI, exists := groups.Load(group)
+	if !exists {
+		return fmt.Errorf("ERR no such group")
+	}
+
+	streamGroup := groupI.(*models.StreamConsumerGroup)
+	streamGroup.LastID = id
+
+	c.incrementKeyVersion(key)
+	return nil
 }
 
 func (c *MemoryCache) WithRetry(strategy models.RetryStrategy) ports.Cache {

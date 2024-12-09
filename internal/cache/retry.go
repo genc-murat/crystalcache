@@ -1235,6 +1235,48 @@ func (rd *RetryDecorator) XInfoStream(key string) (*models.StreamInfo, error) {
 	return info, err
 }
 
+func (rd *RetryDecorator) XGroupCreate(key, group, id string) error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.XGroupCreate(key, group, id)
+	})
+}
+
+func (rd *RetryDecorator) XGroupCreateConsumer(key, group, consumer string) (int64, error) {
+	var count int64
+	err := rd.executeWithRetry(func() error {
+		var err error
+		count, err = rd.cache.XGroupCreateConsumer(key, group, consumer)
+		return err
+	})
+	return count, err
+}
+
+func (rd *RetryDecorator) XGroupDelConsumer(key, group, consumer string) (int64, error) {
+	var count int64
+	err := rd.executeWithRetry(func() error {
+		var err error
+		count, err = rd.cache.XGroupDelConsumer(key, group, consumer)
+		return err
+	})
+	return count, err
+}
+
+func (rd *RetryDecorator) XGroupDestroy(key, group string) (int64, error) {
+	var count int64
+	err := rd.executeWithRetry(func() error {
+		var err error
+		count, err = rd.cache.XGroupDestroy(key, group)
+		return err
+	})
+	return count, err
+}
+
+func (rd *RetryDecorator) XGroupSetID(key, group, id string) error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.XGroupSetID(key, group, id)
+	})
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }

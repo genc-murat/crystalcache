@@ -244,6 +244,7 @@ func (r *Registry) registerHandlers() {
 	r.handlers["XSETID"] = r.streamHandlers.HandleXSETID
 	r.handlers["XTRIM"] = r.streamHandlers.HandleXTRIM
 	r.handlers["XINFO"] = r.streamHandlers.HandleXInfo
+	r.handlers["XGROUP"] = r.streamHandlers.HandleXGroup
 
 }
 

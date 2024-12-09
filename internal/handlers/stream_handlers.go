@@ -448,6 +448,68 @@ func (h *StreamHandlers) HandleXInfo(args []models.Value) models.Value {
 	}
 }
 
+func (h *StreamHandlers) HandleXGroup(args []models.Value) models.Value {
+	if len(args) < 2 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'xgroup' command"}
+	}
+
+	subcommand := strings.ToUpper(args[0].Bulk)
+	switch subcommand {
+	case "CREATE":
+		if len(args) != 4 {
+			return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'xgroup create' command"}
+		}
+		err := h.cache.XGroupCreate(args[1].Bulk, args[2].Bulk, args[3].Bulk)
+		if err != nil {
+			return models.Value{Type: "error", Str: err.Error()}
+		}
+		return models.Value{Type: "string", Str: "OK"}
+
+	case "CREATECONSUMER":
+		if len(args) != 4 {
+			return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'xgroup createconsumer' command"}
+		}
+		created, err := h.cache.XGroupCreateConsumer(args[1].Bulk, args[2].Bulk, args[3].Bulk)
+		if err != nil {
+			return models.Value{Type: "error", Str: err.Error()}
+		}
+		return models.Value{Type: "integer", Num: int(created)}
+
+	case "DELCONSUMER":
+		if len(args) != 4 {
+			return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'xgroup delconsumer' command"}
+		}
+		deleted, err := h.cache.XGroupDelConsumer(args[1].Bulk, args[2].Bulk, args[3].Bulk)
+		if err != nil {
+			return models.Value{Type: "error", Str: err.Error()}
+		}
+		return models.Value{Type: "integer", Num: int(deleted)}
+
+	case "DESTROY":
+		if len(args) != 3 {
+			return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'xgroup destroy' command"}
+		}
+		destroyed, err := h.cache.XGroupDestroy(args[1].Bulk, args[2].Bulk)
+		if err != nil {
+			return models.Value{Type: "error", Str: err.Error()}
+		}
+		return models.Value{Type: "integer", Num: int(destroyed)}
+
+	case "SETID":
+		if len(args) != 4 {
+			return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'xgroup setid' command"}
+		}
+		err := h.cache.XGroupSetID(args[1].Bulk, args[2].Bulk, args[3].Bulk)
+		if err != nil {
+			return models.Value{Type: "error", Str: err.Error()}
+		}
+		return models.Value{Type: "string", Str: "OK"}
+
+	default:
+		return models.Value{Type: "error", Str: "ERR unknown subcommand '" + subcommand + "'"}
+	}
+}
+
 func generateStreamID() string {
 	timestamp := time.Now().UnixMilli()
 	sequence := 0 // You might want to implement a sequence counter

@@ -1,5 +1,7 @@
 package models
 
+import "time"
+
 type StreamEntry struct {
 	ID     string
 	Fields map[string]string
@@ -26,4 +28,16 @@ type StreamInfo struct {
 	LastGeneratedID string
 	FirstEntry      *StreamEntry
 	LastEntry       *StreamEntry
+}
+
+type StreamConsumerGroup struct {
+	Consumers map[string]*StreamConsumer
+	LastID    string
+	Pending   map[string]*PendingMessage
+}
+
+type PendingMessage struct {
+	Consumer     string
+	DeliveryTime time.Time
+	Deliveries   int
 }
