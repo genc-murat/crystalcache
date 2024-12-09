@@ -1292,6 +1292,20 @@ func (c *MemoryCache) Info() map[string]string {
 	})
 	info["json_keys"] = fmt.Sprintf("%d", jsonCount)
 
+	streamKeys := 0
+	c.streams.Range(func(_, _ interface{}) bool {
+		streamKeys++
+		return true
+	})
+	info["stream_keys"] = fmt.Sprintf("%d", streamKeys)
+
+	bitmapKeys := 0
+	c.bitmaps.Range(func(_, _ interface{}) bool {
+		bitmapKeys++
+		return true
+	})
+	info["bitmap_keys"] = fmt.Sprintf("%d", bitmapKeys)
+
 	// Memory analytics
 	info["used_memory_human"] = fmt.Sprintf("%.2fMB", float64(memStats.Alloc)/(1024*1024))
 	info["mem_fragmentation_ratio"] = fmt.Sprintf("%.2f", float64(memStats.Sys-memStats.Alloc)/float64(memStats.Alloc))
