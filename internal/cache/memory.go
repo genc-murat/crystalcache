@@ -31,6 +31,7 @@ type MemoryCache struct {
 	zsets        *sync.Map
 	hlls         *sync.Map
 	jsonData     *sync.Map
+	streams      *sync.Map // stream entries
 	bloomFilter  *models.BloomFilter
 	lastDefrag   time.Time
 	defragMu     sync.Mutex
@@ -54,6 +55,7 @@ func NewMemoryCache() *MemoryCache {
 		zsets:        &sync.Map{},
 		hlls:         &sync.Map{},
 		jsonData:     &sync.Map{},
+		streams:      &sync.Map{},
 		bloomFilter:  models.NewBloomFilter(config),
 	}
 
@@ -3226,6 +3228,105 @@ func (c *MemoryCache) LTrim(key string, start int, stop int) error {
 			return nil
 		}
 	}
+}
+
+func (c *MemoryCache) XAdd(key string, id string, fields map[string]string) error {
+	// Ensure streams map exists
+	var stream sync.Map
+	streamI, _ := c.streams.LoadOrStore(key, &stream)
+	streamMap := streamI.(*sync.Map)
+
+	// Store entry
+	entry := &models.StreamEntry{
+		ID:     id,
+		Fields: fields,
+	}
+
+	streamMap.Store(id, entry)
+	c.incrementKeyVersion(key)
+
+	return nil
+}
+
+func (c *MemoryCache) XACK(key, group string, ids ...string) (int64, error) {
+	streamI, exists := c.streams.Load(key)
+	if !exists {
+		return 0, nil
+	}
+	stream := streamI.(*sync.Map)
+
+	acked := int64(0)
+	for _, id := range ids {
+		if _, exists := stream.Load(id); exists {
+			acked++
+		}
+	}
+
+	c.incrementKeyVersion(key)
+	return acked, nil
+}
+
+func (c *MemoryCache) XDEL(key string, ids ...string) (int64, error) {
+	streamI, exists := c.streams.Load(key)
+	if !exists {
+		return 0, nil
+	}
+	stream := streamI.(*sync.Map)
+
+	deleted := int64(0)
+	for _, id := range ids {
+		if _, ok := stream.LoadAndDelete(id); ok {
+			deleted++
+		}
+	}
+
+	c.incrementKeyVersion(key)
+	return deleted, nil
+}
+
+func (c *MemoryCache) XAutoClaim(key, group, consumer string, minIdleTime int64, start string, count int) ([]string, []models.StreamEntry, string, error) {
+	streamI, exists := c.streams.Load(key)
+	if !exists {
+		return nil, nil, "0-0", nil
+	}
+
+	stream := streamI.(*sync.Map)
+	var claimed []string
+	var entries []models.StreamEntry
+	var cursor = start
+
+	stream.Range(func(key, value interface{}) bool {
+		id := key.(string)
+		if id > start && len(claimed) < count {
+			entry := value.(*models.StreamEntry)
+			claimed = append(claimed, id)
+			entries = append(entries, *entry)
+			cursor = id
+		}
+		return len(claimed) < count
+	})
+
+	c.incrementKeyVersion(key)
+	return claimed, entries, cursor, nil
+}
+
+func (c *MemoryCache) XClaim(key, group, consumer string, minIdleTime int64, ids ...string) ([]models.StreamEntry, error) {
+	streamI, exists := c.streams.Load(key)
+	if !exists {
+		return nil, nil
+	}
+
+	stream := streamI.(*sync.Map)
+	var entries []models.StreamEntry
+
+	for _, id := range ids {
+		if entryI, ok := stream.Load(id); ok {
+			entries = append(entries, *entryI.(*models.StreamEntry))
+		}
+	}
+
+	c.incrementKeyVersion(key)
+	return entries, nil
 }
 
 func (c *MemoryCache) WithRetry(strategy models.RetryStrategy) ports.Cache {

@@ -23,6 +23,7 @@ type Registry struct {
 	clusterHandlers *ClusterHandlers
 	jsonHandlers    *JSONHandlers
 	replicaHandlers *ReplicaHandlers
+	streamHandlers  *StreamHandlers
 }
 
 func NewRegistry(cache ports.Cache, clientManager *client.Manager) *Registry {
@@ -41,6 +42,7 @@ func NewRegistry(cache ports.Cache, clientManager *client.Manager) *Registry {
 		clusterHandlers: NewClusterHandlers(cache),
 		jsonHandlers:    NewJSONHandlers(cache),
 		replicaHandlers: NewReplicaHandlers(cache, nil),
+		streamHandlers:  NewStreamHandlers(cache),
 	}
 
 	r.registerHandlers()
@@ -227,6 +229,9 @@ func (r *Registry) registerHandlers() {
 
 	// In NewRegistry
 	r.handlers["REPLICAOF"] = r.replicaHandlers.HandleReplicaOf
+
+	// stream commands
+	r.handlers["XADD"] = r.streamHandlers.HandleXAdd
 }
 
 func (r *Registry) GetHandler(cmd string) (CommandHandler, bool) {

@@ -103,4 +103,9 @@ type Cache interface {
 	LPos(key string, element string) (int, bool)
 	LPushX(key string, value string) (int, error)
 	RPushX(key string, value string) (int, error)
+	XAdd(key string, id string, fields map[string]string) error
+	XACK(key, group string, ids ...string) (int64, error)
+	XDEL(key string, ids ...string) (int64, error)
+	XAutoClaim(key, group, consumer string, minIdleTime int64, start string, count int) ([]string, []models.StreamEntry, string, error)
+	XClaim(key, group, consumer string, minIdleTime int64, ids ...string) ([]models.StreamEntry, error)
 }

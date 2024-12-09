@@ -1092,6 +1092,54 @@ func (rd *RetryDecorator) LTrim(key string, start int, stop int) error {
 	})
 }
 
+func (rd *RetryDecorator) XAdd(key string, id string, fields map[string]string) error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.XAdd(key, id, fields)
+	})
+}
+
+func (rd *RetryDecorator) XACK(key, group string, ids ...string) (int64, error) {
+	var count int64
+	err := rd.executeWithRetry(func() error {
+		var err error
+		count, err = rd.cache.XACK(key, group, ids...)
+		return err
+	})
+	return count, err
+}
+
+func (rd *RetryDecorator) XDEL(key string, ids ...string) (int64, error) {
+	var count int64
+	err := rd.executeWithRetry(func() error {
+		var err error
+		count, err = rd.cache.XDEL(key, ids...)
+		return err
+	})
+	return count, err
+}
+
+func (rd *RetryDecorator) XAutoClaim(key, group, consumer string, minIdleTime int64, start string, count int) ([]string, []models.StreamEntry, string, error) {
+	var ids []string
+	var entries []models.StreamEntry
+	var cursor string
+	err := rd.executeWithRetry(func() error {
+		var err error
+		ids, entries, cursor, err = rd.cache.XAutoClaim(key, group, consumer, minIdleTime, start, count)
+		return err
+	})
+	return ids, entries, cursor, err
+}
+
+func (rd *RetryDecorator) XClaim(key, group, consumer string, minIdleTime int64, ids ...string) ([]models.StreamEntry, error) {
+	var entries []models.StreamEntry
+	err := rd.executeWithRetry(func() error {
+		var err error
+		entries, err = rd.cache.XClaim(key, group, consumer, minIdleTime, ids...)
+		return err
+	})
+	return entries, err
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }
