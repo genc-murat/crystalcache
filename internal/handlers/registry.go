@@ -251,6 +251,11 @@ func (r *Registry) registerHandlers() {
 	//bitmap commands
 	r.handlers["GETBIT"] = r.bitMapHandlers.HandleGetBit
 	r.handlers["SETBIT"] = r.bitMapHandlers.HandleSetBit
+	r.handlers["BITCOUNT"] = r.bitMapHandlers.HandleBitCount
+	r.handlers["BITFIELD"] = r.bitMapHandlers.HandleBitField
+	r.handlers["BITFIELD_RO"] = r.bitMapHandlers.HandleBitFieldRO
+	r.handlers["BITOP"] = r.bitMapHandlers.HandleBitOp
+	r.handlers["BITPOS"] = r.bitMapHandlers.HandleBitPos
 
 }
 

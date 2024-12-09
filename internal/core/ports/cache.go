@@ -125,4 +125,9 @@ type Cache interface {
 	XGroupSetID(key, group, id string) error
 	GetBit(key string, offset int64) (int, error)
 	SetBit(key string, offset int64, value int) (int, error)
+	BitCount(key string, start, end int64) (int64, error)
+	BitField(key string, commands []models.BitFieldCommand) ([]int64, error)
+	BitFieldRO(key string, commands []models.BitFieldCommand) ([]int64, error)
+	BitOp(operation string, destkey string, keys ...string) (int64, error)
+	BitPos(key string, bit int, start, end int64, reverse bool) (int64, error)
 }

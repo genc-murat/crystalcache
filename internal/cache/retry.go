@@ -1297,6 +1297,56 @@ func (rd *RetryDecorator) SetBit(key string, offset int64, value int) (int, erro
 	return oldBit, err
 }
 
+func (rd *RetryDecorator) BitCount(key string, start, end int64) (int64, error) {
+	var count int64
+	err := rd.executeWithRetry(func() error {
+		var err error
+		count, err = rd.cache.BitCount(key, start, end)
+		return err
+	})
+	return count, err
+}
+
+func (rd *RetryDecorator) BitField(key string, commands []models.BitFieldCommand) ([]int64, error) {
+	var results []int64
+	err := rd.executeWithRetry(func() error {
+		var err error
+		results, err = rd.cache.BitField(key, commands)
+		return err
+	})
+	return results, err
+}
+
+func (rd *RetryDecorator) BitFieldRO(key string, commands []models.BitFieldCommand) ([]int64, error) {
+	var results []int64
+	err := rd.executeWithRetry(func() error {
+		var err error
+		results, err = rd.cache.BitFieldRO(key, commands)
+		return err
+	})
+	return results, err
+}
+
+func (rd *RetryDecorator) BitOp(operation string, destkey string, keys ...string) (int64, error) {
+	var length int64
+	err := rd.executeWithRetry(func() error {
+		var err error
+		length, err = rd.cache.BitOp(operation, destkey, keys...)
+		return err
+	})
+	return length, err
+}
+
+func (rd *RetryDecorator) BitPos(key string, bit int, start, end int64, reverse bool) (int64, error) {
+	var pos int64
+	err := rd.executeWithRetry(func() error {
+		var err error
+		pos, err = rd.cache.BitPos(key, bit, start, end, reverse)
+		return err
+	})
+	return pos, err
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }
