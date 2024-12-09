@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"log"
 	"strconv"
 	"strings"
 
@@ -22,26 +21,29 @@ func (h *ScanHandlers) HandleScan(args []models.Value) models.Value {
 		return models.Value{Type: "error", Str: "ERR wrong number of arguments for SCAN"}
 	}
 
-	cursor := 0
-	if len(args) > 0 {
-		var err error
-		cursor, err = strconv.Atoi(args[0].Bulk)
-		if err != nil {
-			return models.Value{Type: "error", Str: "ERR invalid cursor"}
-		}
+	cursor, err := strconv.Atoi(args[0].Bulk)
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR invalid cursor"}
 	}
 
 	pattern := "*"
-	if len(args) >= 3 && strings.ToUpper(args[1].Bulk) == "MATCH" {
-		pattern = args[2].Bulk
-	}
-
 	count := 10
-	if len(args) >= 5 && strings.ToUpper(args[3].Bulk) == "COUNT" {
-		var err error
-		count, err = strconv.Atoi(args[4].Bulk)
-		if err != nil {
-			return models.Value{Type: "error", Str: "ERR invalid COUNT value"}
+
+	for i := 1; i < len(args); i += 2 {
+		if i+1 >= len(args) {
+			return models.Value{Type: "error", Str: "ERR syntax error"}
+		}
+
+		switch strings.ToUpper(args[i].Bulk) {
+		case "MATCH":
+			pattern = args[i+1].Bulk
+		case "COUNT":
+			count, err = strconv.Atoi(args[i+1].Bulk)
+			if err != nil {
+				return models.Value{Type: "error", Str: "ERR invalid COUNT value"}
+			}
+		default:
+			return models.Value{Type: "error", Str: "ERR syntax error"}
 		}
 	}
 
@@ -49,14 +51,13 @@ func (h *ScanHandlers) HandleScan(args []models.Value) models.Value {
 
 	keyValues := make([]models.Value, len(keys))
 	for i, key := range keys {
-		keyValues[i] = models.Value{Type: "string", Str: key}
+		keyValues[i] = models.Value{Type: "bulk", Bulk: key}
 	}
 
-	log.Printf("[DEBUG] SCAN/SSCAN response: cursor=%d, results=%+v", nextCursor, keyValues)
 	return models.Value{
 		Type: "array",
 		Array: []models.Value{
-			{Type: "string", Str: strconv.Itoa(nextCursor)},
+			{Type: "bulk", Bulk: strconv.Itoa(nextCursor)},
 			{Type: "array", Array: keyValues},
 		},
 	}

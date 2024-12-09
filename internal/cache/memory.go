@@ -1234,90 +1234,77 @@ func (c *MemoryCache) Rename(oldKey, newKey string) error {
 }
 
 func (c *MemoryCache) Info() map[string]string {
-	info := make(map[string]string)
+	stats := make(map[string]string)
 
-	// Uptime and command count
-	info["uptime_in_seconds"] = fmt.Sprintf("%d", int(time.Since(c.stats.startTime).Seconds()))
-	info["total_commands_processed"] = fmt.Sprintf("%d", atomic.LoadInt64(&c.stats.cmdCount))
-
-	// Memory statistics
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
-	info["used_memory"] = fmt.Sprintf("%d", memStats.Alloc)
-	info["used_memory_peak"] = fmt.Sprintf("%d", memStats.TotalAlloc)
 
-	// Total keys
-	info["total_keys"] = fmt.Sprintf("%d", c.DBSize())
+	stats["uptime_in_seconds"] = fmt.Sprintf("%d", int(time.Since(c.stats.startTime).Seconds()))
+	stats["total_commands_processed"] = fmt.Sprintf("%d", atomic.LoadInt64(&c.stats.cmdCount))
+	stats["redis_version"] = "7.2.0"
+	stats["redis_mode"] = "standalone"
 
-	// Feature info
-	info["redis_version"] = "7.2.0"
-	info["redis_mode"] = "standalone"
-	info["json_native_storage"] = "enabled"
-	info["json_version"] = "1.0"
-	info["modules"] = "json_native"
+	stats["used_memory"] = fmt.Sprintf("%d", memStats.Alloc)
+	stats["used_memory_human"] = fmt.Sprintf("%.2fMB", float64(memStats.Alloc)/(1024*1024))
+	stats["used_memory_peak"] = fmt.Sprintf("%d", memStats.TotalAlloc)
+	stats["used_memory_peak_human"] = fmt.Sprintf("%.2fMB", float64(memStats.TotalAlloc)/(1024*1024))
+	stats["used_memory_rss_human"] = fmt.Sprintf("%.2fMB", float64(memStats.HeapAlloc)/(1024*1024))
+	stats["mem_fragmentation_ratio"] = fmt.Sprintf("%.2f", float64(memStats.Sys-memStats.Alloc)/float64(memStats.Alloc))
+	stats["mem_fragmentation_bytes"] = fmt.Sprintf("%d", memStats.Sys-memStats.Alloc)
+	stats["total_system_memory_human"] = fmt.Sprintf("%.2fMB", float64(memStats.Sys)/(1024*1024))
+	stats["mem_allocator"] = "go"
 
-	// Count keys in various maps
-	stringKeys := 0
+	var stringKeys, hashKeys, listKeys, setKeys, jsonKeys, streamKeys, bitmapKeys int
+
 	c.sets.Range(func(_, _ interface{}) bool {
 		stringKeys++
 		return true
 	})
-	info["string_keys"] = fmt.Sprintf("%d", stringKeys)
+	stats["string_keys"] = fmt.Sprintf("%d", stringKeys)
 
-	hashKeys := 0
 	c.hsets.Range(func(_, _ interface{}) bool {
 		hashKeys++
 		return true
 	})
-	info["hash_keys"] = fmt.Sprintf("%d", hashKeys)
+	stats["hash_keys"] = fmt.Sprintf("%d", hashKeys)
 
-	listKeys := 0
 	c.lists.Range(func(_, _ interface{}) bool {
 		listKeys++
 		return true
 	})
-	info["list_keys"] = fmt.Sprintf("%d", listKeys)
+	stats["list_keys"] = fmt.Sprintf("%d", listKeys)
 
-	setKeys := 0
 	c.sets_.Range(func(_, _ interface{}) bool {
 		setKeys++
 		return true
 	})
-	info["set_keys"] = fmt.Sprintf("%d", setKeys)
+	stats["set_keys"] = fmt.Sprintf("%d", setKeys)
 
-	jsonCount := 0
 	c.jsonData.Range(func(_, _ interface{}) bool {
-		jsonCount++
+		jsonKeys++
 		return true
 	})
-	info["json_keys"] = fmt.Sprintf("%d", jsonCount)
+	stats["json_keys"] = fmt.Sprintf("%d", jsonKeys)
 
-	streamKeys := 0
 	c.streams.Range(func(_, _ interface{}) bool {
 		streamKeys++
 		return true
 	})
-	info["stream_keys"] = fmt.Sprintf("%d", streamKeys)
+	stats["stream_keys"] = fmt.Sprintf("%d", streamKeys)
 
-	bitmapKeys := 0
 	c.bitmaps.Range(func(_, _ interface{}) bool {
 		bitmapKeys++
 		return true
 	})
-	info["bitmap_keys"] = fmt.Sprintf("%d", bitmapKeys)
+	stats["bitmap_keys"] = fmt.Sprintf("%d", bitmapKeys)
 
-	// Memory analytics
-	info["used_memory_human"] = fmt.Sprintf("%.2fMB", float64(memStats.Alloc)/(1024*1024))
-	info["mem_fragmentation_ratio"] = fmt.Sprintf("%.2f", float64(memStats.Sys-memStats.Alloc)/float64(memStats.Alloc))
-	info["total_system_memory_human"] = fmt.Sprintf("%.2fMB", float64(memStats.Sys)/(1024*1024))
-	info["used_memory_rss_human"] = fmt.Sprintf("%.2fMB", float64(memStats.HeapAlloc)/(1024*1024))
-	info["used_memory_peak_human"] = fmt.Sprintf("%.2fMB", float64(memStats.TotalAlloc)/(1024*1024))
-	info["mem_allocator"] = "go"
+	stats["total_keys"] = fmt.Sprintf("%d", stringKeys+hashKeys+listKeys+setKeys+jsonKeys+streamKeys+bitmapKeys)
 
-	fragmentationBytes := memStats.Sys - memStats.Alloc
-	info["mem_fragmentation_bytes"] = fmt.Sprintf("%d", fragmentationBytes)
+	stats["json_native_storage"] = "enabled"
+	stats["json_version"] = "1.0"
+	stats["modules"] = "json_native"
 
-	return info
+	return stats
 }
 
 func getGoroutineID() int64 {
