@@ -33,6 +33,7 @@ type MemoryCache struct {
 	jsonData     *sync.Map
 	streams      *sync.Map // stream entries
 	streamGroups *sync.Map // stream consumer groups
+	bitmaps      *sync.Map
 	bloomFilter  *models.BloomFilter
 	lastDefrag   time.Time
 	defragMu     sync.Mutex
@@ -58,6 +59,7 @@ func NewMemoryCache() *MemoryCache {
 		jsonData:     &sync.Map{},
 		streams:      &sync.Map{},
 		streamGroups: &sync.Map{},
+		bitmaps:      &sync.Map{},
 		bloomFilter:  models.NewBloomFilter(config),
 	}
 
@@ -3641,6 +3643,52 @@ func (c *MemoryCache) XGroupSetID(key, group, id string) error {
 
 	c.incrementKeyVersion(key)
 	return nil
+}
+
+func (c *MemoryCache) GetBit(key string, offset int64) (int, error) {
+	val, exists := c.bitmaps.Load(key)
+	if !exists {
+		return 0, nil
+	}
+
+	valBytes := val.([]byte)
+	byteIndex := offset / 8
+	if int64(len(valBytes)) <= byteIndex {
+		return 0, nil
+	}
+
+	bitIndex := offset % 8
+	return int((valBytes[byteIndex] >> (7 - bitIndex)) & 1), nil
+}
+
+func (c *MemoryCache) SetBit(key string, offset int64, value int) (int, error) {
+	if value != 0 && value != 1 {
+		return 0, fmt.Errorf("ERR bit value must be 0 or 1")
+	}
+
+	valI, _ := c.bitmaps.LoadOrStore(key, make([]byte, 0))
+	valBytes := valI.([]byte)
+
+	byteIndex := offset / 8
+	bitIndex := offset % 8
+
+	if int64(len(valBytes)) <= byteIndex {
+		newBytes := make([]byte, byteIndex+1)
+		copy(newBytes, valBytes)
+		valBytes = newBytes
+	}
+
+	oldBit := (valBytes[byteIndex] >> (7 - bitIndex)) & 1
+	if value == 1 {
+		valBytes[byteIndex] |= 1 << (7 - bitIndex)
+	} else {
+		valBytes[byteIndex] &= ^(1 << (7 - bitIndex))
+	}
+
+	c.bitmaps.Store(key, valBytes)
+	c.incrementKeyVersion(key)
+
+	return int(oldBit), nil
 }
 
 func (c *MemoryCache) WithRetry(strategy models.RetryStrategy) ports.Cache {

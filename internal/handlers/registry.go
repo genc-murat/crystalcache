@@ -24,6 +24,7 @@ type Registry struct {
 	jsonHandlers    *JSONHandlers
 	replicaHandlers *ReplicaHandlers
 	streamHandlers  *StreamHandlers
+	bitMapHandlers  *BitMapHandlers
 }
 
 func NewRegistry(cache ports.Cache, clientManager *client.Manager) *Registry {
@@ -43,6 +44,7 @@ func NewRegistry(cache ports.Cache, clientManager *client.Manager) *Registry {
 		jsonHandlers:    NewJSONHandlers(cache),
 		replicaHandlers: NewReplicaHandlers(cache, nil),
 		streamHandlers:  NewStreamHandlers(cache),
+		bitMapHandlers:  NewBitMapHandlers(cache),
 	}
 
 	r.registerHandlers()
@@ -245,6 +247,10 @@ func (r *Registry) registerHandlers() {
 	r.handlers["XTRIM"] = r.streamHandlers.HandleXTRIM
 	r.handlers["XINFO"] = r.streamHandlers.HandleXInfo
 	r.handlers["XGROUP"] = r.streamHandlers.HandleXGroup
+
+	//bitmap commands
+	r.handlers["GETBIT"] = r.bitMapHandlers.HandleGetBit
+	r.handlers["SETBIT"] = r.bitMapHandlers.HandleSetBit
 
 }
 

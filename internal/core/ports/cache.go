@@ -123,4 +123,6 @@ type Cache interface {
 	XGroupDelConsumer(key, group, consumer string) (int64, error)
 	XGroupDestroy(key, group string) (int64, error)
 	XGroupSetID(key, group, id string) error
+	GetBit(key string, offset int64) (int, error)
+	SetBit(key string, offset int64, value int) (int, error)
 }

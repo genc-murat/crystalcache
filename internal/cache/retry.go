@@ -1277,6 +1277,26 @@ func (rd *RetryDecorator) XGroupSetID(key, group, id string) error {
 	})
 }
 
+func (rd *RetryDecorator) GetBit(key string, offset int64) (int, error) {
+	var bit int
+	err := rd.executeWithRetry(func() error {
+		var err error
+		bit, err = rd.cache.GetBit(key, offset)
+		return err
+	})
+	return bit, err
+}
+
+func (rd *RetryDecorator) SetBit(key string, offset int64, value int) (int, error) {
+	var oldBit int
+	err := rd.executeWithRetry(func() error {
+		var err error
+		oldBit, err = rd.cache.SetBit(key, offset, value)
+		return err
+	})
+	return oldBit, err
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }
