@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"log"
+	"strconv"
 	"strings"
 	"time"
 
@@ -507,4 +508,180 @@ func (h *StringHandlers) HandleGetDel(args []models.Value) models.Value {
 
 	// Return the value that was deleted
 	return models.Value{Type: "bulk", Bulk: value}
+}
+
+func (h *StringHandlers) HandleAppend(args []models.Value) models.Value {
+	if err := util.ValidateArgs(args, 2); err != nil {
+		return util.ToValue(err)
+	}
+
+	key := args[0].Bulk
+	value := args[1].Bulk
+
+	// Get existing value or empty string if key doesn't exist
+	currentVal, exists := h.cache.Get(key)
+	if !exists {
+		currentVal = ""
+	}
+
+	// Append the new value
+	newVal := currentVal + value
+
+	// Store the result
+	err := h.cache.Set(key, newVal)
+	if err != nil {
+		return util.ToValue(err)
+	}
+
+	return models.Value{Type: "integer", Num: len(newVal)}
+}
+
+func (h *StringHandlers) HandleDecr(args []models.Value) models.Value {
+	if err := util.ValidateArgs(args, 1); err != nil {
+		return util.ToValue(err)
+	}
+
+	key := args[0].Bulk
+
+	// Get current value
+	value, exists := h.cache.Get(key)
+	if !exists {
+		// If key does not exist, set it to 0 first, then decrement
+		value = "0"
+	}
+
+	// Parse the current value
+	num, err := util.ParseInt(models.Value{Type: "bulk", Bulk: value})
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR value is not an integer or out of range"}
+	}
+
+	// Decrement by 1
+	num--
+
+	// Store the new value
+	err = h.cache.Set(key, strconv.Itoa(num))
+	if err != nil {
+		return util.ToValue(err)
+	}
+
+	return models.Value{Type: "integer", Num: num}
+}
+
+func (h *StringHandlers) HandleDecrBy(args []models.Value) models.Value {
+	if err := util.ValidateArgs(args, 2); err != nil {
+		return util.ToValue(err)
+	}
+
+	key := args[0].Bulk
+
+	// Parse decrement amount
+	decrement, err := util.ParseInt(args[1])
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR value is not an integer or out of range"}
+	}
+
+	// Get current value
+	value, exists := h.cache.Get(key)
+	if !exists {
+		// If key does not exist, set it to 0 first, then decrement
+		value = "0"
+	}
+
+	// Parse the current value
+	num, err := util.ParseInt(models.Value{Type: "bulk", Bulk: value})
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR value is not an integer or out of range"}
+	}
+
+	// Decrement by specified amount
+	num -= decrement
+
+	// Store the new value
+	err = h.cache.Set(key, strconv.Itoa(num))
+	if err != nil {
+		return util.ToValue(err)
+	}
+
+	return models.Value{Type: "integer", Num: num}
+}
+
+func (h *StringHandlers) HandleIncrBy(args []models.Value) models.Value {
+	if err := util.ValidateArgs(args, 2); err != nil {
+		return util.ToValue(err)
+	}
+
+	key := args[0].Bulk
+
+	// Parse increment amount
+	increment, err := util.ParseInt(args[1])
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR value is not an integer or out of range"}
+	}
+
+	// Get current value
+	value, exists := h.cache.Get(key)
+	if !exists {
+		// If key does not exist, set it to 0 first
+		value = "0"
+	}
+
+	// Parse the current value
+	num, err := util.ParseInt(models.Value{Type: "bulk", Bulk: value})
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR value is not an integer or out of range"}
+	}
+
+	// Increment by specified amount
+	num += increment
+
+	// Store the new value
+	err = h.cache.Set(key, strconv.Itoa(num))
+	if err != nil {
+		return util.ToValue(err)
+	}
+
+	return models.Value{Type: "integer", Num: num}
+}
+
+func (h *StringHandlers) HandleIncrByFloat(args []models.Value) models.Value {
+	if err := util.ValidateArgs(args, 2); err != nil {
+		return util.ToValue(err)
+	}
+
+	key := args[0].Bulk
+
+	// Parse increment amount
+	increment, err := strconv.ParseFloat(args[1].Bulk, 64)
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR value is not a valid float"}
+	}
+
+	// Get current value
+	value, exists := h.cache.Get(key)
+	if !exists {
+		// If key does not exist, set it to 0 first
+		value = "0"
+	}
+
+	// Parse the current value
+	currentNum, err := strconv.ParseFloat(value, 64)
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR value is not a valid float"}
+	}
+
+	// Increment by specified amount
+	result := currentNum + increment
+
+	// Convert to string with maximum precision but without scientific notation
+	// This matches Redis behavior for INCRBYFLOAT
+	resultStr := strconv.FormatFloat(result, 'f', -1, 64)
+
+	// Store the new value
+	err = h.cache.Set(key, resultStr)
+	if err != nil {
+		return util.ToValue(err)
+	}
+
+	return models.Value{Type: "bulk", Bulk: resultStr}
 }
