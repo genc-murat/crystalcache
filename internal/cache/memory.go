@@ -3494,6 +3494,40 @@ func (c *MemoryCache) XTRIM(key string, strategy string, threshold int64) (int64
 	return trimmed, nil
 }
 
+func (c *MemoryCache) XInfoGroups(key string) ([]models.StreamGroup, error) {
+	if _, exists := c.streams.Load(key); !exists {
+		return nil, fmt.Errorf("ERR no such key")
+	}
+	return []models.StreamGroup{}, nil
+}
+
+func (c *MemoryCache) XInfoConsumers(key, group string) ([]models.StreamConsumer, error) {
+	if _, exists := c.streams.Load(key); !exists {
+		return nil, fmt.Errorf("ERR no such key")
+	}
+	return []models.StreamConsumer{}, nil
+}
+
+func (c *MemoryCache) XInfoStream(key string) (*models.StreamInfo, error) {
+	streamI, exists := c.streams.Load(key)
+	if !exists {
+		return nil, fmt.Errorf("ERR no such key")
+	}
+
+	stream := streamI.(*sync.Map)
+	var length int64
+	stream.Range(func(_, _ interface{}) bool {
+		length++
+		return true
+	})
+
+	info := &models.StreamInfo{
+		Length: length,
+		Groups: 0,
+	}
+	return info, nil
+}
+
 func (c *MemoryCache) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(c, strategy)
 }

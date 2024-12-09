@@ -356,6 +356,98 @@ func (h *StreamHandlers) HandleXTRIM(args []models.Value) models.Value {
 	return models.Value{Type: "integer", Num: int(count)}
 }
 
+func (h *StreamHandlers) HandleXInfoGroups(args []models.Value) models.Value {
+	if len(args) != 1 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'xinfo groups' command"}
+	}
+
+	groups, err := h.cache.XInfoGroups(args[0].Bulk)
+	if err != nil {
+		return models.Value{Type: "error", Str: err.Error()}
+	}
+
+	result := make([]models.Value, len(groups))
+	for i, group := range groups {
+		result[i] = models.Value{Type: "array", Array: []models.Value{
+			{Type: "bulk", Bulk: "name"}, {Type: "bulk", Bulk: group.Name},
+			{Type: "bulk", Bulk: "consumers"}, {Type: "integer", Num: int(group.Consumers)},
+			{Type: "bulk", Bulk: "pending"}, {Type: "integer", Num: int(group.Pending)},
+			{Type: "bulk", Bulk: "last-delivered-id"}, {Type: "bulk", Bulk: group.LastDeliveredID},
+		}}
+	}
+	return models.Value{Type: "array", Array: result}
+}
+
+func (h *StreamHandlers) HandleXInfoConsumers(args []models.Value) models.Value {
+	if len(args) != 2 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'xinfo consumers' command"}
+	}
+
+	consumers, err := h.cache.XInfoConsumers(args[0].Bulk, args[1].Bulk)
+	if err != nil {
+		return models.Value{Type: "error", Str: err.Error()}
+	}
+
+	result := make([]models.Value, len(consumers))
+	for i, consumer := range consumers {
+		result[i] = models.Value{Type: "array", Array: []models.Value{
+			{Type: "bulk", Bulk: "name"}, {Type: "bulk", Bulk: consumer.Name},
+			{Type: "bulk", Bulk: "pending"}, {Type: "integer", Num: int(consumer.Pending)},
+			{Type: "bulk", Bulk: "idle"}, {Type: "integer", Num: int(consumer.IdleTime)},
+		}}
+	}
+	return models.Value{Type: "array", Array: result}
+}
+
+func (h *StreamHandlers) HandleXInfoStream(args []models.Value) models.Value {
+	if len(args) != 1 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'xinfo stream' command"}
+	}
+
+	info, err := h.cache.XInfoStream(args[0].Bulk)
+	if err != nil {
+		return models.Value{Type: "error", Str: err.Error()}
+	}
+
+	return models.Value{Type: "array", Array: []models.Value{
+		{Type: "bulk", Bulk: "length"}, {Type: "integer", Num: int(info.Length)},
+		{Type: "bulk", Bulk: "radix-tree-keys"}, {Type: "integer", Num: int(info.RadixTreeKeys)},
+		{Type: "bulk", Bulk: "radix-tree-nodes"}, {Type: "integer", Num: int(info.RadixTreeNodes)},
+		{Type: "bulk", Bulk: "groups"}, {Type: "integer", Num: int(info.Groups)},
+		{Type: "bulk", Bulk: "last-generated-id"}, {Type: "bulk", Bulk: info.LastGeneratedID},
+	}}
+}
+
+func (h *StreamHandlers) HandleXInfo(args []models.Value) models.Value {
+	if len(args) < 1 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'xinfo' command"}
+	}
+
+	subcommand := strings.ToUpper(args[0].Bulk)
+	switch subcommand {
+	case "GROUPS":
+		if len(args) != 2 {
+			return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'xinfo groups' command"}
+		}
+		return h.HandleXInfoGroups(args[1:])
+
+	case "CONSUMERS":
+		if len(args) != 3 {
+			return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'xinfo consumers' command"}
+		}
+		return h.HandleXInfoConsumers(args[1:])
+
+	case "STREAM":
+		if len(args) != 2 {
+			return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'xinfo stream' command"}
+		}
+		return h.HandleXInfoStream(args[1:])
+
+	default:
+		return models.Value{Type: "error", Str: "ERR unknown subcommand '" + subcommand + "'"}
+	}
+}
+
 func generateStreamID() string {
 	timestamp := time.Now().UnixMilli()
 	sequence := 0 // You might want to implement a sequence counter

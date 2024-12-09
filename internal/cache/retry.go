@@ -1205,6 +1205,36 @@ func (rd *RetryDecorator) XTRIM(key string, strategy string, threshold int64) (i
 	return count, err
 }
 
+func (rd *RetryDecorator) XInfoGroups(key string) ([]models.StreamGroup, error) {
+	var groups []models.StreamGroup
+	err := rd.executeWithRetry(func() error {
+		var err error
+		groups, err = rd.cache.XInfoGroups(key)
+		return err
+	})
+	return groups, err
+}
+
+func (rd *RetryDecorator) XInfoConsumers(key, group string) ([]models.StreamConsumer, error) {
+	var consumers []models.StreamConsumer
+	err := rd.executeWithRetry(func() error {
+		var err error
+		consumers, err = rd.cache.XInfoConsumers(key, group)
+		return err
+	})
+	return consumers, err
+}
+
+func (rd *RetryDecorator) XInfoStream(key string) (*models.StreamInfo, error) {
+	var info *models.StreamInfo
+	err := rd.executeWithRetry(func() error {
+		var err error
+		info, err = rd.cache.XInfoStream(key)
+		return err
+	})
+	return info, err
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }
