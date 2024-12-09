@@ -247,3 +247,127 @@ func matchPattern(pattern, str string) bool {
 
 	return regex.MatchString(str)
 }
+
+func (h *SetHandlers) HandleSDiffStore(args []models.Value) models.Value {
+	if len(args) < 2 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'sdiffstore' command"}
+	}
+
+	destination := args[0].Bulk
+	keys := make([]string, len(args)-1)
+	for i := 1; i < len(args); i++ {
+		keys[i-1] = args[i].Bulk
+	}
+
+	// Get the difference first
+	diff := h.cache.SDiff(keys...)
+
+	// Clear the destination key if it exists
+	h.cache.Del(destination)
+
+	// Store each element from the difference in the destination
+	stored := 0
+	for _, member := range diff {
+		added, err := h.cache.SAdd(destination, member)
+		if err != nil {
+			return util.ToValue(err)
+		}
+		if added {
+			stored++
+		}
+	}
+
+	return models.Value{Type: "integer", Num: stored}
+}
+
+func (h *SetHandlers) HandleSInterCard(args []models.Value) models.Value {
+	if len(args) < 1 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'sintercard' command"}
+	}
+
+	// Extract limit if provided
+	limit := -1 // -1 means no limit
+	numKeys := len(args)
+
+	// Check if LIMIT option is provided
+	if len(args) >= 3 && strings.ToUpper(args[len(args)-2].Bulk) == "LIMIT" {
+		var err error
+		limit, err = strconv.Atoi(args[len(args)-1].Bulk)
+		if err != nil {
+			return models.Value{Type: "error", Str: "ERR value is not an integer or out of range"}
+		}
+		if limit < 0 {
+			return models.Value{Type: "error", Str: "ERR LIMIT can't be negative"}
+		}
+		numKeys = len(args) - 2
+	}
+
+	// Get the keys
+	keys := make([]string, numKeys)
+	for i := 0; i < numKeys; i++ {
+		keys[i] = args[i].Bulk
+	}
+
+	// Get the intersection
+	intersection := h.cache.SInter(keys...)
+
+	// Apply limit if set
+	if limit >= 0 && len(intersection) > limit {
+		return models.Value{Type: "integer", Num: limit}
+	}
+
+	return models.Value{Type: "integer", Num: len(intersection)}
+}
+
+func (h *SetHandlers) HandleSInterStore(args []models.Value) models.Value {
+	if len(args) < 2 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'sinterstore' command"}
+	}
+
+	destination := args[0].Bulk
+	keys := make([]string, len(args)-1)
+	for i := 1; i < len(args); i++ {
+		keys[i-1] = args[i].Bulk
+	}
+
+	// Get the intersection first
+	intersection := h.cache.SInter(keys...)
+
+	// Clear the destination key if it exists
+	h.cache.Del(destination)
+
+	// Store each element from the intersection in the destination
+	stored := 0
+	for _, member := range intersection {
+		added, err := h.cache.SAdd(destination, member)
+		if err != nil {
+			return util.ToValue(err)
+		}
+		if added {
+			stored++
+		}
+	}
+
+	return models.Value{Type: "integer", Num: stored}
+}
+
+func (h *SetHandlers) HandleSMIsMember(args []models.Value) models.Value {
+	if len(args) < 2 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'smismember' command"}
+	}
+
+	key := args[0].Bulk
+	members := args[1:]
+
+	result := make([]models.Value, len(members))
+	for i, member := range members {
+		isMember := h.cache.SIsMember(key, member.Bulk)
+		if isMember {
+			result[i] = models.Value{Type: "integer", Num: 1}
+		} else {
+			result[i] = models.Value{Type: "integer", Num: 0}
+		}
+	}
+
+	return models.Value{Type: "array", Array: result}
+}
