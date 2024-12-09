@@ -3414,6 +3414,86 @@ func (c *MemoryCache) XREAD(keys []string, ids []string, count int) (map[string]
 	return result, nil
 }
 
+func (c *MemoryCache) XREVRANGE(key, start, end string, count int) ([]models.StreamEntry, error) {
+	streamI, exists := c.streams.Load(key)
+	if !exists {
+		return nil, nil
+	}
+
+	stream := streamI.(*sync.Map)
+	var entries []models.StreamEntry
+
+	// Collect entries
+	stream.Range(func(k, v interface{}) bool {
+		id := k.(string)
+		if (start == "+" || id <= start) && (end == "-" || id >= end) {
+			entries = append(entries, *v.(*models.StreamEntry))
+			if count > 0 && len(entries) >= count {
+				return false
+			}
+		}
+		return true
+	})
+
+	// Reverse the order
+	for i, j := 0, len(entries)-1; i < j; i, j = i+1, j-1 {
+		entries[i], entries[j] = entries[j], entries[i]
+	}
+
+	return entries, nil
+}
+
+func (c *MemoryCache) XSETID(key string, id string) error {
+	if _, exists := c.streams.Load(key); !exists {
+		return fmt.Errorf("ERR no such key")
+	}
+	c.incrementKeyVersion(key)
+	return nil
+}
+func (c *MemoryCache) XTRIM(key string, strategy string, threshold int64) (int64, error) {
+	streamI, exists := c.streams.Load(key)
+	if !exists {
+		return 0, nil
+	}
+
+	stream := streamI.(*sync.Map)
+	var entries []struct {
+		id    string
+		entry *models.StreamEntry
+	}
+
+	// Collect all entries
+	stream.Range(func(k, v interface{}) bool {
+		entries = append(entries, struct {
+			id    string
+			entry *models.StreamEntry
+		}{
+			id:    k.(string),
+			entry: v.(*models.StreamEntry),
+		})
+		return true
+	})
+
+	// Sort by ID
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].id < entries[j].id
+	})
+
+	var trimmed int64
+	if len(entries) > int(threshold) {
+		for i := 0; i < len(entries)-int(threshold); i++ {
+			stream.Delete(entries[i].id)
+			trimmed++
+		}
+	}
+
+	if trimmed > 0 {
+		c.incrementKeyVersion(key)
+	}
+
+	return trimmed, nil
+}
+
 func (c *MemoryCache) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(c, strategy)
 }

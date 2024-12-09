@@ -290,6 +290,72 @@ func (h *StreamHandlers) HandleXREAD(args []models.Value) models.Value {
 	return models.Value{Type: "array", Array: result}
 }
 
+func (h *StreamHandlers) HandleXREVRANGE(args []models.Value) models.Value {
+	if len(args) < 3 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'xrevrange' command"}
+	}
+
+	count := 0
+	if len(args) >= 4 {
+		var err error
+		count, err = strconv.Atoi(args[3].Bulk)
+		if err != nil {
+			return models.Value{Type: "error", Str: "ERR invalid COUNT"}
+		}
+	}
+
+	entries, err := h.cache.XREVRANGE(args[0].Bulk, args[1].Bulk, args[2].Bulk, count)
+	if err != nil {
+		return models.Value{Type: "error", Str: err.Error()}
+	}
+
+	result := make([]models.Value, len(entries))
+	for i, entry := range entries {
+		fields := make([]models.Value, 0, len(entry.Fields)*2)
+		for k, v := range entry.Fields {
+			fields = append(fields, models.Value{Type: "bulk", Bulk: k})
+			fields = append(fields, models.Value{Type: "bulk", Bulk: v})
+		}
+		result[i] = models.Value{Type: "array", Array: []models.Value{
+			{Type: "bulk", Bulk: entry.ID},
+			{Type: "array", Array: fields},
+		}}
+	}
+
+	return models.Value{Type: "array", Array: result}
+}
+
+func (h *StreamHandlers) HandleXSETID(args []models.Value) models.Value {
+	if len(args) != 2 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'xsetid' command"}
+	}
+
+	err := h.cache.XSETID(args[0].Bulk, args[1].Bulk)
+	if err != nil {
+		return models.Value{Type: "error", Str: err.Error()}
+	}
+
+	return models.Value{Type: "string", Str: "OK"}
+}
+
+func (h *StreamHandlers) HandleXTRIM(args []models.Value) models.Value {
+	if len(args) != 3 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'xtrim' command"}
+	}
+
+	threshold, err := strconv.ParseInt(args[2].Bulk, 10, 64)
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR invalid threshold"}
+	}
+
+	count, err := h.cache.XTRIM(args[0].Bulk, args[1].Bulk, threshold)
+	if err != nil {
+		return models.Value{Type: "error", Str: err.Error()}
+	}
+
+	return models.Value{Type: "integer", Num: int(count)}
+}
+
 func generateStreamID() string {
 	timestamp := time.Now().UnixMilli()
 	sequence := 0 // You might want to implement a sequence counter

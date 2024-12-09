@@ -1179,6 +1179,32 @@ func (rd *RetryDecorator) XREAD(keys []string, ids []string, count int) (map[str
 	return result, err
 }
 
+func (rd *RetryDecorator) XREVRANGE(key, start, end string, count int) ([]models.StreamEntry, error) {
+	var entries []models.StreamEntry
+	err := rd.executeWithRetry(func() error {
+		var err error
+		entries, err = rd.cache.XREVRANGE(key, start, end, count)
+		return err
+	})
+	return entries, err
+}
+
+func (rd *RetryDecorator) XSETID(key string, id string) error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.XSETID(key, id)
+	})
+}
+
+func (rd *RetryDecorator) XTRIM(key string, strategy string, threshold int64) (int64, error) {
+	var count int64
+	err := rd.executeWithRetry(func() error {
+		var err error
+		count, err = rd.cache.XTRIM(key, strategy, threshold)
+		return err
+	})
+	return count, err
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }

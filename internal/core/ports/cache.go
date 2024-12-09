@@ -112,4 +112,7 @@ type Cache interface {
 	XPENDING(key, group string) (int64, error)
 	XRANGE(key, start, end string, count int) ([]models.StreamEntry, error)
 	XREAD(keys []string, ids []string, count int) (map[string][]models.StreamEntry, error)
+	XREVRANGE(key, start, end string, count int) ([]models.StreamEntry, error)
+	XSETID(key string, id string) error
+	XTRIM(key string, strategy string, threshold int64) (int64, error)
 }

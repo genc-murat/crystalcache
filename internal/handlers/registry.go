@@ -240,6 +240,9 @@ func (r *Registry) registerHandlers() {
 	r.handlers["XDEL"] = r.streamHandlers.HandleXDEL
 	r.handlers["XAUTOCLAIM"] = r.streamHandlers.HandleXAutoClaim
 	r.handlers["XCLAIM"] = r.streamHandlers.HandleXClaim
+	r.handlers["XREVRANGE"] = r.streamHandlers.HandleXREVRANGE
+	r.handlers["XSETID"] = r.streamHandlers.HandleXSETID
+	r.handlers["XTRIM"] = r.streamHandlers.HandleXTRIM
 
 }
 
