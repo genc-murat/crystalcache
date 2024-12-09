@@ -3026,6 +3026,120 @@ func (c *MemoryCache) HIncrByFloat(key, field string, increment float64) (float6
 	}
 }
 
+func (c *MemoryCache) LIndex(key string, index int) (string, bool) {
+	// Load the list from sync.Map
+	listI, exists := c.lists.Load(key)
+	if !exists {
+		return "", false
+	}
+
+	list := listI.(*[]string)
+	length := len(*list)
+
+	// Handle negative indices by converting to positive
+	if index < 0 {
+		index = length + index
+	}
+
+	// Check bounds
+	if index < 0 || index >= length {
+		return "", false
+	}
+
+	// Return element at index
+	return (*list)[index], true
+}
+
+func (c *MemoryCache) LInsert(key string, before bool, pivot string, value string) (int, error) {
+	for {
+		// Load or create the list
+		listI, exists := c.lists.Load(key)
+		if !exists {
+			return 0, nil // Return 0 if key doesn't exist
+		}
+
+		list := listI.(*[]string)
+		pivotIndex := -1
+
+		// Find pivot element
+		for i, element := range *list {
+			if element == pivot {
+				pivotIndex = i
+				break
+			}
+		}
+
+		// If pivot wasn't found, return -1
+		if pivotIndex == -1 {
+			return -1, nil
+		}
+
+		// Create new list with appropriate capacity
+		newList := make([]string, len(*list)+1)
+
+		if before {
+			// Copy elements before pivot
+			copy(newList, (*list)[:pivotIndex])
+			// Insert new value
+			newList[pivotIndex] = value
+			// Copy remaining elements
+			copy(newList[pivotIndex+1:], (*list)[pivotIndex:])
+		} else {
+			// Copy elements up to and including pivot
+			copy(newList, (*list)[:pivotIndex+1])
+			// Insert new value
+			newList[pivotIndex+1] = value
+			// Copy remaining elements
+			copy(newList[pivotIndex+2:], (*list)[pivotIndex+1:])
+		}
+
+		// Try to update the list atomically
+		if c.lists.CompareAndSwap(key, listI, &newList) {
+			c.incrementKeyVersion(key)
+			return len(newList), nil
+		}
+	}
+}
+
+// LIndex returns an element from a list by its index with retry logic
+func (rd *RetryDecorator) LIndex(key string, index int) (string, bool) {
+	var value string
+	var exists bool
+	var finalExists bool
+
+	err := rd.executeWithRetry(func() error {
+		value, exists = rd.cache.LIndex(key, index)
+		if exists {
+			finalExists = true
+			return nil
+		}
+		return errors.New("index out of range")
+	})
+
+	if err != nil {
+		return "", false
+	}
+	return value, finalExists
+}
+
+// LInsert inserts an element before or after a pivot in a list with retry logic
+func (rd *RetryDecorator) LInsert(key string, before bool, pivot string, value string) (int, error) {
+	var length int
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		length, err = rd.cache.LInsert(key, before, pivot, value)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return 0, err
+	}
+	return length, finalErr
+}
+
 func (c *MemoryCache) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(c, strategy)
 }

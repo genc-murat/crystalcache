@@ -97,4 +97,6 @@ type Cache interface {
 	ExpireTime(key string) (int64, error)
 	HIncrBy(key, field string, increment int64) (int64, error)
 	HIncrByFloat(key, field string, increment float64) (float64, error)
+	LIndex(key string, index int) (string, bool)
+	LInsert(key string, before bool, pivot string, value string) (int, error)
 }

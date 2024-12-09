@@ -517,3 +517,188 @@ func (h *ListHandlers) HandleBLMOVE(args []models.Value) models.Value {
 		}
 	}
 }
+
+// HandleLIndex handles the LINDEX command which returns an element from a list by its index
+// Parameters:
+//   - args: Array of Values containing the key and index
+//
+// Returns:
+//   - models.Value: The element at the specified index, or null if out of range
+func (h *ListHandlers) HandleLIndex(args []models.Value) models.Value {
+	if err := util.ValidateArgs(args, 2); err != nil {
+		return util.ToValue(err)
+	}
+
+	index, err := util.ParseInt(args[1])
+	if err != nil {
+		return util.ToValue(err)
+	}
+
+	value, exists := h.cache.LIndex(args[0].Bulk, index)
+	if !exists {
+		return models.Value{Type: "null"}
+	}
+
+	return models.Value{Type: "bulk", Bulk: value}
+}
+
+// HandleLInsert handles the LINSERT command which inserts an element before or after another element
+// Parameters:
+//   - args: Array of Values containing key, BEFORE/AFTER, pivot, and value
+//
+// Returns:
+//   - models.Value: The length of the list after insertion, or -1 if pivot not found
+func (h *ListHandlers) HandleLInsert(args []models.Value) models.Value {
+	if err := util.ValidateArgs(args, 4); err != nil {
+		return util.ToValue(err)
+	}
+
+	position := args[1].Bulk
+	if position != "BEFORE" && position != "AFTER" {
+		return models.Value{Type: "error", Str: "ERR syntax error"}
+	}
+
+	pivot := args[2].Bulk
+	value := args[3].Bulk
+
+	length, err := h.cache.LInsert(args[0].Bulk, position == "BEFORE", pivot, value)
+	if err != nil {
+		return util.ToValue(err)
+	}
+
+	return models.Value{Type: "integer", Num: length}
+}
+
+// HandleLMove handles the LMOVE command which atomically moves an element from one list to another
+// Parameters:
+//   - args: Array of Values containing source key, destination key, source direction (LEFT/RIGHT),
+//     and destination direction (LEFT/RIGHT)
+//
+// Returns:
+//   - models.Value: The element being moved, or null if source list is empty
+func (h *ListHandlers) HandleLMove(args []models.Value) models.Value {
+	if err := util.ValidateArgs(args, 4); err != nil {
+		return util.ToValue(err)
+	}
+
+	source := args[0].Bulk
+	destination := args[1].Bulk
+	sourceDir := args[2].Bulk
+	destDir := args[3].Bulk
+
+	if sourceDir != "LEFT" && sourceDir != "RIGHT" {
+		return models.Value{Type: "error", Str: "ERR source direction must be LEFT or RIGHT"}
+	}
+	if destDir != "LEFT" && destDir != "RIGHT" {
+		return models.Value{Type: "error", Str: "ERR destination direction must be LEFT or RIGHT"}
+	}
+
+	// Atomically move the element
+	var value string
+	var exists bool
+
+	if sourceDir == "LEFT" {
+		value, exists = h.cache.LPop(source)
+	} else {
+		value, exists = h.cache.RPop(source)
+	}
+
+	if !exists {
+		return models.Value{Type: "null"}
+	}
+
+	var err error
+	if destDir == "LEFT" {
+		_, err = h.cache.LPush(destination, value)
+	} else {
+		_, err = h.cache.RPush(destination, value)
+	}
+
+	if err != nil {
+		return util.ToValue(err)
+	}
+
+	return models.Value{Type: "bulk", Bulk: value}
+}
+
+// HandleLMPop handles the LMPOP command which atomically removes and returns elements from multiple lists
+// Parameters:
+//   - args: Array of Values containing numkeys, keys..., direction (LEFT/RIGHT), [COUNT count]
+//
+// Returns:
+//   - models.Value: Array containing the key and popped elements
+func (h *ListHandlers) HandleLMPop(args []models.Value) models.Value {
+	if len(args) < 3 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'lmpop' command"}
+	}
+
+	numKeys, err := util.ParseInt(args[0])
+	if err != nil {
+		return util.ToValue(err)
+	}
+
+	if len(args) < 1+numKeys+1 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'lmpop' command"}
+	}
+
+	direction := args[1+numKeys].Bulk
+	if direction != "LEFT" && direction != "RIGHT" {
+		return models.Value{Type: "error", Str: "ERR direction must be LEFT or RIGHT"}
+	}
+
+	count := 1
+	if len(args) > 2+numKeys {
+		if args[2+numKeys].Bulk != "COUNT" {
+			return models.Value{Type: "error", Str: "ERR syntax error"}
+		}
+		if len(args) <= 3+numKeys {
+			return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'lmpop' command"}
+		}
+		count, err = util.ParseInt(args[3+numKeys])
+		if err != nil {
+			return util.ToValue(err)
+		}
+		if count <= 0 {
+			return models.Value{Type: "error", Str: "ERR count must be positive"}
+		}
+	}
+
+	// Try each key until we find a non-empty list
+	for i := 0; i < numKeys; i++ {
+		key := args[1+i].Bulk
+		var elements []string
+		var exists bool
+
+		if direction == "LEFT" {
+			for j := 0; j < count; j++ {
+				if value, ok := h.cache.LPop(key); ok {
+					elements = append(elements, value)
+					exists = true
+				} else {
+					break
+				}
+			}
+		} else {
+			for j := 0; j < count; j++ {
+				if value, ok := h.cache.RPop(key); ok {
+					elements = append(elements, value)
+					exists = true
+				} else {
+					break
+				}
+			}
+		}
+
+		if exists {
+			result := []models.Value{{Type: "bulk", Bulk: key}}
+			elementArray := make([]models.Value, len(elements))
+			for j, element := range elements {
+				elementArray[j] = models.Value{Type: "bulk", Bulk: element}
+			}
+			result = append(result, models.Value{Type: "array", Array: elementArray})
+			return models.Value{Type: "array", Array: result}
+		}
+	}
+
+	return models.Value{Type: "null"}
+}
