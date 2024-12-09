@@ -34,6 +34,12 @@ type MemoryAnalytics struct {
 	KeyCount        int64
 	ExpiredKeyCount int64
 	EvictedKeyCount int64
+
+	HLLMemory         int64
+	JSONMemory        int64
+	StreamMemory      int64
+	StreamGroupMemory int64
+	BitmapMemory      int64
 }
 
 func (c *MemoryCache) GetMemoryAnalytics() *MemoryAnalytics {
@@ -122,6 +128,65 @@ func (c *MemoryCache) calculateStructureMemory(analytics *MemoryAnalytics) {
 		return true
 	})
 
+	// HyperLogLog memory
+	c.hlls.Range(func(key, hll interface{}) bool {
+		k := key.(string)
+		// Assuming a typical HLL implementation with 16KB registers
+		size := int64(len(k) + 16384)
+		atomic.AddInt64(&analytics.HLLMemory, size)
+		return true
+	})
+
+	// JSON data memory
+	c.jsonData.Range(func(key, value interface{}) bool {
+		k := key.(string)
+		v := value.([]byte) // Assuming JSON is stored as []byte
+		size := int64(len(k) + len(v))
+		atomic.AddInt64(&analytics.JSONMemory, size)
+		return true
+	})
+
+	// Stream entries memory
+	c.streams.Range(func(key, stream interface{}) bool {
+		k := key.(string)
+		s := stream.(*sync.Map)
+		size := int64(len(k))
+		s.Range(func(id, entry interface{}) bool {
+			// Assuming each entry has an ID (string) and payload ([]byte)
+			entryID := id.(string)
+			entryData := entry.([]byte)
+			size += int64(len(entryID) + len(entryData))
+			return true
+		})
+		atomic.AddInt64(&analytics.StreamMemory, size)
+		return true
+	})
+
+	// Stream consumer groups memory
+	c.streamGroups.Range(func(key, groups interface{}) bool {
+		k := key.(string)
+		g := groups.(*sync.Map)
+		size := int64(len(k))
+		g.Range(func(groupName, consumers interface{}) bool {
+			gName := groupName.(string)
+			size += int64(len(gName))
+			// Add estimated size for consumer state (PEL, last-delivered-id, etc.)
+			size += 256 // Estimated overhead per consumer group
+			return true
+		})
+		atomic.AddInt64(&analytics.StreamGroupMemory, size)
+		return true
+	})
+
+	// Bitmap memory
+	c.bitmaps.Range(func(key, bitmap interface{}) bool {
+		k := key.(string)
+		b := bitmap.([]byte)
+		size := int64(len(k) + len(b))
+		atomic.AddInt64(&analytics.BitmapMemory, size)
+		return true
+	})
+
 	// Key statistics
 	analytics.KeyCount = c.getKeyCount()
 	analytics.ExpiredKeyCount = c.getExpiredKeyCount()
@@ -129,10 +194,67 @@ func (c *MemoryCache) calculateStructureMemory(analytics *MemoryAnalytics) {
 
 func (c *MemoryCache) getKeyCount() int64 {
 	var count int64
+
+	// Count keys in sets
 	c.sets.Range(func(_, _ interface{}) bool {
 		atomic.AddInt64(&count, 1)
-		return true // Tüm elemanları gezmeye devam et
+		return true
 	})
+
+	// Count keys in hash sets
+	c.hsets.Range(func(_, _ interface{}) bool {
+		atomic.AddInt64(&count, 1)
+		return true
+	})
+
+	// Count keys in lists
+	c.lists.Range(func(_, _ interface{}) bool {
+		atomic.AddInt64(&count, 1)
+		return true
+	})
+
+	// Count keys in sets_
+	c.sets_.Range(func(_, _ interface{}) bool {
+		atomic.AddInt64(&count, 1)
+		return true
+	})
+
+	// Count keys in sorted sets
+	c.zsets.Range(func(_, _ interface{}) bool {
+		atomic.AddInt64(&count, 1)
+		return true
+	})
+
+	// Count keys in HyperLogLog structures
+	c.hlls.Range(func(_, _ interface{}) bool {
+		atomic.AddInt64(&count, 1)
+		return true
+	})
+
+	// Count keys in JSON data
+	c.jsonData.Range(func(_, _ interface{}) bool {
+		atomic.AddInt64(&count, 1)
+		return true
+	})
+
+	// Count keys in streams
+	c.streams.Range(func(_, _ interface{}) bool {
+		atomic.AddInt64(&count, 1)
+		return true
+	})
+
+	// Count keys in stream groups
+	c.streamGroups.Range(func(_, _ interface{}) bool {
+		atomic.AddInt64(&count, 1)
+		return true
+	})
+
+	// Count keys in bitmaps
+	c.bitmaps.Range(func(_, _ interface{}) bool {
+		atomic.AddInt64(&count, 1)
+		return true
+	})
+
 	return count
 }
 
@@ -192,17 +314,32 @@ func (c *MemoryCache) evictKeys(targetBytes int64) {
 			break
 		}
 
-		var keyToDelete interface{}
-		c.sets.Range(func(key, _ interface{}) bool {
-			keyToDelete = key
-			return false // İlk bulunan anahtarı silmek için döngüyü sonlandır
-		})
+		maps := [...]*sync.Map{
+			c.sets,
+			c.hlls,
+			c.jsonData,
+			c.streams,
+			c.bitmaps,
+		}
 
-		if keyToDelete != nil {
-			c.sets.Delete(keyToDelete)               // Anahtarı sil
-			atomic.AddInt64(&c.stats.evictedKeys, 1) // Silme işlemini kaydet
-		} else {
-			break // Silinecek başka anahtar kalmadıysa çık
+		evicted := false
+		for _, m := range maps {
+			var keyToDelete interface{}
+			m.Range(func(key, _ interface{}) bool {
+				keyToDelete = key
+				return false
+			})
+
+			if keyToDelete != nil {
+				m.Delete(keyToDelete)
+				atomic.AddInt64(&c.stats.evictedKeys, 1)
+				evicted = true
+				break
+			}
+		}
+
+		if !evicted {
+			break
 		}
 	}
 }
