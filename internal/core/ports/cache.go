@@ -108,4 +108,8 @@ type Cache interface {
 	XDEL(key string, ids ...string) (int64, error)
 	XAutoClaim(key, group, consumer string, minIdleTime int64, start string, count int) ([]string, []models.StreamEntry, string, error)
 	XClaim(key, group, consumer string, minIdleTime int64, ids ...string) ([]models.StreamEntry, error)
+	XLEN(key string) int64
+	XPENDING(key, group string) (int64, error)
+	XRANGE(key, start, end string, count int) ([]models.StreamEntry, error)
+	XREAD(keys []string, ids []string, count int) (map[string][]models.StreamEntry, error)
 }

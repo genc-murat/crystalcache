@@ -1140,6 +1140,45 @@ func (rd *RetryDecorator) XClaim(key, group, consumer string, minIdleTime int64,
 	return entries, err
 }
 
+func (rd *RetryDecorator) XLEN(key string) int64 {
+	var count int64
+	rd.executeWithRetry(func() error {
+		count = rd.cache.XLEN(key)
+		return nil
+	})
+	return count
+}
+
+func (rd *RetryDecorator) XPENDING(key, group string) (int64, error) {
+	var count int64
+	err := rd.executeWithRetry(func() error {
+		var err error
+		count, err = rd.cache.XPENDING(key, group)
+		return err
+	})
+	return count, err
+}
+
+func (rd *RetryDecorator) XRANGE(key, start, end string, count int) ([]models.StreamEntry, error) {
+	var entries []models.StreamEntry
+	err := rd.executeWithRetry(func() error {
+		var err error
+		entries, err = rd.cache.XRANGE(key, start, end, count)
+		return err
+	})
+	return entries, err
+}
+
+func (rd *RetryDecorator) XREAD(keys []string, ids []string, count int) (map[string][]models.StreamEntry, error) {
+	var result map[string][]models.StreamEntry
+	err := rd.executeWithRetry(func() error {
+		var err error
+		result, err = rd.cache.XREAD(keys, ids, count)
+		return err
+	})
+	return result, err
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }

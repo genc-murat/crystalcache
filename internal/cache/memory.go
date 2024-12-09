@@ -3329,6 +3329,91 @@ func (c *MemoryCache) XClaim(key, group, consumer string, minIdleTime int64, ids
 	return entries, nil
 }
 
+func (c *MemoryCache) XLEN(key string) int64 {
+	streamI, exists := c.streams.Load(key)
+	if !exists {
+		return 0
+	}
+
+	stream := streamI.(*sync.Map)
+	var count int64
+	stream.Range(func(_, _ interface{}) bool {
+		count++
+		return true
+	})
+	return count
+}
+
+func (c *MemoryCache) XPENDING(key, group string) (int64, error) {
+	streamI, exists := c.streams.Load(key)
+	if !exists {
+		return 0, nil
+	}
+
+	stream := streamI.(*sync.Map)
+	var count int64
+	stream.Range(func(_, _ interface{}) bool {
+		count++
+		return true
+	})
+	return count, nil
+}
+
+func (c *MemoryCache) XRANGE(key, start, end string, count int) ([]models.StreamEntry, error) {
+	streamI, exists := c.streams.Load(key)
+	if !exists {
+		return nil, nil
+	}
+
+	stream := streamI.(*sync.Map)
+	var entries []models.StreamEntry
+
+	stream.Range(func(k, v interface{}) bool {
+		id := k.(string)
+		if (start == "-" || id >= start) && (end == "+" || id <= end) {
+			entries = append(entries, *v.(*models.StreamEntry))
+			if count > 0 && len(entries) >= count {
+				return false
+			}
+		}
+		return true
+	})
+
+	return entries, nil
+}
+
+func (c *MemoryCache) XREAD(keys []string, ids []string, count int) (map[string][]models.StreamEntry, error) {
+	result := make(map[string][]models.StreamEntry)
+
+	for i, key := range keys {
+		streamI, exists := c.streams.Load(key)
+		if !exists {
+			continue
+		}
+
+		stream := streamI.(*sync.Map)
+		var entries []models.StreamEntry
+		startID := ids[i]
+
+		stream.Range(func(k, v interface{}) bool {
+			id := k.(string)
+			if id > startID {
+				entries = append(entries, *v.(*models.StreamEntry))
+				if count > 0 && len(entries) >= count {
+					return false
+				}
+			}
+			return true
+		})
+
+		if len(entries) > 0 {
+			result[key] = entries
+		}
+	}
+
+	return result, nil
+}
+
 func (c *MemoryCache) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(c, strategy)
 }

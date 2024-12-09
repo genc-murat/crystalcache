@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/genc-murat/crystalcache/internal/core/models"
@@ -170,6 +171,120 @@ func (h *StreamHandlers) HandleXClaim(args []models.Value) models.Value {
 			{Type: "bulk", Bulk: entry.ID},
 			{Type: "array", Array: fields},
 		}}
+	}
+
+	return models.Value{Type: "array", Array: result}
+}
+
+func (h *StreamHandlers) HandleXLEN(args []models.Value) models.Value {
+	if len(args) != 1 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'xlen' command"}
+	}
+
+	count := h.cache.XLEN(args[0].Bulk)
+	return models.Value{Type: "integer", Num: int(count)}
+}
+
+func (h *StreamHandlers) HandleXPENDING(args []models.Value) models.Value {
+	if len(args) < 2 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'xpending' command"}
+	}
+
+	count, err := h.cache.XPENDING(args[0].Bulk, args[1].Bulk)
+	if err != nil {
+		return models.Value{Type: "error", Str: err.Error()}
+	}
+
+	return models.Value{Type: "integer", Num: int(count)}
+}
+
+func (h *StreamHandlers) HandleXRANGE(args []models.Value) models.Value {
+	if len(args) < 3 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'xrange' command"}
+	}
+
+	count := 0
+	if len(args) >= 4 {
+		var err error
+		count, err = strconv.Atoi(args[3].Bulk)
+		if err != nil {
+			return models.Value{Type: "error", Str: "ERR invalid COUNT"}
+		}
+	}
+
+	entries, err := h.cache.XRANGE(args[0].Bulk, args[1].Bulk, args[2].Bulk, count)
+	if err != nil {
+		return models.Value{Type: "error", Str: err.Error()}
+	}
+
+	result := make([]models.Value, len(entries))
+	for i, entry := range entries {
+		fields := make([]models.Value, 0, len(entry.Fields)*2)
+		for k, v := range entry.Fields {
+			fields = append(fields, models.Value{Type: "bulk", Bulk: k})
+			fields = append(fields, models.Value{Type: "bulk", Bulk: v})
+		}
+		result[i] = models.Value{Type: "array", Array: []models.Value{
+			{Type: "bulk", Bulk: entry.ID},
+			{Type: "array", Array: fields},
+		}}
+	}
+
+	return models.Value{Type: "array", Array: result}
+}
+
+func (h *StreamHandlers) HandleXREAD(args []models.Value) models.Value {
+	if len(args) < 3 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'xread' command"}
+	}
+
+	count := 0
+	argIndex := 0
+
+	if strings.ToUpper(args[0].Bulk) == "COUNT" {
+		if len(args) < 5 {
+			return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'xread' command"}
+		}
+		var err error
+		count, err = strconv.Atoi(args[1].Bulk)
+		if err != nil {
+			return models.Value{Type: "error", Str: "ERR invalid COUNT"}
+		}
+		argIndex = 2
+	}
+
+	numKeys := (len(args) - argIndex) / 2
+	keys := make([]string, numKeys)
+	ids := make([]string, numKeys)
+
+	for i := 0; i < numKeys; i++ {
+		keys[i] = args[argIndex+i].Bulk
+		ids[i] = args[argIndex+numKeys+i].Bulk
+	}
+
+	entries, err := h.cache.XREAD(keys, ids, count)
+	if err != nil {
+		return models.Value{Type: "error", Str: err.Error()}
+	}
+
+	result := make([]models.Value, 0, len(entries))
+	for key, keyEntries := range entries {
+		entryValues := make([]models.Value, len(keyEntries))
+		for i, entry := range keyEntries {
+			fields := make([]models.Value, 0, len(entry.Fields)*2)
+			for k, v := range entry.Fields {
+				fields = append(fields, models.Value{Type: "bulk", Bulk: k})
+				fields = append(fields, models.Value{Type: "bulk", Bulk: v})
+			}
+			entryValues[i] = models.Value{Type: "array", Array: []models.Value{
+				{Type: "bulk", Bulk: entry.ID},
+				{Type: "array", Array: fields},
+			}}
+		}
+		result = append(result, models.Value{Type: "array", Array: []models.Value{
+			{Type: "bulk", Bulk: key},
+			{Type: "array", Array: entryValues},
+		}})
 	}
 
 	return models.Value{Type: "array", Array: result}

@@ -232,6 +232,15 @@ func (r *Registry) registerHandlers() {
 
 	// stream commands
 	r.handlers["XADD"] = r.streamHandlers.HandleXAdd
+	r.handlers["XACK"] = r.streamHandlers.HandleXACK
+	r.handlers["XLEN"] = r.streamHandlers.HandleXLEN
+	r.handlers["XPENDING"] = r.streamHandlers.HandleXPENDING
+	r.handlers["XRANGE"] = r.streamHandlers.HandleXRANGE
+	r.handlers["XREAD"] = r.streamHandlers.HandleXREAD
+	r.handlers["XDEL"] = r.streamHandlers.HandleXDEL
+	r.handlers["XAUTOCLAIM"] = r.streamHandlers.HandleXAutoClaim
+	r.handlers["XCLAIM"] = r.streamHandlers.HandleXClaim
+
 }
 
 func (r *Registry) GetHandler(cmd string) (CommandHandler, bool) {
