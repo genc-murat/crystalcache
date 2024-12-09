@@ -702,3 +702,93 @@ func (h *ListHandlers) HandleLMPop(args []models.Value) models.Value {
 
 	return models.Value{Type: "null"}
 }
+
+// HandleLPos handles the LPOS command which returns the position of an element in the list
+// Parameters:
+//   - args: Array of Values containing the key and element to find
+//
+// Returns:
+//   - models.Value: The position of the element, or null if not found
+//     Returns error if wrong number of arguments
+func (h *ListHandlers) HandleLPos(args []models.Value) models.Value {
+	if err := util.ValidateArgs(args, 2); err != nil {
+		return util.ToValue(err)
+	}
+
+	position, exists := h.cache.LPos(args[0].Bulk, args[1].Bulk)
+	if !exists {
+		return models.Value{Type: "null"}
+	}
+
+	return models.Value{Type: "integer", Num: position}
+}
+
+// HandleLPushX handles the LPUSHX command which inserts an element at the head of an existing list
+// Parameters:
+//   - args: Array of Values containing the key and value to push
+//
+// Returns:
+//   - models.Value: The length of the list after the push operation
+//     Returns error if wrong number of arguments or operation fails
+func (h *ListHandlers) HandleLPushX(args []models.Value) models.Value {
+	if err := util.ValidateArgs(args, 2); err != nil {
+		return util.ToValue(err)
+	}
+
+	length, err := h.cache.LPushX(args[0].Bulk, args[1].Bulk)
+	if err != nil {
+		return util.ToValue(err)
+	}
+
+	return models.Value{Type: "integer", Num: length}
+}
+
+// HandleRPushX handles the RPUSHX command which inserts an element at the tail of an existing list
+// Parameters:
+//   - args: Array of Values containing the key and value to push
+//
+// Returns:
+//   - models.Value: The length of the list after the push operation
+//     Returns error if wrong number of arguments or operation fails
+func (h *ListHandlers) HandleRPushX(args []models.Value) models.Value {
+	if err := util.ValidateArgs(args, 2); err != nil {
+		return util.ToValue(err)
+	}
+
+	length, err := h.cache.RPushX(args[0].Bulk, args[1].Bulk)
+	if err != nil {
+		return util.ToValue(err)
+	}
+
+	return models.Value{Type: "integer", Num: length}
+}
+
+// HandleLTrim handles the LTRIM command which trims a list to the specified range
+// Parameters:
+//   - args: Array of Values containing the key, start index, and stop index
+//
+// Returns:
+//   - models.Value: "OK" if successful
+//     Returns error if wrong number of arguments or invalid indices
+func (h *ListHandlers) HandleLTrim(args []models.Value) models.Value {
+	if err := util.ValidateArgs(args, 3); err != nil {
+		return util.ToValue(err)
+	}
+
+	start, err := util.ParseInt(args[1])
+	if err != nil {
+		return util.ToValue(err)
+	}
+
+	stop, err := util.ParseInt(args[2])
+	if err != nil {
+		return util.ToValue(err)
+	}
+
+	err = h.cache.LTrim(args[0].Bulk, start, stop)
+	if err != nil {
+		return util.ToValue(err)
+	}
+
+	return models.Value{Type: "string", Str: "OK"}
+}

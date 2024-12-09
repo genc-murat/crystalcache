@@ -3140,6 +3140,94 @@ func (rd *RetryDecorator) LInsert(key string, before bool, pivot string, value s
 	return length, finalErr
 }
 
+// LPOS returns the index of the first matching element in a list
+func (c *MemoryCache) LPos(key string, element string) (int, bool) {
+	listI, exists := c.lists.Load(key)
+	if !exists {
+		return 0, false
+	}
+
+	list := listI.(*[]string)
+	for i, value := range *list {
+		if value == element {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
+// LPUSHX inserts elements at the head of the list only if the list exists
+func (c *MemoryCache) LPushX(key string, value string) (int, error) {
+	// First check if list exists
+	if !c.Exists(key) {
+		return 0, nil
+	}
+
+	// If it exists, use standard LPush
+	return c.LPush(key, value)
+}
+
+// RPUSHX inserts elements at the tail of the list only if the list exists
+func (c *MemoryCache) RPushX(key string, value string) (int, error) {
+	// First check if list exists
+	if !c.Exists(key) {
+		return 0, nil
+	}
+
+	// If it exists, use standard RPush
+	return c.RPush(key, value)
+}
+
+// LTRIM trims a list to the specified range
+func (c *MemoryCache) LTrim(key string, start int, stop int) error {
+	for {
+		listI, exists := c.lists.Load(key)
+		if !exists {
+			return nil
+		}
+
+		list := listI.(*[]string)
+		length := len(*list)
+
+		// Convert negative indices to positive
+		if start < 0 {
+			start = length + start
+		}
+		if stop < 0 {
+			stop = length + stop
+		}
+
+		// Boundary checks
+		if start < 0 {
+			start = 0
+		}
+		if stop >= length {
+			stop = length - 1
+		}
+		if start > stop {
+			// Empty the list if start > stop
+			c.lists.Delete(key)
+			c.incrementKeyVersion(key)
+			return nil
+		}
+
+		// Create new list with trimmed values
+		newList := make([]string, stop-start+1)
+		copy(newList, (*list)[start:stop+1])
+
+		// Try to update atomically
+		if c.lists.CompareAndSwap(key, listI, &newList) {
+			c.incrementKeyVersion(key)
+
+			// If list is empty after trim, remove it
+			if len(newList) == 0 {
+				c.lists.Delete(key)
+			}
+			return nil
+		}
+	}
+}
+
 func (c *MemoryCache) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(c, strategy)
 }

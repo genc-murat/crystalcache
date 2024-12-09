@@ -99,4 +99,8 @@ type Cache interface {
 	HIncrByFloat(key, field string, increment float64) (float64, error)
 	LIndex(key string, index int) (string, bool)
 	LInsert(key string, before bool, pivot string, value string) (int, error)
+	LTrim(key string, start, stop int) error
+	LPos(key string, element string) (int, bool)
+	LPushX(key string, value string) (int, error)
+	RPushX(key string, value string) (int, error)
 }

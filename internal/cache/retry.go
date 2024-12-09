@@ -1028,6 +1028,70 @@ func (rd *RetryDecorator) HIncrByFloat(key, field string, increment float64) (fl
 	return result, finalErr
 }
 
+// LPOS with retry logic
+func (rd *RetryDecorator) LPos(key string, element string) (int, bool) {
+	var index int
+	var exists bool
+	var finalExists bool
+
+	err := rd.executeWithRetry(func() error {
+		index, exists = rd.cache.LPos(key, element)
+		if exists {
+			finalExists = true
+			return nil
+		}
+		return errors.New("element not found")
+	})
+
+	if err != nil {
+		return 0, false
+	}
+	return index, finalExists
+}
+
+// LPUSHX with retry logic
+func (rd *RetryDecorator) LPushX(key string, value string) (int, error) {
+	var length int
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		length, err = rd.cache.LPushX(key, value)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return 0, err
+	}
+	return length, finalErr
+}
+
+// RPUSHX with retry logic
+func (rd *RetryDecorator) RPushX(key string, value string) (int, error) {
+	var length int
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		length, err = rd.cache.RPushX(key, value)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return 0, err
+	}
+	return length, finalErr
+}
+
+// LTRIM with retry logic
+func (rd *RetryDecorator) LTrim(key string, start int, stop int) error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.LTrim(key, start, stop)
+	})
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }
