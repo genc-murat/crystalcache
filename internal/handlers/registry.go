@@ -106,6 +106,10 @@ func (r *Registry) registerHandlers() {
 	r.handlers["LLEN"] = r.listHandlers.HandleLLen
 	r.handlers["LSET"] = r.listHandlers.HandleLSet
 	r.handlers["LREM"] = r.listHandlers.HandleLRem
+	r.handlers["BLMOVE"] = r.listHandlers.HandleBLMOVE
+	r.handlers["BRPOP"] = r.listHandlers.HandleBRPop
+	r.handlers["BLPOP"] = r.listHandlers.HandleBLPop
+	r.handlers["BLMPOP"] = r.listHandlers.HandleBLMPOP
 
 	// Set Commands
 	r.handlers["SADD"] = r.setHandlers.HandleSAdd

@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"time"
+
 	"github.com/genc-murat/crystalcache/internal/core/models"
 	"github.com/genc-murat/crystalcache/internal/core/ports"
 	"github.com/genc-murat/crystalcache/internal/util"
@@ -217,4 +219,301 @@ func (h *ListHandlers) HandleLRem(args []models.Value) models.Value {
 	}
 
 	return models.Value{Type: "integer", Num: removed}
+}
+
+// HandleBLPop handles the BLPOP command which removes and returns an element from the head of the list
+// If the list is empty, it blocks until an element is available or timeout is reached
+// Parameters:
+//   - args: Array of Values containing the keys and timeout in seconds
+//
+// Returns:
+//   - models.Value: Array containing the key and popped element, or null if timeout reached
+func (h *ListHandlers) HandleBLPop(args []models.Value) models.Value {
+	if len(args) < 2 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'blpop' command"}
+	}
+
+	// Last argument is the timeout
+	timeout, err := util.ParseFloat(args[len(args)-1])
+	if err != nil {
+		return util.ToValue(err)
+	}
+
+	// Convert timeout to duration
+	timeoutDuration := time.Duration(timeout * float64(time.Second))
+	if timeout == 0 {
+		timeoutDuration = time.Duration(0)
+	}
+
+	// Try each key until we get a value or reach timeout
+	timer := time.NewTimer(timeoutDuration)
+	defer timer.Stop()
+
+	for {
+		// Try all keys first without blocking
+		for i := 0; i < len(args)-1; i++ {
+			key := args[i].Bulk
+			if value, exists := h.cache.LPop(key); exists {
+				return models.Value{
+					Type: "array",
+					Array: []models.Value{
+						{Type: "bulk", Bulk: key},
+						{Type: "bulk", Bulk: value},
+					},
+				}
+			}
+		}
+
+		// If timeout is 0, we keep trying indefinitely
+		if timeout == 0 {
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+
+		select {
+		case <-timer.C:
+			return models.Value{Type: "null"}
+		default:
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+}
+
+// HandleBRPop handles the BRPOP command which removes and returns an element from the tail of the list
+// If the list is empty, it blocks until an element is available or timeout is reached
+// Parameters:
+//   - args: Array of Values containing the keys and timeout in seconds
+//
+// Returns:
+//   - models.Value: Array containing the key and popped element, or null if timeout reached
+func (h *ListHandlers) HandleBRPop(args []models.Value) models.Value {
+	if len(args) < 2 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'brpop' command"}
+	}
+
+	// Last argument is the timeout
+	timeout, err := util.ParseFloat(args[len(args)-1])
+	if err != nil {
+		return util.ToValue(err)
+	}
+
+	// Convert timeout to duration
+	timeoutDuration := time.Duration(timeout * float64(time.Second))
+	if timeout == 0 {
+		timeoutDuration = time.Duration(0)
+	}
+
+	// Try each key until we get a value or reach timeout
+	timer := time.NewTimer(timeoutDuration)
+	defer timer.Stop()
+
+	for {
+		// Try all keys first without blocking
+		for i := 0; i < len(args)-1; i++ {
+			key := args[i].Bulk
+			if value, exists := h.cache.RPop(key); exists {
+				return models.Value{
+					Type: "array",
+					Array: []models.Value{
+						{Type: "bulk", Bulk: key},
+						{Type: "bulk", Bulk: value},
+					},
+				}
+			}
+		}
+
+		// If timeout is 0, we keep trying indefinitely
+		if timeout == 0 {
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+
+		select {
+		case <-timer.C:
+			return models.Value{Type: "null"}
+		default:
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+}
+
+// HandleBLMPOP handles the BLMPOP command which atomically removes and returns elements from multiple lists
+// Parameters:
+//   - args: Array of Values containing timeout, key count, keys, direction (LEFT/RIGHT), and count
+//
+// Returns:
+//   - models.Value: Array containing the key and popped elements, or null if timeout reached
+func (h *ListHandlers) HandleBLMPOP(args []models.Value) models.Value {
+	if len(args) < 4 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'blmpop' command"}
+	}
+
+	timeout, err := util.ParseFloat(args[0])
+	if err != nil {
+		return util.ToValue(err)
+	}
+
+	keyCount, err := util.ParseInt(args[1])
+	if err != nil {
+		return util.ToValue(err)
+	}
+
+	if len(args) < 2+keyCount+1 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'blmpop' command"}
+	}
+
+	direction := args[2+keyCount].Bulk
+	if direction != "LEFT" && direction != "RIGHT" {
+		return models.Value{Type: "error", Str: "ERR direction must be LEFT or RIGHT"}
+	}
+
+	count := 1
+	if len(args) > 3+keyCount {
+		count, err = util.ParseInt(args[3+keyCount])
+		if err != nil {
+			return util.ToValue(err)
+		}
+		if count <= 0 {
+			return models.Value{Type: "error", Str: "ERR count must be positive"}
+		}
+	}
+
+	// Convert timeout to duration
+	timeoutDuration := time.Duration(timeout * float64(time.Second))
+	if timeout == 0 {
+		timeoutDuration = time.Duration(0)
+	}
+
+	timer := time.NewTimer(timeoutDuration)
+	defer timer.Stop()
+
+	for {
+		// Try all keys first without blocking
+		for i := 0; i < keyCount; i++ {
+			key := args[2+i].Bulk
+			var elements []string
+			var exists bool
+
+			if direction == "LEFT" {
+				for j := 0; j < count; j++ {
+					if value, ok := h.cache.LPop(key); ok {
+						elements = append(elements, value)
+						exists = true
+					} else {
+						break
+					}
+				}
+			} else {
+				for j := 0; j < count; j++ {
+					if value, ok := h.cache.RPop(key); ok {
+						elements = append(elements, value)
+						exists = true
+					} else {
+						break
+					}
+				}
+			}
+
+			if exists {
+				result := []models.Value{{Type: "bulk", Bulk: key}}
+				elementArray := make([]models.Value, len(elements))
+				for j, element := range elements {
+					elementArray[j] = models.Value{Type: "bulk", Bulk: element}
+				}
+				result = append(result, models.Value{Type: "array", Array: elementArray})
+				return models.Value{Type: "array", Array: result}
+			}
+		}
+
+		// If timeout is 0, we keep trying indefinitely
+		if timeout == 0 {
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+
+		select {
+		case <-timer.C:
+			return models.Value{Type: "null"}
+		default:
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+}
+
+// HandleBLMOVE handles the BLMOVE command which atomically moves an element from one list to another
+// Parameters:
+//   - args: Array of Values containing source key, destination key, source direction (LEFT/RIGHT),
+//     destination direction (LEFT/RIGHT), and timeout
+//
+// Returns:
+//   - models.Value: The moved element, or null if timeout reached
+func (h *ListHandlers) HandleBLMOVE(args []models.Value) models.Value {
+	if err := util.ValidateArgs(args, 5); err != nil {
+		return util.ToValue(err)
+	}
+
+	source := args[0].Bulk
+	destination := args[1].Bulk
+	sourceDir := args[2].Bulk
+	destDir := args[3].Bulk
+
+	if sourceDir != "LEFT" && sourceDir != "RIGHT" {
+		return models.Value{Type: "error", Str: "ERR source direction must be LEFT or RIGHT"}
+	}
+	if destDir != "LEFT" && destDir != "RIGHT" {
+		return models.Value{Type: "error", Str: "ERR destination direction must be LEFT or RIGHT"}
+	}
+
+	timeout, err := util.ParseFloat(args[4])
+	if err != nil {
+		return util.ToValue(err)
+	}
+
+	// Convert timeout to duration
+	timeoutDuration := time.Duration(timeout * float64(time.Second))
+	if timeout == 0 {
+		timeoutDuration = time.Duration(0)
+	}
+
+	timer := time.NewTimer(timeoutDuration)
+	defer timer.Stop()
+
+	for {
+		// Try to move element
+		var value string
+		var exists bool
+
+		if sourceDir == "LEFT" {
+			value, exists = h.cache.LPop(source)
+		} else {
+			value, exists = h.cache.RPop(source)
+		}
+
+		if exists {
+			if destDir == "LEFT" {
+				_, err = h.cache.LPush(destination, value)
+			} else {
+				_, err = h.cache.RPush(destination, value)
+			}
+
+			if err != nil {
+				return util.ToValue(err)
+			}
+
+			return models.Value{Type: "bulk", Bulk: value}
+		}
+
+		// If timeout is 0, we keep trying indefinitely
+		if timeout == 0 {
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+
+		select {
+		case <-timer.C:
+			return models.Value{Type: "null"}
+		default:
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
 }
