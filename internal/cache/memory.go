@@ -825,6 +825,12 @@ func (c *MemoryCache) Type(key string) string {
 	if _, exists := c.zsets.Load(key); exists {
 		return "zset"
 	}
+	if _, exists := c.bitmaps.Load(key); exists {
+		return "bitmap"
+	}
+	if _, exists := c.streams.Load(key); exists {
+		return "stream"
+	}
 	return "none"
 }
 
