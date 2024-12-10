@@ -120,11 +120,33 @@ func (b *BasicOps) getSortedMembers(key string) []models.ZSetMember {
 		return true
 	})
 
+	// Sıralama yalnızca `Member` alanına göre yapılır
 	sort.Slice(members, func(i, j int) bool {
-		if members[i].Score == members[j].Score {
-			return members[i].Member < members[j].Member
-		}
-		return members[i].Score < members[j].Score
+		return members[i].Member < members[j].Member
+	})
+
+	return members
+}
+
+func (b *BasicOps) getLexSortedMembers(key string) []models.ZSetMember {
+	value, exists := b.cache.Load(key)
+	if !exists {
+		return []models.ZSetMember{}
+	}
+
+	set := value.(*sync.Map)
+	var members []models.ZSetMember
+
+	set.Range(func(member, score interface{}) bool {
+		members = append(members, models.ZSetMember{
+			Member: member.(string),
+			Score:  score.(float64),
+		})
+		return true
+	})
+
+	sort.Slice(members, func(i, j int) bool {
+		return members[i].Member < members[j].Member
 	})
 
 	return members
