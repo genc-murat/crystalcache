@@ -13,6 +13,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/genc-murat/crystalcache/internal/cache/zset"
 	"github.com/genc-murat/crystalcache/internal/core/models"
 	"github.com/genc-murat/crystalcache/internal/core/ports"
 	"github.com/genc-murat/crystalcache/pkg/utils/hash"
@@ -37,6 +38,8 @@ type MemoryCache struct {
 	bloomFilter  *models.BloomFilter
 	lastDefrag   time.Time
 	defragMu     sync.Mutex
+
+	zsetManager *zset.Manager
 }
 
 func NewMemoryCache() *MemoryCache {
@@ -70,6 +73,8 @@ func NewMemoryCache() *MemoryCache {
 			mc.cleanExpired()
 		}
 	}()
+
+	mc.zsetManager = zset.NewManager(mc.zsets, mc.keyVersions)
 
 	return mc
 }
@@ -187,12 +192,18 @@ func (c *MemoryCache) Del(key string) (bool, error) {
 		deleted = true
 	}
 
+	// zsets'i ekle
+	if _, ok := c.zsets.LoadAndDelete(key); ok {
+		deleted = true
+	}
+
 	if deleted {
 		c.incrementKeyVersion(key)
 	}
 
 	return deleted, nil
 }
+
 func (c *MemoryCache) Set(key string, value string) error {
 	c.bloomFilter.Add([]byte(key))
 	c.sets.Store(key, value)
@@ -1041,6 +1052,10 @@ func (c *MemoryCache) DBSize() int {
 	countMap(c.hsets)
 	countMap(c.lists)
 	countMap(c.sets_)
+	countMap(c.zsets) // zsets eklendi
+	countMap(c.streams)
+	countMap(c.bitmaps)
+	countMap(c.jsonData)
 
 	return int(total)
 }
@@ -1253,7 +1268,7 @@ func (c *MemoryCache) Info() map[string]string {
 	stats["total_system_memory_human"] = fmt.Sprintf("%.2fMB", float64(memStats.Sys)/(1024*1024))
 	stats["mem_allocator"] = "go"
 
-	var stringKeys, hashKeys, listKeys, setKeys, jsonKeys, streamKeys, bitmapKeys int
+	var stringKeys, hashKeys, listKeys, setKeys, jsonKeys, streamKeys, bitmapKeys, zsetKeys int
 
 	c.sets.Range(func(_, _ interface{}) bool {
 		stringKeys++
@@ -1297,7 +1312,15 @@ func (c *MemoryCache) Info() map[string]string {
 	})
 	stats["bitmap_keys"] = fmt.Sprintf("%d", bitmapKeys)
 
-	stats["total_keys"] = fmt.Sprintf("%d", stringKeys+hashKeys+listKeys+setKeys+jsonKeys+streamKeys+bitmapKeys)
+	// ZSet keys sayısını hesapla
+	c.zsets.Range(func(_, _ interface{}) bool {
+		zsetKeys++
+		return true
+	})
+	stats["zset_keys"] = fmt.Sprintf("%d", zsetKeys)
+
+	// Total keys hesaplamasına zsetKeys'i ekle
+	stats["total_keys"] = fmt.Sprintf("%d", stringKeys+hashKeys+listKeys+setKeys+jsonKeys+streamKeys+bitmapKeys+zsetKeys)
 
 	stats["json_native_storage"] = "enabled"
 	stats["json_version"] = "1.0"
@@ -1964,9 +1987,13 @@ func (c *MemoryCache) Scan(cursor int, matchPattern string, count int) ([]string
 
 	// Collect keys from all data structures
 	collectKeys(c.sets)
-	collectKeys(c.sets_)
 	collectKeys(c.hsets)
 	collectKeys(c.lists)
+	collectKeys(c.sets_)
+	collectKeys(c.zsets) // zsets eklendi
+	collectKeys(c.streams)
+	collectKeys(c.bitmaps)
+	collectKeys(c.jsonData)
 
 	// Sort for consistent iteration
 	sort.Strings(allKeys)
