@@ -10,8 +10,6 @@ func (c *MemoryCache) ZDiffStore(destination string, keys ...string) (int, error
 	return c.zsetManager.ZDiffStore(destination, keys...)
 }
 
-// internal/cache/memory_cache.go
-
 // Basic operations
 func (c *MemoryCache) ZAdd(key string, score float64, member string) error {
 	return c.zsetManager.ZAdd(key, score, member)

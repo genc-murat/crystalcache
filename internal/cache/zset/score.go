@@ -1,5 +1,3 @@
-// internal/cache/zset/score.go
-
 package zset
 
 import (

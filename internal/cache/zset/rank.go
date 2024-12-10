@@ -1,5 +1,3 @@
-// internal/cache/zset/rank.go
-
 package zset
 
 import (

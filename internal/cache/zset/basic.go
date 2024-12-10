@@ -1,5 +1,3 @@
-// internal/cache/zset/basic.go
-
 package zset
 
 import (
