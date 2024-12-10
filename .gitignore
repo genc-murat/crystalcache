@@ -27,3 +27,4 @@ go.work.sum
 **/database.aof
 
 .idea/
+redis/
