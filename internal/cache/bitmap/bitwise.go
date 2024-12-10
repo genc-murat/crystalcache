@@ -123,6 +123,7 @@ func (b *BitwiseOps) bitopXOR(keys ...string) []byte {
 	var maxLen int
 	values := make([][]byte, 0, len(keys))
 
+	// Load all key values and determine the maximum length
 	for _, key := range keys {
 		if val, exists := b.basicOps.cache.Load(key); exists {
 			bytes := val.([]byte)
@@ -137,17 +138,18 @@ func (b *BitwiseOps) bitopXOR(keys ...string) []byte {
 		return nil
 	}
 
+	// Initialize result array with zeros
 	result := make([]byte, maxLen)
-	for i := 0; i < maxLen; i++ {
-		for j, val := range values {
+
+	// Apply XOR across all bitmaps
+	for _, val := range values {
+		for i := 0; i < maxLen; i++ {
 			if i < len(val) {
-				if j == 0 {
-					result[i] = val[i]
-				} else {
-					result[i] ^= val[i]
-				}
+				result[i] ^= val[i]
+				fmt.Printf("Intermediate result at byte %d: %08b\n", i, result[i])
 			}
 		}
 	}
+
 	return result
 }
