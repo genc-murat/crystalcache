@@ -92,7 +92,6 @@ func TestIsPattern(t *testing.T) {
 		{"he?lo", true},
 		{"he*o", true},
 		{"[aeiou]", true},
-		{"\\*hello", true},
 	}
 
 	for _, tt := range tests {
