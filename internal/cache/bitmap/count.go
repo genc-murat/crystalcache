@@ -96,7 +96,7 @@ func (c *CountOps) findBitInByte(b byte, bit int, reverse bool) int {
 	if reverse {
 		for i := 7; i >= 0; i-- {
 			if ((b >> i) & 1) == byte(bit) {
-				return 7 - i
+				return 7 - i // Adjust reverse position correctly
 			}
 		}
 	} else {
@@ -115,8 +115,11 @@ func (c *CountOps) CountBitsInRange(b byte, start, end int) int {
 		return 0
 	}
 
-	mask := byte(0xFF)
-	mask = mask >> uint(start)
-	mask = mask << uint(7-end)
+	// Create mask to clear bits before `start` and after `end`
+	maskStart := byte(0xFF) >> uint(start) // Clear bits before `start`
+	maskEnd := byte(0xFF) << uint(7-end)   // Clear bits after `end`
+	mask := maskStart & maskEnd            // Combine masks
+
+	// Apply mask and count the set bits
 	return bits.OnesCount8(b & mask)
 }
