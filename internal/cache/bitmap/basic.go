@@ -26,7 +26,11 @@ func (b *BasicOps) GetBit(key string, offset int64) (int, error) {
 		return 0, nil
 	}
 
-	valBytes := val.([]byte)
+	valBytes, ok := val.([]byte)
+	if !ok {
+		return 0, fmt.Errorf("ERR invalid bitmap format")
+	}
+
 	byteIndex := offset / 8
 	if int64(len(valBytes)) <= byteIndex {
 		return 0, nil
@@ -43,7 +47,10 @@ func (b *BasicOps) SetBit(key string, offset int64, value int) (int, error) {
 	}
 
 	valI, _ := b.cache.LoadOrStore(key, make([]byte, 0))
-	valBytes := valI.([]byte)
+	valBytes, ok := valI.([]byte)
+	if !ok {
+		return 0, fmt.Errorf("ERR invalid bitmap format")
+	}
 
 	byteIndex := offset / 8
 	bitIndex := offset % 8
@@ -62,7 +69,7 @@ func (b *BasicOps) SetBit(key string, offset int64, value int) (int, error) {
 	if value == 1 {
 		valBytes[byteIndex] |= 1 << (7 - bitIndex)
 	} else {
-		valBytes[byteIndex] &= ^(1 << (7 - bitIndex))
+		valBytes[byteIndex] &^= 1 << (7 - bitIndex)
 	}
 
 	// Store updated bitmap
@@ -72,18 +79,11 @@ func (b *BasicOps) SetBit(key string, offset int64, value int) (int, error) {
 	return int(oldBit), nil
 }
 
-// Helper methods
-
 // incrementKeyVersion increments the version of a key
 func (b *BasicOps) incrementKeyVersion(key string) {
-	for {
-		var version int64
-		oldVersionI, _ := b.version.LoadOrStore(key, version)
-		oldVersion := oldVersionI.(int64)
-		if b.version.CompareAndSwap(key, oldVersion, oldVersion+1) {
-			break
-		}
-	}
+	val, _ := b.version.LoadOrStore(key, int64(0))
+	version := val.(int64)
+	b.version.Store(key, version+1)
 }
 
 // GetBitmap returns the underlying byte slice for a key
@@ -92,11 +92,21 @@ func (b *BasicOps) GetBitmap(key string) []byte {
 	if !exists {
 		return nil
 	}
-	return val.([]byte)
+
+	valBytes, ok := val.([]byte)
+	if !ok {
+		return nil
+	}
+
+	return valBytes
 }
 
 // CreateBitmap creates a new bitmap of given size
 func (b *BasicOps) CreateBitmap(key string, size int) error {
+	if size < 0 {
+		return fmt.Errorf("ERR size must be non-negative")
+	}
+
 	bitmap := make([]byte, size)
 	b.cache.Store(key, bitmap)
 	b.incrementKeyVersion(key)
