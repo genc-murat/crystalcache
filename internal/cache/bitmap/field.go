@@ -113,8 +113,13 @@ func (f *FieldOps) bitfieldSet(key string, typ string, offset int64, value int64
 		bytes = newBytes
 	}
 
+	// Retrieve the old value
+	oldValue, err := f.bitfieldGet(key, typ, offset)
+	if err != nil {
+		return 0, err
+	}
+
 	mask := int64((1 << bits) - 1)
-	oldValue := value
 	value &= mask
 
 	startBit := offset % 8
