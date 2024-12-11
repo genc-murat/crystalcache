@@ -1694,13 +1694,24 @@ func (h *JSONHandlers) HandleJSONSearch(args []models.Value) models.Value {
 		return models.Value{Type: "error", Str: err.Error()}
 	}
 
+	// Assert target to string
+	jsonStr, ok := target.(string)
+	if !ok {
+		// If not string, try marshaling the target value to JSON
+		bytes, err := json.Marshal(target)
+		if err != nil {
+			return models.Value{Type: "error", Str: "ERR failed to process target JSON"}
+		}
+		jsonStr = string(bytes)
+	}
+
 	// Search in value
 	opts := &jsonUtil.SearchOptions{
 		CaseSensitive: caseSensitive,
 		IncludeKeys:   true,
 		IncludeValues: true,
 	}
-	paths := h.searchUtil.Search(target, keyword, opts)
+	paths := h.searchUtil.Search(jsonStr, keyword, opts)
 
 	// Convert result to JSON array
 	result, err := json.Marshal(paths)
