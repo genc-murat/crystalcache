@@ -42,7 +42,11 @@ func main() {
 	memCache := cache.NewMemoryCache()
 	memCache.StartDefragmentation(5*time.Minute, 0.25)
 
-	aofStorage, err := storage.NewAOF("database.aof")
+	aofConfig := storage.DefaultAOFConfig()
+	aofConfig.Path = "database.aof"
+	aofConfig.SyncInterval = 2 * time.Second
+
+	aofStorage, err := storage.NewAOF(aofConfig)
 	if err != nil {
 		log.Fatal(err)
 	}

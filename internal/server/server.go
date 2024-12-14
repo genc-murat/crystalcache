@@ -16,7 +16,6 @@ import (
 	"github.com/genc-murat/crystalcache/internal/handlers"
 	"github.com/genc-murat/crystalcache/internal/metrics"
 	"github.com/genc-murat/crystalcache/pkg/resp"
-	util "github.com/genc-murat/crystalcache/pkg/utils"
 )
 
 type Server struct {
@@ -80,27 +79,112 @@ func NewServer(cache ports.Cache, storage ports.Storage, pool ports.Pool, config
 
 func isWriteCommand(cmd string) bool {
 	writeCommands := map[string]bool{
-		"SET":      true,
-		"DEL":      true,
-		"INCR":     true,
-		"DECR":     true,
-		"RPUSH":    true,
-		"LPUSH":    true,
-		"RPOP":     true,
-		"LPOP":     true,
-		"SADD":     true,
-		"SREM":     true,
-		"ZADD":     true,
-		"ZREM":     true,
-		"HSET":     true,
-		"HDEL":     true,
-		"EXPIRE":   true,
+		// String Commands
+		"SET":         true,
+		"MSET":        true,
+		"MSETNX":      true,
+		"APPEND":      true,
+		"INCR":        true,
+		"INCRBY":      true,
+		"INCRBYFLOAT": true,
+		"DECR":        true,
+		"DECRBY":      true,
+		"GETSET":      true,
+		"SETRANGE":    true,
+
+		// Key Commands
+		"DEL":       true,
+		"UNLINK":    true,
+		"EXPIRE":    true,
+		"EXPIREAT":  true,
+		"PEXPIRE":   true,
+		"PEXPIREAT": true,
+
+		// List Commands
+		"RPUSH":   true,
+		"LPUSH":   true,
+		"RPUSHX":  true,
+		"LPUSHX":  true,
+		"RPOP":    true,
+		"LPOP":    true,
+		"LSET":    true,
+		"LTRIM":   true,
+		"LINSERT": true,
+		"LREM":    true,
+		"BLPOP":   true,
+		"BRPOP":   true,
+		"LMOVE":   true,
+		"BLMOVE":  true,
+
+		// Set Commands
+		"SADD":        true,
+		"SREM":        true,
+		"SPOP":        true,
+		"SMOVE":       true,
+		"SINTERSTORE": true,
+		"SUNIONSTORE": true,
+		"SDIFFSTORE":  true,
+
+		// Sorted Set Commands
+		"ZADD":             true,
+		"ZREM":             true,
+		"ZINCRBY":          true,
+		"ZREMRANGEBYRANK":  true,
+		"ZREMRANGEBYSCORE": true,
+		"ZREMRANGEBYLEX":   true,
+		"ZINTERSTORE":      true,
+		"ZUNIONSTORE":      true,
+		"ZDIFFSTORE":       true,
+		"ZPOPMIN":          true,
+		"ZPOPMAX":          true,
+		"BZPOPMIN":         true,
+		"BZPOPMAX":         true,
+		"ZRANGESTORE":      true,
+
+		// Hash Commands
+		"HSET":         true,
+		"HSETNX":       true,
+		"HMSET":        true,
+		"HDEL":         true,
+		"HINCRBY":      true,
+		"HINCRBYFLOAT": true,
+
+		// Stream Commands
+		"XADD":       true,
+		"XDEL":       true,
+		"XTRIM":      true,
+		"XSETID":     true,
+		"XGROUP":     true,
+		"XACK":       true,
+		"XCLAIM":     true,
+		"XAUTOCLAIM": true,
+
+		// Bitmap Commands
+		"SETBIT":   true,
+		"BITOP":    true,
+		"BITFIELD": true,
+
+		// JSON Commands
+		"JSON.SET":       true,
+		"JSON.DEL":       true,
+		"JSON.ARRAPPEND": true,
+		"JSON.ARRINSERT": true,
+		"JSON.ARRTRIM":   true,
+		"JSON.ARRPOP":    true,
+		"JSON.STRAPPEND": true,
+		"JSON.NUMINCRBY": true,
+		"JSON.NUMMULTBY": true,
+		"JSON.CLEAR":     true,
+		"JSON.MERGE":     true,
+		"JSON.MSET":      true,
+
+		// Admin Commands
 		"FLUSHALL": true,
 		"FLUSHDB":  true,
-		"JSON.SET": true,
-		"JSON.DEL": true,
-		"MULTI":    true,
-		"EXEC":     true,
+
+		// Transaction Commands
+		"MULTI": true,
+		"EXEC":  true,
 	}
 	return writeCommands[cmd]
 }
@@ -302,6 +386,18 @@ func (s *Server) loadData() error {
 			return
 		}
 
+		// Get command name
+		cmd := strings.ToUpper(value.Array[0].Bulk)
+
+		// Get command handler
+		handler, exists := s.registry.GetHandler(cmd)
+		if !exists {
+			log.Printf("Unknown command in AOF: %s", cmd)
+			return
+		}
+
+		// Execute command
+		handler(value.Array[1:])
 	})
 }
 
@@ -402,34 +498,6 @@ func (s *Server) handleCommand(value models.Value) models.Value {
 	}
 
 	cmd := strings.ToUpper(value.Array[0].Bulk)
-	log.Printf("[DEBUG] Received command: %s with args: %+v", cmd, value.Array[1:])
-
-	// Special handling for INFO command to combine cache and replication info
-	if len(value.Array) == 0 {
-		return models.Value{Type: "error", Str: "ERR empty command"}
-	}
-
-	// Special handling for INFO command to combine cache and replication info
-	if cmd == "INFO" {
-		cacheInfo := s.adminHandlers.HandleInfo(value.Array[1:])
-		if cacheInfo.Type == "error" {
-			return cacheInfo
-		}
-
-		// Parse the cache info string back into a map
-		cacheInfoMap := parseInfoString(cacheInfo.Bulk)
-
-		// Merge with replication info
-		replInfo := s.GetReplicationInfo()
-		for k, v := range replInfo {
-			cacheInfoMap[k] = v
-		}
-
-		return models.Value{
-			Type: "bulk",
-			Bulk: util.FormatInfoResponse(cacheInfoMap),
-		}
-	}
 
 	// Handle regular commands
 	handler, exists := s.registry.GetHandler(cmd)
@@ -437,15 +505,22 @@ func (s *Server) handleCommand(value models.Value) models.Value {
 		return models.Value{Type: "error", Str: "ERR unknown command"}
 	}
 
-	// If we're a slave, only allow read commands unless it's a replication command
+	// If we're a slave, only allow read commands
 	if !s.isMaster && isWriteCommand(cmd) && !isReplicationCommand(cmd) {
 		return models.Value{Type: "error", Str: "READONLY You can't write against a read only replica"}
 	}
 
+	// Execute command
 	result := handler(value.Array[1:])
 
-	// Propagate write commands to replicas if we're the master
+	// If master and write command, persist to AOF and propagate
 	if s.isMaster && isWriteCommand(cmd) {
+		// Write to AOF
+		if err := s.storage.Write(value); err != nil {
+			log.Printf("Failed to write to AOF: %v", err)
+		}
+
+		// Propagate to replicas
 		s.propagateToReplicas(value)
 	}
 
@@ -476,10 +551,13 @@ func isReplicationCommand(cmd string) bool {
 func (s *Server) Shutdown(ctx context.Context) error {
 	close(s.shutdown)
 
-	// Wait for goroutines to finish with timeout
 	done := make(chan struct{})
 	go func() {
 		s.wg.Wait()
+		// Close AOF storage
+		if err := s.storage.Close(); err != nil {
+			log.Printf("Error closing AOF: %v", err)
+		}
 		close(done)
 	}()
 
