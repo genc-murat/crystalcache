@@ -1,6 +1,7 @@
 package zset
 
 import (
+	"fmt"
 	"strings"
 )
 
@@ -19,18 +20,20 @@ func (l *LexOps) parseLexBound(bound string) (string, bool, bool) {
 	isInclusive := true
 	isInf := false
 
-	// Check for infinity
+	// Handle infinity bounds
 	if bound == "+" || bound == "-" {
 		isInf = true
 		return bound, isInclusive, isInf
 	}
 
 	// Parse bound type
-	if strings.HasPrefix(bound, "(") {
-		isInclusive = false
-		bound = bound[1:]
-	} else if strings.HasPrefix(bound, "[") {
-		bound = bound[1:]
+	if len(bound) > 1 {
+		if strings.HasPrefix(bound, "(") {
+			isInclusive = false
+			bound = bound[1:] // Exclude the '(' character
+		} else if strings.HasPrefix(bound, "[") {
+			bound = bound[1:] // Exclude the '[' character
+		}
 	}
 
 	return bound, isInclusive, isInf
@@ -38,12 +41,19 @@ func (l *LexOps) parseLexBound(bound string) (string, bool, bool) {
 
 // ZLexCount returns the number of elements in sorted set between min and max
 func (l *LexOps) ZLexCount(key string, min, max string) (int, error) {
+	// Parse lexicographical bounds
 	minVal, minInc, minInf := l.parseLexBound(min)
 	maxVal, maxInc, maxInf := l.parseLexBound(max)
 
+	// Retrieve sorted members for the given key
 	members := l.basicOps.getSortedMembers(key)
-	count := 0
+	if len(members) == 0 {
+		// Return 0 immediately if there are no members
+		return 0, nil
+	}
 
+	// Count members within the lexicographical range
+	count := 0
 	for _, member := range members {
 		if l.isInLexRange(member.Member, minVal, maxVal, minInc, maxInc, minInf, maxInf) {
 			count++
@@ -55,12 +65,19 @@ func (l *LexOps) ZLexCount(key string, min, max string) (int, error) {
 
 // ZRangeByLex returns elements in sorted set between min and max lexicographically
 func (l *LexOps) ZRangeByLex(key string, min, max string) []string {
+	// Parse lexicographical bounds
 	minVal, minInc, minInf := l.parseLexBound(min)
 	maxVal, maxInc, maxInf := l.parseLexBound(max)
 
+	// Retrieve sorted members for the given key
 	members := l.basicOps.getSortedMembers(key)
-	result := make([]string, 0, len(members))
+	if len(members) == 0 {
+		// Return immediately if no members are found
+		return []string{}
+	}
 
+	// Filter members within the lexicographical range
+	result := []string{}
 	for _, member := range members {
 		if l.isInLexRange(member.Member, minVal, maxVal, minInc, maxInc, minInf, maxInf) {
 			result = append(result, member.Member)
@@ -72,63 +89,63 @@ func (l *LexOps) ZRangeByLex(key string, min, max string) []string {
 
 // ZRevRangeByLex returns elements in sorted set between max and min lexicographically
 func (l *LexOps) ZRevRangeByLex(key string, max, min string) []string {
+	// Fetch the range using ZRangeByLex
 	result := l.ZRangeByLex(key, min, max)
-	// Reverse the result
+
+	// Reverse the slice in-place
 	for i, j := 0, len(result)-1; i < j; i, j = i+1, j-1 {
 		result[i], result[j] = result[j], result[i]
 	}
+
 	return result
 }
 
 // ZRemRangeByLex removes elements in sorted set between min and max lexicographically
 func (l *LexOps) ZRemRangeByLex(key string, min, max string) (int, error) {
+	// Parse lexicographical bounds
 	minVal, minInc, minInf := l.parseLexBound(min)
 	maxVal, maxInc, maxInf := l.parseLexBound(max)
 
+	// Retrieve sorted members for the given key
 	members := l.basicOps.getSortedMembers(key)
-	toRemove := make([]string, 0)
+	if len(members) == 0 {
+		// Return immediately if there are no members
+		return 0, nil
+	}
 
+	// Filter members to remove
+	toRemove := []string{}
 	for _, member := range members {
 		if l.isInLexRange(member.Member, minVal, maxVal, minInc, maxInc, minInf, maxInf) {
 			toRemove = append(toRemove, member.Member)
 		}
 	}
 
-	// Remove members
+	// Remove members and count removals
 	for _, member := range toRemove {
 		if err := l.basicOps.ZRem(key, member); err != nil {
-			return 0, err
+			// Return an error if any removal fails
+			return 0, fmt.Errorf("failed to remove member '%s': %w", member, err)
 		}
 	}
 
+	// Return the number of removed members
 	return len(toRemove), nil
 }
 
 // Helper method to check if member is in lexicographical range
-func (l *LexOps) isInLexRange(member, min, max string, minInc, maxInc bool, minInf, maxInf bool) bool {
-	// Check min bound
+func (l *LexOps) isInLexRange(member, min, max string, minInc, maxInc, minInf, maxInf bool) bool {
+	// Check the minimum bound
 	if !minInf {
-		if minInc {
-			if member < min {
-				return false
-			}
-		} else {
-			if member <= min {
-				return false
-			}
+		if (minInc && member < min) || (!minInc && member <= min) {
+			return false
 		}
 	}
 
-	// Check max bound
+	// Check the maximum bound
 	if !maxInf {
-		if maxInc {
-			if member > max {
-				return false
-			}
-		} else {
-			if member >= max {
-				return false
-			}
+		if (maxInc && member > max) || (!maxInc && member >= max) {
+			return false
 		}
 	}
 
