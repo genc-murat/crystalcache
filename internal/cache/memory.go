@@ -1,7 +1,6 @@
 package cache
 
 import (
-	"errors"
 	"fmt"
 	"log"
 	"runtime"
@@ -2091,45 +2090,6 @@ func (c *MemoryCache) LInsert(key string, before bool, pivot string, value strin
 			return len(newList), nil
 		}
 	}
-}
-
-// LIndex returns an element from a list by its index with retry logic
-func (rd *RetryDecorator) LIndex(key string, index int) (string, bool) {
-	var value string
-	var exists bool
-	var finalExists bool
-
-	err := rd.executeWithRetry(func() error {
-		value, exists = rd.cache.LIndex(key, index)
-		if exists {
-			finalExists = true
-			return nil
-		}
-		return errors.New("index out of range")
-	})
-
-	if err != nil {
-		return "", false
-	}
-	return value, finalExists
-}
-
-// LInsert inserts an element before or after a pivot in a list with retry logic
-func (rd *RetryDecorator) LInsert(key string, before bool, pivot string, value string) (int, error) {
-	var length int
-	var finalErr error
-
-	err := rd.executeWithRetry(func() error {
-		var err error
-		length, err = rd.cache.LInsert(key, before, pivot, value)
-		finalErr = err
-		return err
-	})
-
-	if err != nil {
-		return 0, err
-	}
-	return length, finalErr
 }
 
 // LPOS returns the index of the first matching element in a list
