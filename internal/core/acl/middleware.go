@@ -6,42 +6,108 @@ import (
 	"github.com/genc-murat/crystalcache/internal/core/models"
 )
 
+// Middleware handles ACL checks for commands
 type Middleware struct {
 	aclManager *ACLManager
 }
 
+// NewMiddleware creates a new ACL middleware instance
 func NewMiddleware(aclManager *ACLManager) *Middleware {
 	return &Middleware{
 		aclManager: aclManager,
 	}
 }
 
+// CheckCommand validates if a user has permission to execute a command
 func (m *Middleware) CheckCommand(username string, cmd models.Value) bool {
 	if len(cmd.Array) == 0 {
 		return false
 	}
 
+	// Special handling for default user with no auth
+	if username == "" || username == DefaultUsername {
+		if user, exists := m.aclManager.users[DefaultUsername]; exists && user.NoPass {
+			return true
+		}
+	}
+
 	command := strings.ToUpper(cmd.Array[0].Bulk)
 
-	// Determine required permission based on command
-	var requiredPerm Permission
-	switch {
-	case isWriteCommand(command):
-		requiredPerm = PermissionWrite
-	case isAdminCommand(command):
-		requiredPerm = PermissionAdmin
-	default:
-		requiredPerm = PermissionRead
+	// Always allow AUTH command
+	if command == "AUTH" {
+		return true
 	}
 
 	// For commands that operate on keys, check key permissions
 	if len(cmd.Array) > 1 {
 		key := cmd.Array[1].Bulk
-		return m.aclManager.CheckPermission(username, requiredPerm, key)
+		return m.aclManager.CheckCommandPerm(username, command) &&
+			m.aclManager.CheckKeyPerm(username, key, isWriteCommand(command))
 	}
 
 	// For commands that don't operate on keys
-	return m.aclManager.CheckPermission(username, requiredPerm, "*")
+	return m.aclManager.CheckCommandPerm(username, command)
+}
+
+// readOnlyCommands contains commands that don't modify data
+var readOnlyCommands = map[string]bool{
+	// String Commands
+	"GET":      true,
+	"STRLEN":   true,
+	"GETRANGE": true,
+	"MGET":     true,
+
+	// Hash Commands
+	"HGET":    true,
+	"HMGET":   true,
+	"HLEN":    true,
+	"HKEYS":   true,
+	"HVALS":   true,
+	"HGETALL": true,
+	"HEXISTS": true,
+	"HSCAN":   true,
+
+	// List Commands
+	"LLEN":   true,
+	"LINDEX": true,
+	"LRANGE": true,
+
+	// Set Commands
+	"SCARD":     true,
+	"SISMEMBER": true,
+	"SMEMBERS":  true,
+	"SSCAN":     true,
+	"SINTER":    true,
+	"SUNION":    true,
+	"SDIFF":     true,
+
+	// Sorted Set Commands
+	"ZCARD":         true,
+	"ZCOUNT":        true,
+	"ZLEXCOUNT":     true,
+	"ZSCORE":        true,
+	"ZRANGE":        true,
+	"ZRANGEBYLEX":   true,
+	"ZRANGEBYSCORE": true,
+	"ZRANK":         true,
+	"ZREVRANK":      true,
+	"ZSCAN":         true,
+
+	// Key Commands
+	"EXISTS":    true,
+	"TYPE":      true,
+	"TTL":       true,
+	"PTTL":      true,
+	"OBJECT":    true,
+	"MEMORY":    true,
+	"RANDOMKEY": true,
+	"SCAN":      true,
+
+	// Server Commands
+	"PING":    true,
+	"TIME":    true,
+	"INFO":    true,
+	"COMMAND": true,
 }
 
 func isWriteCommand(cmd string) bool {
@@ -131,20 +197,6 @@ func isWriteCommand(cmd string) bool {
 		"BITOP":    true,
 		"BITFIELD": true,
 
-		// JSON Commands
-		"JSON.SET":       true,
-		"JSON.DEL":       true,
-		"JSON.ARRAPPEND": true,
-		"JSON.ARRINSERT": true,
-		"JSON.ARRTRIM":   true,
-		"JSON.ARRPOP":    true,
-		"JSON.STRAPPEND": true,
-		"JSON.NUMINCRBY": true,
-		"JSON.NUMMULTBY": true,
-		"JSON.CLEAR":     true,
-		"JSON.MERGE":     true,
-		"JSON.MSET":      true,
-
 		// Admin Commands
 		"FLUSHALL": true,
 		"FLUSHDB":  true,
@@ -179,94 +231,33 @@ func isAdminCommand(cmd string) bool {
 		"REPLCONF":  true,
 
 		// Client Management
-		"CLIENT": true, // CLIENT KILL, CLIENT LIST, CLIENT GETNAME, CLIENT SETNAME, etc.
+		"CLIENT": true,
 		"KILL":   true,
 
-		// Slow Log
-		"SLOWLOG": true,
-
-		// Memory Management
-		"MEMORY": true, // MEMORY DOCTOR, MEMORY HELP, MEMORY MALLOC-STATS, etc.
-		"SWAPDB": true,
-
-		// Security
-		"AUTH":  true,
-		"HELLO": true,
-
-		// Persistence Control
-		"BGREWRITEAOF": true,
-		"LOADING":      true,
-
-		// Cluster Management
-		"CLUSTER":   true,
-		"READONLY":  true,
-		"READWRITE": true,
-
-		// Module Management
-		"MODULE": true, // MODULE LOAD, MODULE UNLOAD, MODULE LIST
-
-		// Scripting Admin Commands
-		"SCRIPT":   true, // SCRIPT FLUSH, SCRIPT KILL, SCRIPT LOAD
-		"FUNCTION": true, // FUNCTION LOAD, FUNCTION DELETE, etc.
-
-		// Info & Statistics
-		"INFO":    true,
-		"TIME":    true,
-		"COMMAND": true, // COMMAND INFO, COMMAND COUNT, COMMAND LIST
-		"LATENCY": true,
-
-		// Key Space & Database Management
-		"SELECT":    true,
-		"MOVE":      true,
-		"SCAN":      true,
-		"RANDOMKEY": true,
-
-		// Persistence & Backup
-		"DUMP":    true,
-		"RESTORE": true,
-		"MIGRATE": true,
-
-		// Transaction Control
-		"MULTI":   true,
-		"EXEC":    true,
-		"DISCARD": true,
-		"WATCH":   true,
-		"UNWATCH": true,
-
-		// Pub/Sub Administration
-		"PUBSUB": true, // PUBSUB CHANNELS, PUBSUB NUMSUB, PUBSUB NUMPAT
-
-		// Stream Admin Commands
-		"XGROUP": true,
-		"XSETID": true,
-		"XINFO":  true,
-
-		// Sentinel Commands (if implementing Sentinel features)
+		// Other Admin Commands
+		"SLOWLOG":  true,
+		"MEMORY":   true,
+		"SWAPDB":   true,
+		"MODULE":   true,
+		"SCRIPT":   true,
+		"FUNCTION": true,
+		"CLUSTER":  true,
 		"SENTINEL": true,
-
-		// Advanced Monitoring
-		"OBJECT":              true,
-		"MEMORY DOCTOR":       true,
-		"MEMORY PURGE":        true,
-		"MEMORY MALLOC-STATS": true,
-
-		// Advanced Security
-		"ACL WHOAMI":  true,
-		"ACL LIST":    true,
-		"ACL USERS":   true,
-		"ACL SETUSER": true,
-		"ACL DELUSER": true,
-		"ACL GETUSER": true,
-		"ACL CAT":     true,
-		"ACL GENPASS": true,
-		"ACL LOG":     true,
-		"ACL HELP":    true,
-
-		// Advanced Configuration
-		"CONFIG GET":       true,
-		"CONFIG SET":       true,
-		"CONFIG REWRITE":   true,
-		"CONFIG RESETSTAT": true,
+		"COMMAND":  true,
 	}
 	return adminCommands[cmd]
+}
+
+// Helper function to determine command category
+func getCommandCategory(cmd string) string {
+	switch {
+	case isAdminCommand(cmd):
+		return "@admin"
+	case isWriteCommand(cmd):
+		return "@write"
+	case readOnlyCommands[cmd]:
+		return "@read"
+	default:
+		return "@all"
+	}
 }

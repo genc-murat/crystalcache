@@ -68,6 +68,12 @@ func NewServer(cache ports.Cache, storage ports.Storage, pool ports.Pool, config
 	adminHandlers := handlers.NewAdminHandlers(cache, clientManager)
 
 	aclManager := acl.NewACLManager()
+	// Create default user with full permissions if it doesn't exist
+	err := aclManager.SetUser("user default on nopass ~* +@all")
+	if err != nil {
+		log.Printf("Warning: Failed to create default user: %v", err)
+	}
+
 	aclMiddleware := acl.NewMiddleware(aclManager)
 
 	return &Server{
@@ -81,7 +87,6 @@ func NewServer(cache ports.Cache, storage ports.Storage, pool ports.Pool, config
 		adminHandlers: adminHandlers,
 		isMaster:      true,
 		replicas:      make(map[string]*replica),
-
 		aclManager:    aclManager,
 		aclMiddleware: aclMiddleware,
 	}
@@ -423,6 +428,7 @@ func (s *Server) GetReplicaCount() int {
 	return len(s.replicas)
 }
 
+// Server struct'ındaki handleConnection metodunu güncelleyelim
 func (s *Server) handleConnection(conn net.Conn) {
 	defer conn.Close()
 	defer s.wg.Done()
@@ -434,8 +440,9 @@ func (s *Server) handleConnection(conn net.Conn) {
 	reader := resp.NewReader(conn)
 	writer := resp.NewWriter(conn)
 
-	var authenticated bool
-	var username string
+	// Set default authentication state
+	authenticated := true // Default user is authenticated by default
+	username := "default" // Use default username
 
 	for {
 		value, err := reader.Read()
@@ -449,32 +456,64 @@ func (s *Server) handleConnection(conn net.Conn) {
 
 		cmd := strings.ToUpper(value.Array[0].Bulk)
 
-		// Handle AUTH command
+		// Special handling for AUTH command
 		if cmd == "AUTH" {
-			if len(value.Array) != 3 {
+			switch len(value.Array) {
+			case 2: // Old style auth with just password
+				password := value.Array[1].Bulk
+				if s.aclManager.Authenticate("default", password) {
+					authenticated = true
+					username = "default"
+					writer.Write(models.Value{Type: "string", Str: "OK"})
+				} else {
+					authenticated = false
+					writer.Write(models.Value{Type: "error", Str: "ERR invalid password"})
+				}
+				continue
+			case 3: // New style auth with username and password
+				username = value.Array[1].Bulk
+				password := value.Array[2].Bulk
+				if s.aclManager.Authenticate(username, password) {
+					authenticated = true
+					writer.Write(models.Value{Type: "string", Str: "OK"})
+				} else {
+					authenticated = false
+					writer.Write(models.Value{Type: "error", Str: "ERR invalid username or password"})
+				}
+				continue
+			default:
 				writer.Write(models.Value{Type: "error", Str: "ERR wrong number of arguments for AUTH"})
 				continue
 			}
+		}
 
-			username = value.Array[1].Bulk
-			password := value.Array[2].Bulk
-
-			if s.aclManager.Authenticate(username, password) {
-				authenticated = true
-				writer.Write(models.Value{Type: "string", Str: "OK"})
-			} else {
-				writer.Write(models.Value{Type: "error", Str: "ERR invalid username or password"})
-			}
+		// Allow PING without authentication
+		if cmd == "PING" {
+			writer.Write(models.Value{Type: "string", Str: "PONG"})
 			continue
 		}
 
-		// Check authentication for all other commands
-		if !authenticated && cmd != "PING" {
+		// Allow INFO without authentication
+		if cmd == "INFO" {
+			result := s.handleCommand(value)
+			writer.Write(result)
+			continue
+		}
+
+		// Handle commands that don't require authentication
+		if !requiresAuth(cmd) {
+			result := s.handleCommand(value)
+			writer.Write(result)
+			continue
+		}
+
+		// Check authentication state
+		if !authenticated {
 			writer.Write(models.Value{Type: "error", Str: "NOAUTH Authentication required."})
 			continue
 		}
 
-		// Check permissions
+		// Check permissions for authenticated users
 		if !s.aclMiddleware.CheckCommand(username, value) {
 			writer.Write(models.Value{Type: "error", Str: "NOPERM insufficient permissions"})
 			continue
@@ -501,6 +540,16 @@ func (s *Server) handleConnection(conn net.Conn) {
 			return
 		}
 	}
+}
+
+// Helper function to determine if a command requires authentication
+func requiresAuth(cmd string) bool {
+	noAuthCommands := map[string]bool{
+		"PING": false,
+		"AUTH": false,
+		"INFO": false,
+	}
+	return !noAuthCommands[cmd]
 }
 
 func (s *Server) GetReplicationInfo() map[string]string {
