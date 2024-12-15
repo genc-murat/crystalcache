@@ -9,8 +9,11 @@ import (
 	"sync"
 	"time"
 
+	"log"
+
 	"github.com/genc-murat/crystalcache/internal/core/models"
 	"github.com/genc-murat/crystalcache/pkg/resp"
+	"github.com/gofrs/flock"
 )
 
 // AOFConfig holds configuration for AOF persistence
@@ -36,11 +39,13 @@ func DefaultAOFConfig() AOFConfig {
 }
 
 type AOF struct {
-	config AOFConfig
-	file   *os.File
-	writer *bufio.Writer
-	reader *bufio.Reader
-	mu     sync.RWMutex
+	config   AOFConfig
+	file     *os.File
+	writer   *bufio.Writer
+	reader   *bufio.Reader
+	fileLock *flock.Flock
+	mu       sync.RWMutex
+	logger   *log.Logger
 
 	// Background sync
 	syncCh chan struct{}
@@ -59,18 +64,32 @@ func NewAOF(config AOFConfig) (*AOF, error) {
 		return nil, fmt.Errorf("failed to create directory: %v", err)
 	}
 
+	// File locking to prevent concurrent access
+	lock := flock.New(config.Path + ".lock")
+	if err := lock.Lock(); err != nil {
+		return nil, fmt.Errorf("failed to lock AOF file: %v", err)
+	}
+
 	f, err := os.OpenFile(config.Path, os.O_CREATE|os.O_RDWR|os.O_APPEND, 0666)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open AOF file: %v", err)
 	}
 
+	logFile, err := os.OpenFile("aof.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create log file: %v", err)
+	}
+	logger := log.New(logFile, "AOF: ", log.Ldate|log.Ltime|log.Lshortfile)
+
 	aof := &AOF{
-		config: config,
-		file:   f,
-		writer: bufio.NewWriterSize(f, config.BufferSize),
-		reader: bufio.NewReader(f),
-		syncCh: make(chan struct{}),
-		done:   make(chan struct{}),
+		config:   config,
+		file:     f,
+		writer:   bufio.NewWriterSize(f, config.BufferSize),
+		reader:   bufio.NewReader(f),
+		fileLock: lock,
+		logger:   logger,
+		syncCh:   make(chan struct{}, 100),
+		done:     make(chan struct{}),
 	}
 
 	// Start background sync if needed
@@ -86,6 +105,12 @@ func (aof *AOF) Write(value models.Value) error {
 	aof.mu.Lock()
 	defer aof.mu.Unlock()
 
+	// Validate data
+	if err := aof.validateData(value); err != nil {
+		aof.logger.Printf("Invalid data: %v", err)
+		return err
+	}
+
 	// Check rotation before write
 	if aof.config.EnableRotation {
 		if err := aof.checkRotation(); err != nil {
@@ -96,6 +121,7 @@ func (aof *AOF) Write(value models.Value) error {
 	// Write the command
 	writer := resp.NewWriter(aof.writer)
 	if err := writer.Write(value); err != nil {
+		aof.logger.Printf("Write failed: %v", err)
 		return fmt.Errorf("failed to write value: %v", err)
 	}
 
@@ -146,9 +172,11 @@ func (aof *AOF) Close() error {
 
 	// Ensure all data is written
 	if err := aof.sync(); err != nil {
+		aof.logger.Printf("Final sync failed: %v", err)
 		return fmt.Errorf("final sync failed: %v", err)
 	}
 
+	aof.fileLock.Unlock()
 	return aof.file.Close()
 }
 
@@ -156,9 +184,14 @@ func (aof *AOF) Close() error {
 
 func (aof *AOF) sync() error {
 	if err := aof.writer.Flush(); err != nil {
+		aof.logger.Printf("Flush failed: %v", err)
 		return err
 	}
-	return aof.file.Sync()
+	if err := aof.file.Sync(); err != nil {
+		aof.logger.Printf("File sync failed: %v", err)
+		return err
+	}
+	return nil
 }
 
 func (aof *AOF) backgroundSync() {
@@ -194,6 +227,11 @@ func (aof *AOF) checkRotation() error {
 }
 
 func (aof *AOF) rotate() error {
+	// Backup current file
+	if err := aof.backupFile(); err != nil {
+		return err
+	}
+
 	// Sync current file
 	if err := aof.sync(); err != nil {
 		return err
@@ -224,5 +262,21 @@ func (aof *AOF) rotate() error {
 	aof.writer = bufio.NewWriterSize(f, aof.config.BufferSize)
 	aof.reader = bufio.NewReader(f)
 
+	return nil
+}
+
+func (aof *AOF) backupFile() error {
+	backupPath := fmt.Sprintf("%s.bak", aof.config.Path)
+	if err := os.Rename(aof.config.Path, backupPath); err != nil {
+		aof.logger.Printf("Backup failed: %v", err)
+		return fmt.Errorf("backup failed: %v", err)
+	}
+	return nil
+}
+
+func (aof *AOF) validateData(value models.Value) error {
+	if value.Type == "" || (value.Type == "Bulk" && value.Bulk == "") {
+		return fmt.Errorf("invalid value: %v", value)
+	}
 	return nil
 }

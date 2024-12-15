@@ -24,7 +24,8 @@ go.work.sum
 # env file
 .env
 
-**/database.aof
+**/*.aof*
+**/aof.log
 
 .idea/
 redis/
