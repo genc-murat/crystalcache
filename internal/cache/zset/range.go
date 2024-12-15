@@ -203,3 +203,46 @@ func (r *RangeOps) compareAndSwapMembers(key string, oldMembers, newMembers []mo
 	}
 	return true
 }
+
+// ZRangeByScore returns members within the specified score range.
+func (r *RangeOps) ZRangeByScore(key string, min, max float64) []string {
+	members := r.basicOps.getSortedMembers(key)
+	result := make([]string, 0, len(members))
+
+	for _, member := range members {
+		if r.isInScoreRange(member.Score, min, max) {
+			result = append(result, member.Member)
+		}
+	}
+	return result
+}
+
+// ZRangeByScoreWithScores returns members and their scores within the specified score range.
+func (r *RangeOps) ZRangeByScoreWithScores(key string, min, max float64) []models.ZSetMember {
+	members := r.basicOps.getSortedMembers(key)
+	result := make([]models.ZSetMember, 0, len(members))
+
+	for _, member := range members {
+		if r.isInScoreRange(member.Score, min, max) {
+			result = append(result, member)
+		}
+	}
+	return result
+}
+
+// ZRevRangeByScore returns members within the specified score range in reverse order.
+func (r *RangeOps) ZRevRangeByScore(key string, max, min float64) []string {
+	members := r.ZRangeByScore(key, min, max)
+
+	// Reverse order
+	for i, j := 0, len(members)-1; i < j; i, j = i+1, j-1 {
+		members[i], members[j] = members[j], members[i]
+	}
+
+	return members
+}
+
+// isInScoreRange checks if a score is within the specified range.
+func (r *RangeOps) isInScoreRange(score, min, max float64) bool {
+	return score >= min && score <= max
+}
