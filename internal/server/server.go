@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/genc-murat/crystalcache/internal/client"
+	"github.com/genc-murat/crystalcache/internal/core/acl"
 	"github.com/genc-murat/crystalcache/internal/core/models"
 	"github.com/genc-murat/crystalcache/internal/core/ports"
 	"github.com/genc-murat/crystalcache/internal/handlers"
@@ -43,6 +44,9 @@ type Server struct {
 	replChan   chan models.Value
 	replMutex  sync.RWMutex
 	replicas   map[string]*replica
+
+	aclManager    *acl.ACLManager
+	aclMiddleware *acl.Middleware
 }
 
 type replica struct {
@@ -63,6 +67,9 @@ func NewServer(cache ports.Cache, storage ports.Storage, pool ports.Pool, config
 	registry := handlers.NewRegistry(cache, clientManager)
 	adminHandlers := handlers.NewAdminHandlers(cache, clientManager)
 
+	aclManager := acl.NewACLManager()
+	aclMiddleware := acl.NewMiddleware(aclManager)
+
 	return &Server{
 		cache:         cache,
 		storage:       storage,
@@ -74,6 +81,9 @@ func NewServer(cache ports.Cache, storage ports.Storage, pool ports.Pool, config
 		adminHandlers: adminHandlers,
 		isMaster:      true,
 		replicas:      make(map[string]*replica),
+
+		aclManager:    aclManager,
+		aclMiddleware: aclMiddleware,
 	}
 }
 
@@ -424,6 +434,9 @@ func (s *Server) handleConnection(conn net.Conn) {
 	reader := resp.NewReader(conn)
 	writer := resp.NewWriter(conn)
 
+	var authenticated bool
+	var username string
+
 	for {
 		value, err := reader.Read()
 		if err != nil {
@@ -435,6 +448,37 @@ func (s *Server) handleConnection(conn net.Conn) {
 		}
 
 		cmd := strings.ToUpper(value.Array[0].Bulk)
+
+		// Handle AUTH command
+		if cmd == "AUTH" {
+			if len(value.Array) != 3 {
+				writer.Write(models.Value{Type: "error", Str: "ERR wrong number of arguments for AUTH"})
+				continue
+			}
+
+			username = value.Array[1].Bulk
+			password := value.Array[2].Bulk
+
+			if s.aclManager.Authenticate(username, password) {
+				authenticated = true
+				writer.Write(models.Value{Type: "string", Str: "OK"})
+			} else {
+				writer.Write(models.Value{Type: "error", Str: "ERR invalid username or password"})
+			}
+			continue
+		}
+
+		// Check authentication for all other commands
+		if !authenticated && cmd != "PING" {
+			writer.Write(models.Value{Type: "error", Str: "NOAUTH Authentication required."})
+			continue
+		}
+
+		// Check permissions
+		if !s.aclMiddleware.CheckCommand(username, value) {
+			writer.Write(models.Value{Type: "error", Str: "NOPERM insufficient permissions"})
+			continue
+		}
 
 		// Handle REPLCONF command for replica identification
 		if cmd == "REPLCONF" {
