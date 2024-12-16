@@ -564,7 +564,7 @@ func (s *Server) GetReplicationInfo() map[string]string {
 
 		// Add information about each connected replica
 		for i, replica := range s.replicas {
-			info[fmt.Sprintf("slave%d", i)] = fmt.Sprintf("ip=%s,state=online",
+			info[fmt.Sprintf("slave%s", i)] = fmt.Sprintf("ip=%s,state=online",
 				replica.conn.RemoteAddr().String())
 		}
 	} else {
