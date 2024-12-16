@@ -1,6 +1,6 @@
 module github.com/genc-murat/crystalcache
 
-go 1.23.3
+go 1.23.4
 
 require (
 	github.com/gofrs/flock v0.12.1
