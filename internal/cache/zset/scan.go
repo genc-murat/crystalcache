@@ -27,8 +27,8 @@ func (s *ScanOps) ZScan(key string, cursor int, match string, count int) ([]mode
 	}
 
 	// Get all members
-	members := s.basicOps.getSortedMembers(key)
-	if len(members) == 0 {
+	members, err := s.basicOps.getSortedMembers(key)
+	if err != nil || len(members) == 0 {
 		return []models.ZSetMember{}, 0
 	}
 

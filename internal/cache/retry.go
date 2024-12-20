@@ -958,13 +958,14 @@ func (rd *RetryDecorator) ZScan(key string, cursor int, match string, count int)
 	return members, nextCursor
 }
 
-func (rd *RetryDecorator) ZUnion(keys ...string) []models.ZSetMember {
+func (rd *RetryDecorator) ZUnion(keys ...string) ([]models.ZSetMember, error) {
 	var result []models.ZSetMember
+	var err error
 	rd.executeWithRetry(func() error {
-		result = rd.cache.ZUnion(keys...)
-		return nil
+		result, err = rd.cache.ZUnion(keys...)
+		return err
 	})
-	return result
+	return result, err
 }
 
 // ExpireAt sets an absolute Unix timestamp when the key should expire

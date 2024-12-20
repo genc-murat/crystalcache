@@ -1068,7 +1068,11 @@ func (h *ZSetHandlers) HandleZUnion(args []models.Value) models.Value {
 		withScores = true
 	}
 
-	members := h.cache.ZUnion(keys...)
+	members, err := h.cache.ZUnion(keys...)
+	if err != nil {
+		// Handle the error appropriately. For now, return an error Value.
+		return models.Value{Type: "error", Str: err.Error()}
+	}
 
 	if withScores {
 		result := make([]models.Value, len(members)*2)

@@ -93,7 +93,7 @@ func (m *Manager) ZRevRank(key string, member string) (int, bool) {
 }
 
 // Set Operations
-func (m *Manager) ZUnion(keys ...string) []models.ZSetMember {
+func (m *Manager) ZUnion(keys ...string) ([]models.ZSetMember, error) {
 	return m.setOps.ZUnion(keys...)
 }
 

@@ -16,8 +16,8 @@ func NewModifyOps(basicOps *BasicOps) *ModifyOps {
 
 // ZRemRangeByRank removes all elements in the sorted set with rank between start and stop
 func (m *ModifyOps) ZRemRangeByRank(key string, start, stop int) (int, error) {
-	members := m.basicOps.getSortedMembers(key)
-	if len(members) == 0 {
+	members, err := m.basicOps.getSortedMembers(key)
+	if err != nil || len(members) == 0 {
 		return 0, nil
 	}
 
@@ -55,8 +55,8 @@ func (m *ModifyOps) ZRemRangeByRank(key string, start, stop int) (int, error) {
 
 // ZRemRangeByScore removes all elements in the sorted set with score between min and max
 func (m *ModifyOps) ZRemRangeByScore(key string, min, max float64) (int, error) {
-	members := m.basicOps.getSortedMembers(key)
-	if len(members) == 0 {
+	members, err := m.basicOps.getSortedMembers(key)
+	if err != nil || len(members) == 0 {
 		return 0, nil
 	}
 

@@ -46,8 +46,8 @@ func (l *LexOps) ZLexCount(key string, min, max string) (int, error) {
 	maxVal, maxInc, maxInf := l.parseLexBound(max)
 
 	// Retrieve sorted members for the given key
-	members := l.basicOps.getSortedMembers(key)
-	if len(members) == 0 {
+	members, err := l.basicOps.getSortedMembers(key)
+	if err != nil || len(members) == 0 {
 		// Return 0 immediately if there are no members
 		return 0, nil
 	}
@@ -70,8 +70,8 @@ func (l *LexOps) ZRangeByLex(key string, min, max string) []string {
 	maxVal, maxInc, maxInf := l.parseLexBound(max)
 
 	// Retrieve sorted members for the given key
-	members := l.basicOps.getSortedMembers(key)
-	if len(members) == 0 {
+	members, err := l.basicOps.getSortedMembers(key)
+	if err != nil || len(members) == 0 {
 		// Return immediately if no members are found
 		return []string{}
 	}
@@ -107,8 +107,8 @@ func (l *LexOps) ZRemRangeByLex(key string, min, max string) (int, error) {
 	maxVal, maxInc, maxInf := l.parseLexBound(max)
 
 	// Retrieve sorted members for the given key
-	members := l.basicOps.getSortedMembers(key)
-	if len(members) == 0 {
+	members, err := l.basicOps.getSortedMembers(key)
+	if err != nil || len(members) == 0 {
 		// Return immediately if there are no members
 		return 0, nil
 	}

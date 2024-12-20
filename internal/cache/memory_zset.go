@@ -96,7 +96,7 @@ func (c *MemoryCache) ZRevRank(key string, member string) (int, bool) {
 }
 
 // Set operations
-func (c *MemoryCache) ZUnion(keys ...string) []models.ZSetMember {
+func (c *MemoryCache) ZUnion(keys ...string) ([]models.ZSetMember, error) {
 	return c.zsetManager.ZUnion(keys...)
 }
 

@@ -14,6 +14,21 @@ func NewRangeOps(basicOps *BasicOps) *RangeOps {
 	}
 }
 
+// Range Operations
+func (r *RangeOps) ZRange(key string, start, stop int) []string {
+	members, err := r.basicOps.getSortedMembers(key)
+	if err != nil || len(members) == 0 {
+		return []string{}
+	}
+
+	start, stop = r.adjustRangeIndices(start, stop, len(members))
+	if start > stop {
+		return []string{}
+	}
+
+	return r.extractMembers(members[start : stop+1])
+}
+
 // adjustRangeIndices normalizes start and stop indices
 func (r *RangeOps) adjustRangeIndices(start, stop, length int) (int, int) {
 	if start < 0 {
@@ -47,24 +62,9 @@ func (r *RangeOps) extractMembers(members []models.ZSetMember) []string {
 	return result
 }
 
-// Range Operations
-func (r *RangeOps) ZRange(key string, start, stop int) []string {
-	members := r.basicOps.getSortedMembers(key)
-	if len(members) == 0 {
-		return []string{}
-	}
-
-	start, stop = r.adjustRangeIndices(start, stop, len(members))
-	if start > stop {
-		return []string{}
-	}
-
-	return r.extractMembers(members[start : stop+1])
-}
-
 func (r *RangeOps) ZRangeWithScores(key string, start, stop int) []models.ZSetMember {
-	members := r.basicOps.getSortedMembers(key)
-	if len(members) == 0 {
+	members, err := r.basicOps.getSortedMembers(key)
+	if err != nil || len(members) == 0 {
 		return []models.ZSetMember{}
 	}
 
@@ -77,8 +77,8 @@ func (r *RangeOps) ZRangeWithScores(key string, start, stop int) []models.ZSetMe
 }
 
 func (r *RangeOps) ZRevRange(key string, start, stop int) []string {
-	members := r.basicOps.getSortedMembers(key)
-	if len(members) == 0 {
+	members, err := r.basicOps.getSortedMembers(key)
+	if err != nil || len(members) == 0 {
 		return []string{}
 	}
 
@@ -92,8 +92,8 @@ func (r *RangeOps) ZRevRange(key string, start, stop int) []string {
 }
 
 func (r *RangeOps) ZRevRangeWithScores(key string, start, stop int) []models.ZSetMember {
-	members := r.basicOps.getSortedMembers(key)
-	if len(members) == 0 {
+	members, err := r.basicOps.getSortedMembers(key)
+	if err != nil || len(members) == 0 {
 		return []models.ZSetMember{}
 	}
 
@@ -191,8 +191,8 @@ func (r *RangeOps) ZPopMinOne(key string) (models.ZSetMember, bool) {
 
 // Helper method for atomic updates
 func (r *RangeOps) compareAndSwapMembers(key string, oldMembers, newMembers []models.ZSetMember) bool {
-	currentMembers := r.basicOps.getSortedMembers(key)
-	if len(currentMembers) != len(oldMembers) {
+	currentMembers, err := r.basicOps.getSortedMembers(key)
+	if err != nil || len(currentMembers) != len(oldMembers) {
 		return false
 	}
 
@@ -206,27 +206,33 @@ func (r *RangeOps) compareAndSwapMembers(key string, oldMembers, newMembers []mo
 
 // ZRangeByScore returns members within the specified score range.
 func (r *RangeOps) ZRangeByScore(key string, min, max float64) []string {
-	members := r.basicOps.getSortedMembers(key)
+	members, err := r.basicOps.getSortedMembers(key)
 	result := make([]string, 0, len(members))
 
-	for _, member := range members {
-		if r.isInScoreRange(member.Score, min, max) {
-			result = append(result, member.Member)
+	if err == nil {
+		for _, member := range members {
+			if r.isInScoreRange(member.Score, min, max) {
+				result = append(result, member.Member)
+			}
 		}
 	}
+
 	return result
 }
 
 // ZRangeByScoreWithScores returns members and their scores within the specified score range.
 func (r *RangeOps) ZRangeByScoreWithScores(key string, min, max float64) []models.ZSetMember {
-	members := r.basicOps.getSortedMembers(key)
+	members, err := r.basicOps.getSortedMembers(key)
 	result := make([]models.ZSetMember, 0, len(members))
 
-	for _, member := range members {
-		if r.isInScoreRange(member.Score, min, max) {
-			result = append(result, member)
+	if err == nil {
+		for _, member := range members {
+			if r.isInScoreRange(member.Score, min, max) {
+				result = append(result, member)
+			}
 		}
 	}
+
 	return result
 }
 

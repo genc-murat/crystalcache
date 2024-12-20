@@ -2,6 +2,7 @@ package zset
 
 import (
 	"fmt"
+	"log"
 	"math/rand"
 	"sort"
 	"sync"
@@ -21,6 +22,12 @@ func NewBasicOps(cache *sync.Map, keyVersions *sync.Map) *BasicOps {
 		cache:       cache,
 		keyVersions: keyVersions,
 	}
+}
+
+// Del deletes a key from the cache.
+func (b *BasicOps) Del(key string) error {
+	b.cache.Delete(key)
+	return nil
 }
 
 // ZAdd adds a member with score to a sorted set
@@ -157,20 +164,21 @@ func (b *BasicOps) incrementKeyVersion(key string) {
 	}
 }
 
-// getSortedMembers returns sorted list of members with scores
-func (b *BasicOps) getSortedMembers(key string) []models.ZSetMember {
+// getSortedMembers retrieves and sorts members of a sorted set from the cache.
+func (b *BasicOps) getSortedMembers(key string) ([]models.ZSetMember, error) {
 	// Attempt to retrieve the value from the cache
 	value, exists := b.cache.Load(key)
 	if !exists {
-		// Return an empty slice if the key does not exist in the cache
-		return []models.ZSetMember{}
+		// Return an empty slice and no error if the key does not exist in the cache.
+		// Consider logging this for debugging purposes.
+		return []models.ZSetMember{}, nil
 	}
 
 	// Assert that the value is of the expected type *sync.Map
 	set, ok := value.(*sync.Map)
 	if !ok {
-		// Handle cases where the type is incorrect
-		return []models.ZSetMember{}
+		// Return an empty slice and an error indicating the type mismatch.
+		return []models.ZSetMember{}, fmt.Errorf("unexpected type for key '%s' in cache: got %T, expected *sync.Map", key, value)
 	}
 
 	// Initialize a slice to hold the members
@@ -186,6 +194,10 @@ func (b *BasicOps) getSortedMembers(key string) []models.ZSetMember {
 				Member: memberStr,
 				Score:  scoreFloat,
 			})
+		} else {
+			// Handle cases where the type is incorrect within the sync.Map.
+			// Consider logging this as it indicates a potential data integrity issue.
+			log.Printf("warning: invalid data type in sorted set '%s': member=%T, score=%T", key, member, score)
 		}
 		return true
 	})
@@ -195,7 +207,7 @@ func (b *BasicOps) getSortedMembers(key string) []models.ZSetMember {
 		return members[i].Member < members[j].Member
 	})
 
-	return members
+	return members, nil
 }
 
 func (b *BasicOps) getLexSortedMembers(key string) []models.ZSetMember {
@@ -240,8 +252,9 @@ func (b *BasicOps) getLexSortedMembers(key string) []models.ZSetMember {
 
 // ZRandMember returns random members from a sorted set
 func (b *BasicOps) ZRandMember(key string, count int, withScores bool) []models.ZSetMember {
-	members := b.getSortedMembers(key)
-	if len(members) == 0 || count == 0 {
+	members, err := b.getSortedMembers(key)
+
+	if err != nil || len(members) == 0 || count == 0 {
 		// Return empty slice if there are no members or count is zero
 		return []models.ZSetMember{}
 	}
