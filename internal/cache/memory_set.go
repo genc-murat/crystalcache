@@ -6,9 +6,8 @@ import (
 )
 
 func (c *MemoryCache) SAdd(key string, member string) (bool, error) {
-	var set sync.Map
-	actual, _ := c.sets_.LoadOrStore(key, &set)
-	actualSet := actual.(*sync.Map)
+	setI, _ := c.sets_.LoadOrStore(key, &sync.Map{})
+	actualSet := setI.(*sync.Map)
 
 	_, loaded := actualSet.LoadOrStore(member, true)
 	if !loaded {
@@ -18,11 +17,16 @@ func (c *MemoryCache) SAdd(key string, member string) (bool, error) {
 	return false, nil
 }
 
-// Set Operations
 func (c *MemoryCache) SMembers(key string) ([]string, error) {
-	members := make([]string, 0)
+	var members []string
 	if setI, ok := c.sets_.Load(key); ok {
 		set := setI.(*sync.Map)
+		size := 0
+		set.Range(func(_, _ interface{}) bool {
+			size++
+			return true
+		})
+		members = make([]string, 0, size)
 		set.Range(func(key, _ interface{}) bool {
 			members = append(members, key.(string))
 			return true
@@ -33,34 +37,29 @@ func (c *MemoryCache) SMembers(key string) ([]string, error) {
 }
 
 func (c *MemoryCache) SCard(key string) int {
-	count := 0
 	if setI, ok := c.sets_.Load(key); ok {
-		set := setI.(*sync.Map)
-		set.Range(func(_, _ interface{}) bool {
+		count := 0
+		setI.(*sync.Map).Range(func(_, _ interface{}) bool {
 			count++
 			return true
 		})
+		return count
 	}
-	return count
+	return 0
 }
 
 func (c *MemoryCache) SRem(key string, member string) (bool, error) {
 	if setI, ok := c.sets_.Load(key); ok {
-		set := setI.(*sync.Map)
-		if _, exists := set.LoadAndDelete(member); exists {
+		if _, exists := setI.(*sync.Map).LoadAndDelete(member); exists {
 			c.incrementKeyVersion(key)
-
-			// Check if set is empty
 			empty := true
-			set.Range(func(_, _ interface{}) bool {
+			setI.(*sync.Map).Range(func(_, _ interface{}) bool {
 				empty = false
 				return false
 			})
-
 			if empty {
 				c.sets_.Delete(key)
 			}
-
 			return true, nil
 		}
 	}
@@ -69,8 +68,7 @@ func (c *MemoryCache) SRem(key string, member string) (bool, error) {
 
 func (c *MemoryCache) SIsMember(key string, member string) bool {
 	if setI, ok := c.sets_.Load(key); ok {
-		set := setI.(*sync.Map)
-		_, exists := set.Load(member)
+		_, exists := setI.(*sync.Map).Load(member)
 		return exists
 	}
 	return false
@@ -81,8 +79,32 @@ func (c *MemoryCache) SInter(keys ...string) []string {
 		return []string{}
 	}
 
-	// Get first set
-	firstSetI, exists := c.sets_.Load(keys[0])
+	sortedKeys := make([]string, len(keys))
+	copy(sortedKeys, keys)
+	sort.Slice(sortedKeys, func(i, j int) bool {
+		setI, exists := c.sets_.Load(sortedKeys[i])
+		sizeI := 0
+		if exists {
+			set := setI.(*sync.Map)
+			set.Range(func(_, _ interface{}) bool {
+				sizeI++
+				return true
+			})
+		}
+
+		setJ, exists := c.sets_.Load(sortedKeys[j])
+		sizeJ := 0
+		if exists {
+			set := setJ.(*sync.Map)
+			set.Range(func(_, _ interface{}) bool {
+				sizeJ++
+				return true
+			})
+		}
+		return sizeI < sizeJ
+	})
+
+	firstSetI, exists := c.sets_.Load(sortedKeys[0])
 	if !exists {
 		return []string{}
 	}
@@ -94,24 +116,21 @@ func (c *MemoryCache) SInter(keys ...string) []string {
 		return true
 	})
 
-	// Intersect with other sets
-	for _, key := range keys[1:] {
+	for _, key := range sortedKeys[1:] {
 		setI, exists := c.sets_.Load(key)
 		if !exists {
 			return []string{}
 		}
 
 		set := setI.(*sync.Map)
-		toDelete := make([]string, 0)
-
 		for member := range result {
 			if _, exists := set.Load(member); !exists {
-				toDelete = append(toDelete, member)
+				delete(result, member)
 			}
 		}
 
-		for _, member := range toDelete {
-			delete(result, member)
+		if len(result) == 0 {
+			return []string{}
 		}
 	}
 
@@ -153,9 +172,19 @@ func (c *MemoryCache) SDiff(keys ...string) []string {
 	if !exists {
 		return []string{}
 	}
+	firstSet := firstSetI.(*sync.Map)
+
+	if len(keys) == 1 {
+		diff := make([]string, 0)
+		firstSet.Range(func(key, _ interface{}) bool {
+			diff = append(diff, key.(string))
+			return true
+		})
+		sort.Strings(diff)
+		return diff
+	}
 
 	result := make(map[string]bool)
-	firstSet := firstSetI.(*sync.Map)
 	firstSet.Range(func(key, _ interface{}) bool {
 		result[key.(string)] = true
 		return true
@@ -172,6 +201,9 @@ func (c *MemoryCache) SDiff(keys ...string) []string {
 			delete(result, member.(string))
 			return true
 		})
+		if len(result) == 0 {
+			return []string{}
+		}
 	}
 
 	diff := make([]string, 0, len(result))
