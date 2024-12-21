@@ -50,6 +50,15 @@ func NewCuckooFilter(capacity uint64) *CuckooFilter {
 	return cf
 }
 
+// GetMemoryUsage returns the memory usage of CuckooFilter in bytes
+func (cf *CuckooFilter) GetMemoryUsage() int64 {
+	var size int64
+	for _, bucket := range cf.buckets {
+		size += int64(len(bucket))
+	}
+	return size
+}
+
 // generateIndex creates the first index for an item
 func (cf *CuckooFilter) generateIndex(item string) uint64 {
 	h := fnv.New64a()

@@ -6,6 +6,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/genc-murat/crystalcache/internal/core/models"
 )
 
 type MemoryAnalytics struct {
@@ -40,6 +42,11 @@ type MemoryAnalytics struct {
 	StreamMemory      int64
 	StreamGroupMemory int64
 	BitmapMemory      int64
+
+	GeoMemory        int64
+	SuggestionMemory int64
+	CMSMemory        int64
+	CuckooMemory     int64
 }
 
 func (c *MemoryCache) GetMemoryAnalytics() *MemoryAnalytics {
@@ -175,6 +182,66 @@ func (c *MemoryCache) calculateStructureMemory(analytics *MemoryAnalytics) {
 		b := bitmap.([]byte)
 		size := int64(len(k) + len(b))
 		atomic.AddInt64(&analytics.BitmapMemory, size)
+		return true
+	})
+
+	// HyperLogLog memory
+	c.hlls.Range(func(key, hll interface{}) bool {
+		k := key.(string)
+		h := hll.(*models.HyperLogLog)
+		size := int64(len(k)) + h.GetMemoryUsage()
+		atomic.AddInt64(&analytics.HLLMemory, size)
+		return true
+	})
+	// Geo memory
+	c.geoData.Range(func(key, geoSet interface{}) bool {
+		k := key.(string)
+		gs := geoSet.(*sync.Map)
+		size := int64(len(k))
+		gs.Range(func(member, point interface{}) bool {
+			m := member.(string)
+			p := point.(*models.GeoPoint)
+			size += int64(len(m))         // member name
+			size += 24                    // Longitude, Latitude (float64 * 2)
+			size += int64(len(p.GeoHash)) // GeoHash string
+			return true
+		})
+		atomic.AddInt64(&analytics.GeoMemory, size)
+		return true
+	})
+
+	// Suggestion memory
+	c.suggestions.Range(func(key, dict interface{}) bool {
+		k := key.(string)
+		d := dict.(*models.SuggestionDict)
+		size := int64(len(k))
+		for str, sug := range d.Entries {
+			size += int64(len(str))         // String key
+			size += int64(len(sug.String))  // Suggestion string
+			size += 8                       // Score (float64)
+			size += int64(len(sug.Payload)) // Payload
+		}
+		atomic.AddInt64(&analytics.SuggestionMemory, size)
+		return true
+	})
+
+	// Count-Min Sketch memory
+	c.cms.Range(func(key, sketch interface{}) bool {
+		k := key.(string)
+		cms := sketch.(*models.CountMinSketch)
+		size := int64(len(k))
+		size += int64(cms.Width * cms.Depth * 8) // uint64 cells
+		size += int64(len(cms.HashSeed) * 8)     // Hash seeds
+		atomic.AddInt64(&analytics.CMSMemory, size)
+		return true
+	})
+
+	// Cuckoo Filter memory
+	c.cuckooFilters.Range(func(key, filter interface{}) bool {
+		k := key.(string)
+		cf := filter.(*models.CuckooFilter)
+		size := int64(len(k)) + cf.GetMemoryUsage()
+		atomic.AddInt64(&analytics.CuckooMemory, size)
 		return true
 	})
 

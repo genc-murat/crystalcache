@@ -26,6 +26,11 @@ func NewHyperLogLog() *HyperLogLog {
 	}
 }
 
+// GetMemoryUsage returns the memory usage of HyperLogLog in bytes
+func (hll *HyperLogLog) GetMemoryUsage() int64 {
+	return int64(len(hll.registers))
+}
+
 // Add adds a value to the HyperLogLog
 func (hll *HyperLogLog) Add(value uint64) bool {
 	// Get the bucket index and pattern from the hash
