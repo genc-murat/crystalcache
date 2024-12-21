@@ -27,6 +27,7 @@ type Registry struct {
 	bitMapHandlers     *BitMapHandlers
 	geoHandlers        *GeoHandlers
 	suggestionHandlers *SuggestionHandlers
+	cmsHandlers        *CMSHandlers
 }
 
 func NewRegistry(cache ports.Cache, clientManager *client.Manager) *Registry {
@@ -49,6 +50,7 @@ func NewRegistry(cache ports.Cache, clientManager *client.Manager) *Registry {
 		bitMapHandlers:     NewBitMapHandlers(cache),
 		geoHandlers:        NewGeoHandlers(cache),
 		suggestionHandlers: NewSuggestionHandlers(cache),
+		cmsHandlers:        NewCMSHandlers(cache),
 	}
 
 	r.registerHandlers()
@@ -277,6 +279,14 @@ func (r *Registry) registerHandlers() {
 	r.handlers["GEORADIUSBYMEMBER_RO"] = r.geoHandlers.HandleGeoRadius
 	r.handlers["GEOSEARCH"] = r.geoHandlers.HandleGeoSearch
 	r.handlers["GEOSEARCHSTORE"] = r.geoHandlers.HandleGeoSearchStore
+
+	// Count-Min Sketch Commands
+	r.handlers["CMS.INCRBY"] = r.cmsHandlers.HandleCMSIncrBy
+	r.handlers["CMS.QUERY"] = r.cmsHandlers.HandleCMSQuery
+	r.handlers["CMS.MERGE"] = r.cmsHandlers.HandleCMSMerge
+	r.handlers["CMS.INFO"] = r.cmsHandlers.HandleCMSInfo
+	r.handlers["CMS.INITBYDIM"] = r.cmsHandlers.HandleCMSInitByDim
+	r.handlers["CMS.INITBYPROB"] = r.cmsHandlers.HandleCMSInitByProb
 
 }
 

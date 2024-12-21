@@ -3,6 +3,7 @@ package cache
 import (
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/genc-murat/crystalcache/internal/core/models"
 )
@@ -155,4 +156,25 @@ func min(a, b, c int) int {
 		return b
 	}
 	return c
+}
+
+func (c *MemoryCache) defragSuggestions() {
+	newSuggestions := &sync.Map{}
+
+	c.suggestions.Range(func(key, valueI interface{}) bool {
+		dict := valueI.(*models.SuggestionDict)
+
+		// Create a new dictionary
+		newDict := models.NewSuggestionDict()
+
+		// Copy all entries
+		for str, sug := range dict.Entries {
+			newDict.Entries[str] = sug
+		}
+
+		newSuggestions.Store(key, newDict)
+		return true
+	})
+
+	c.suggestions = newSuggestions
 }

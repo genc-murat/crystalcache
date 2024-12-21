@@ -1558,6 +1558,64 @@ func (rd *RetryDecorator) FTSugLen(key string) (int64, error) {
 	return length, finalErr
 }
 
+func (rd *RetryDecorator) CMSInitByDim(key string, width, depth uint) error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.CMSInitByDim(key, width, depth)
+	})
+}
+
+func (rd *RetryDecorator) CMSInitByProb(key string, epsilon, delta float64) error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.CMSInitByProb(key, epsilon, delta)
+	})
+}
+
+func (rd *RetryDecorator) CMSIncrBy(key string, items []string, increments []uint64) error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.CMSIncrBy(key, items, increments)
+	})
+}
+
+func (rd *RetryDecorator) CMSQuery(key string, items []string) ([]uint64, error) {
+	var counts []uint64
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		counts, err = rd.cache.CMSQuery(key, items)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return counts, finalErr
+}
+
+func (rd *RetryDecorator) CMSMerge(destination string, sources []string, weights []float64) error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.CMSMerge(destination, sources, weights)
+	})
+}
+
+func (rd *RetryDecorator) CMSInfo(key string) (map[string]interface{}, error) {
+	var info map[string]interface{}
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		info, err = rd.cache.CMSInfo(key)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return info, finalErr
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }

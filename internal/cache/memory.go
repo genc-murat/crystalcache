@@ -36,6 +36,7 @@ type MemoryCache struct {
 	bitmaps      *sync.Map
 	geoData      *sync.Map
 	suggestions  *sync.Map // suggestion dictionaries
+	cms          *sync.Map // Count-Min Sketches
 	bloomFilter  *models.BloomFilter
 	lastDefrag   time.Time
 	defragMu     sync.Mutex
@@ -67,6 +68,7 @@ func NewMemoryCache() *MemoryCache {
 		bitmaps:      &sync.Map{},
 		geoData:      &sync.Map{},
 		suggestions:  &sync.Map{},
+		cms:          &sync.Map{},
 		bloomFilter:  models.NewBloomFilter(config),
 	}
 
@@ -197,12 +199,19 @@ func (c *MemoryCache) Del(key string) (bool, error) {
 		deleted = true
 	}
 
-	// zsets'i ekle
 	if _, ok := c.zsets.LoadAndDelete(key); ok {
 		deleted = true
 	}
 
 	if _, ok := c.geoData.LoadAndDelete(key); ok {
+		deleted = true
+	}
+
+	if _, ok := c.suggestions.LoadAndDelete(key); ok {
+		deleted = true
+	}
+
+	if _, ok := c.cms.LoadAndDelete(key); ok {
 		deleted = true
 	}
 
@@ -681,6 +690,12 @@ func (c *MemoryCache) Type(key string) string {
 	}
 	if _, exists := c.geoData.Load(key); exists {
 		return "geo"
+	}
+	if _, exists := c.suggestions.Load(key); exists {
+		return "suggestion"
+	}
+	if _, exists := c.cms.Load(key); exists {
+		return "cms"
 	}
 	return "none"
 }
@@ -1475,6 +1490,8 @@ func (c *MemoryCache) Defragment() {
 	c.defragBitmaps()
 
 	c.defragGeoData()
+	c.defragCMS()
+	c.defragSuggestions()
 
 	c.lastDefrag = time.Now()
 

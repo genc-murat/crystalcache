@@ -147,4 +147,12 @@ type Cache interface {
 
 	// FTSugLen gets the size of an auto-complete suggestion dictionary
 	FTSugLen(key string) (int64, error)
+
+	// Count-Min Sketch operations
+	CMSInitByDim(key string, width, depth uint) error
+	CMSInitByProb(key string, epsilon, delta float64) error
+	CMSIncrBy(key string, items []string, increments []uint64) error
+	CMSQuery(key string, items []string) ([]uint64, error)
+	CMSMerge(destination string, sources []string, weights []float64) error
+	CMSInfo(key string) (map[string]interface{}, error)
 }
