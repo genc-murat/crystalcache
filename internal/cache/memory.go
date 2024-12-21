@@ -20,26 +20,27 @@ import (
 )
 
 type MemoryCache struct {
-	sets         *sync.Map // string key-value pairs
-	hsets        *sync.Map // hash maps
-	lists        *sync.Map // lists
-	sets_        *sync.Map // sets
-	expires      *sync.Map // expiration times
-	stats        *Stats
-	transactions *sync.Map
-	keyVersions  *sync.Map
-	zsets        *sync.Map
-	hlls         *sync.Map
-	jsonData     *sync.Map
-	streams      *sync.Map // stream entries
-	streamGroups *sync.Map // stream consumer groups
-	bitmaps      *sync.Map
-	geoData      *sync.Map
-	suggestions  *sync.Map // suggestion dictionaries
-	cms          *sync.Map // Count-Min Sketches
-	bloomFilter  *models.BloomFilter
-	lastDefrag   time.Time
-	defragMu     sync.Mutex
+	sets          *sync.Map // string key-value pairs
+	hsets         *sync.Map // hash maps
+	lists         *sync.Map // lists
+	sets_         *sync.Map // sets
+	expires       *sync.Map // expiration times
+	stats         *Stats
+	transactions  *sync.Map
+	keyVersions   *sync.Map
+	zsets         *sync.Map
+	hlls          *sync.Map
+	jsonData      *sync.Map
+	streams       *sync.Map // stream entries
+	streamGroups  *sync.Map // stream consumer groups
+	bitmaps       *sync.Map
+	geoData       *sync.Map
+	suggestions   *sync.Map // suggestion dictionaries
+	cms           *sync.Map // Count-Min Sketches
+	bloomFilter   *models.BloomFilter
+	cuckooFilters *sync.Map
+	lastDefrag    time.Time
+	defragMu      sync.Mutex
 
 	zsetManager   *zset.Manager
 	bitmapManager *bitmap.Manager
@@ -52,24 +53,25 @@ func NewMemoryCache() *MemoryCache {
 	}
 
 	mc := &MemoryCache{
-		sets:         &sync.Map{},
-		hsets:        &sync.Map{},
-		lists:        &sync.Map{},
-		sets_:        &sync.Map{},
-		expires:      &sync.Map{},
-		stats:        NewStats(),
-		transactions: &sync.Map{},
-		keyVersions:  &sync.Map{},
-		zsets:        &sync.Map{},
-		hlls:         &sync.Map{},
-		jsonData:     &sync.Map{},
-		streams:      &sync.Map{},
-		streamGroups: &sync.Map{},
-		bitmaps:      &sync.Map{},
-		geoData:      &sync.Map{},
-		suggestions:  &sync.Map{},
-		cms:          &sync.Map{},
-		bloomFilter:  models.NewBloomFilter(config),
+		sets:          &sync.Map{},
+		hsets:         &sync.Map{},
+		lists:         &sync.Map{},
+		sets_:         &sync.Map{},
+		expires:       &sync.Map{},
+		stats:         NewStats(),
+		transactions:  &sync.Map{},
+		keyVersions:   &sync.Map{},
+		zsets:         &sync.Map{},
+		hlls:          &sync.Map{},
+		jsonData:      &sync.Map{},
+		streams:       &sync.Map{},
+		streamGroups:  &sync.Map{},
+		bitmaps:       &sync.Map{},
+		geoData:       &sync.Map{},
+		suggestions:   &sync.Map{},
+		cms:           &sync.Map{},
+		cuckooFilters: &sync.Map{},
+		bloomFilter:   models.NewBloomFilter(config),
 	}
 
 	// Start background cleanup
@@ -217,6 +219,10 @@ func (c *MemoryCache) Del(key string) (bool, error) {
 
 	if deleted {
 		c.incrementKeyVersion(key)
+	}
+
+	if _, ok := c.cuckooFilters.LoadAndDelete(key); ok {
+		deleted = true
 	}
 
 	return deleted, nil
@@ -697,6 +703,9 @@ func (c *MemoryCache) Type(key string) string {
 	if _, exists := c.cms.Load(key); exists {
 		return "cms"
 	}
+	if _, exists := c.cuckooFilters.Load(key); exists {
+		return "cuckoo"
+	}
 	return "none"
 }
 
@@ -1090,7 +1099,7 @@ func (c *MemoryCache) Info() map[string]string {
 	// Keys count
 	var stringKeys, hashKeys, listKeys, setKeys, jsonKeys,
 		streamKeys, bitmapKeys, zsetKeys, suggestionKeys,
-		geoKeys, cmsKeys int
+		geoKeys, cmsKeys, cuckooKeys int
 
 	c.sets.Range(func(_, _ interface{}) bool {
 		stringKeys++
@@ -1158,25 +1167,33 @@ func (c *MemoryCache) Info() map[string]string {
 	})
 	stats["cms_keys"] = fmt.Sprintf("%d", cmsKeys)
 
+	c.cuckooFilters.Range(func(_, _ interface{}) bool {
+		cuckooKeys++
+		return true
+	})
+	stats["cuckoo_keys"] = fmt.Sprintf("%d", cuckooKeys)
+
 	// Total keys
 	stats["total_keys"] = fmt.Sprintf("%d", stringKeys+hashKeys+listKeys+
 		setKeys+jsonKeys+streamKeys+bitmapKeys+zsetKeys+
-		suggestionKeys+geoKeys+cmsKeys)
+		suggestionKeys+geoKeys+cmsKeys+cuckooKeys)
 
 	// Modules and Features
 	stats["json_native_storage"] = "enabled"
 	stats["json_version"] = "1.0"
-	stats["modules"] = "json_native,geo,suggestion,cms"
+	stats["modules"] = "json_native,geo,suggestion,cms,cuckoo" // Add cuckoo module
 
 	// Module specific versions and info
 	stats["geo_version"] = "1.0"
 	stats["suggestion_version"] = "1.0"
 	stats["cms_version"] = "1.0"
+	stats["cuckoo_version"] = "1.0" // Add cuckoo version
 
 	// Additional module capabilities
 	stats["geo_search"] = "enabled"
 	stats["suggestion_fuzzy"] = "enabled"
 	stats["cms_merge"] = "enabled"
+	stats["cuckoo_capacity"] = "enabled"
 
 	return stats
 }
@@ -1526,6 +1543,7 @@ func (c *MemoryCache) Defragment() {
 	c.defragGeoData()
 	c.defragCMS()
 	c.defragSuggestions()
+	c.defragCuckooFilters()
 
 	c.lastDefrag = time.Now()
 

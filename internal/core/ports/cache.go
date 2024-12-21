@@ -155,4 +155,17 @@ type Cache interface {
 	CMSQuery(key string, items []string) ([]uint64, error)
 	CMSMerge(destination string, sources []string, weights []float64) error
 	CMSInfo(key string) (map[string]interface{}, error)
+
+	CFReserve(key string, capacity uint64) error
+	CFAdd(key string, item string) (bool, error)
+	CFAddNX(key string, item string) (bool, error)
+	CFInsert(key string, items []string) ([]bool, error)
+	CFInsertNX(key string, items []string) ([]bool, error)
+	CFDel(key string, item string) (bool, error)
+	CFCount(key string, item string) (int, error)
+	CFExists(key string, item string) (bool, error)
+	CFMExists(key string, items []string) ([]bool, error)
+	CFInfo(key string) (*models.CuckooInfo, error)
+	CFScanDump(key string, iter uint64) (uint64, []byte, error)
+	CFLoadChunk(key string, iter uint64, data []byte) error
 }

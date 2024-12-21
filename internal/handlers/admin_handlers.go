@@ -51,7 +51,8 @@ func (h *AdminHandlers) HandleInfo(args []models.Value) models.Value {
 	info := h.cache.Info()
 
 	// Get module list
-	modules := []string{"json_native", "geo", "suggestion", "cms"}
+	// Get module list
+	modules := []string{"json_native", "geo", "suggestion", "cms", "cuckoo"} // Add cuckoo
 	modulesEnabled := make([]string, 0)
 
 	for _, module := range modules {
@@ -68,6 +69,7 @@ func (h *AdminHandlers) HandleInfo(args []models.Value) models.Value {
 		"name=geo,ver=1.0,api=1.0",
 		"name=suggestion,ver=1.0,api=1.0",
 		"name=cms,ver=1.0,api=1.0",
+		"name=cuckoo,ver=1.0,api=1.0",
 	}
 	info["module_list"] = strings.Join(moduleDetails, ",")
 
@@ -103,6 +105,7 @@ func (h *AdminHandlers) HandleInfo(args []models.Value) models.Value {
 	response = append(response, fmt.Sprintf("suggestion_keys:%s", info["suggestion_keys"]))
 	response = append(response, fmt.Sprintf("geo_keys:%s", info["geo_keys"]))
 	response = append(response, fmt.Sprintf("cms_keys:%s", info["cms_keys"]))
+	response = append(response, fmt.Sprintf("cuckoo_keys:%s", info["cuckoo_keys"]))
 
 	return models.Value{
 		Type: "string",

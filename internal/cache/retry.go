@@ -1616,6 +1616,190 @@ func (rd *RetryDecorator) CMSInfo(key string) (map[string]interface{}, error) {
 	return info, finalErr
 }
 
+// Cuckoo Filter operations for RetryDecorator
+func (rd *RetryDecorator) CFReserve(key string, capacity uint64) error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.CFReserve(key, capacity)
+	})
+}
+
+func (rd *RetryDecorator) CFAdd(key string, item string) (bool, error) {
+	var added bool
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		added, err = rd.cache.CFAdd(key, item)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return false, err
+	}
+	return added, finalErr
+}
+
+func (rd *RetryDecorator) CFAddNX(key string, item string) (bool, error) {
+	var added bool
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		added, err = rd.cache.CFAddNX(key, item)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return false, err
+	}
+	return added, finalErr
+}
+
+func (rd *RetryDecorator) CFInsert(key string, items []string) ([]bool, error) {
+	var results []bool
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		results, err = rd.cache.CFInsert(key, items)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return results, finalErr
+}
+
+func (rd *RetryDecorator) CFInsertNX(key string, items []string) ([]bool, error) {
+	var results []bool
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		results, err = rd.cache.CFInsertNX(key, items)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return results, finalErr
+}
+
+func (rd *RetryDecorator) CFDel(key string, item string) (bool, error) {
+	var deleted bool
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		deleted, err = rd.cache.CFDel(key, item)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return false, err
+	}
+	return deleted, finalErr
+}
+
+func (rd *RetryDecorator) CFCount(key string, item string) (int, error) {
+	var count int
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		count, err = rd.cache.CFCount(key, item)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return 0, err
+	}
+	return count, finalErr
+}
+
+func (rd *RetryDecorator) CFExists(key string, item string) (bool, error) {
+	var exists bool
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		exists, err = rd.cache.CFExists(key, item)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return false, err
+	}
+	return exists, finalErr
+}
+
+func (rd *RetryDecorator) CFMExists(key string, items []string) ([]bool, error) {
+	var results []bool
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		results, err = rd.cache.CFMExists(key, items)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return results, finalErr
+}
+
+func (rd *RetryDecorator) CFInfo(key string) (*models.CuckooInfo, error) {
+	var info *models.CuckooInfo
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		info, err = rd.cache.CFInfo(key)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return info, finalErr
+}
+
+func (rd *RetryDecorator) CFScanDump(key string, iter uint64) (uint64, []byte, error) {
+	var nextIter uint64
+	var data []byte
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		nextIter, data, err = rd.cache.CFScanDump(key, iter)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return 0, nil, err
+	}
+	return nextIter, data, finalErr
+}
+
+func (rd *RetryDecorator) CFLoadChunk(key string, iter uint64, data []byte) error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.CFLoadChunk(key, iter, data)
+	})
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }

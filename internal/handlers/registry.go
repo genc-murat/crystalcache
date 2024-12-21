@@ -28,6 +28,7 @@ type Registry struct {
 	geoHandlers        *GeoHandlers
 	suggestionHandlers *SuggestionHandlers
 	cmsHandlers        *CMSHandlers
+	cuckooHandlers     *CuckooHandlers
 }
 
 func NewRegistry(cache ports.Cache, clientManager *client.Manager) *Registry {
@@ -51,6 +52,7 @@ func NewRegistry(cache ports.Cache, clientManager *client.Manager) *Registry {
 		geoHandlers:        NewGeoHandlers(cache),
 		suggestionHandlers: NewSuggestionHandlers(cache),
 		cmsHandlers:        NewCMSHandlers(cache),
+		cuckooHandlers:     NewCuckooHandlers(cache),
 	}
 
 	r.registerHandlers()
@@ -287,6 +289,20 @@ func (r *Registry) registerHandlers() {
 	r.handlers["CMS.INFO"] = r.cmsHandlers.HandleCMSInfo
 	r.handlers["CMS.INITBYDIM"] = r.cmsHandlers.HandleCMSInitByDim
 	r.handlers["CMS.INITBYPROB"] = r.cmsHandlers.HandleCMSInitByProb
+
+	// Cuckoo Filter Commands
+	r.handlers["CF.RESERVE"] = r.cuckooHandlers.HandleCFReserve
+	r.handlers["CF.ADD"] = r.cuckooHandlers.HandleCFAdd
+	r.handlers["CF.ADDNX"] = r.cuckooHandlers.HandleCFAddNX
+	r.handlers["CF.INSERT"] = r.cuckooHandlers.HandleCFInsert
+	r.handlers["CF.INSERTNX"] = r.cuckooHandlers.HandleCFInsertNX
+	r.handlers["CF.DEL"] = r.cuckooHandlers.HandleCFDel
+	r.handlers["CF.COUNT"] = r.cuckooHandlers.HandleCFCount
+	r.handlers["CF.EXISTS"] = r.cuckooHandlers.HandleCFExists
+	r.handlers["CF.MEXISTS"] = r.cuckooHandlers.HandleCFMExists
+	r.handlers["CF.INFO"] = r.cuckooHandlers.HandleCFInfo
+	r.handlers["CF.SCANDUMP"] = r.cuckooHandlers.HandleCFScanDump
+	r.handlers["CF.LOADCHUNK"] = r.cuckooHandlers.HandleCFLoadChunk
 
 }
 
