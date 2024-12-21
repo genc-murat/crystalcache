@@ -29,6 +29,7 @@ type Registry struct {
 	suggestionHandlers *SuggestionHandlers
 	cmsHandlers        *CMSHandlers
 	cuckooHandlers     *CuckooHandlers
+	hllHandlers        *HLLHandlers
 }
 
 func NewRegistry(cache ports.Cache, clientManager *client.Manager) *Registry {
@@ -53,6 +54,7 @@ func NewRegistry(cache ports.Cache, clientManager *client.Manager) *Registry {
 		suggestionHandlers: NewSuggestionHandlers(cache),
 		cmsHandlers:        NewCMSHandlers(cache),
 		cuckooHandlers:     NewCuckooHandlers(cache),
+		hllHandlers:        NewHLLHandlers(cache),
 	}
 
 	r.registerHandlers()
@@ -303,6 +305,13 @@ func (r *Registry) registerHandlers() {
 	r.handlers["CF.INFO"] = r.cuckooHandlers.HandleCFInfo
 	r.handlers["CF.SCANDUMP"] = r.cuckooHandlers.HandleCFScanDump
 	r.handlers["CF.LOADCHUNK"] = r.cuckooHandlers.HandleCFLoadChunk
+
+	// HyperLogLog Commands
+	r.handlers["PFADD"] = r.hllHandlers.HandlePFAdd
+	r.handlers["PFCOUNT"] = r.hllHandlers.HandlePFCount
+	r.handlers["PFMERGE"] = r.hllHandlers.HandlePFMerge
+	r.handlers["PFDEBUG"] = r.hllHandlers.HandlePFDebug
+	r.handlers["PFSELFTEST"] = r.hllHandlers.HandlePFSelfTest
 
 }
 

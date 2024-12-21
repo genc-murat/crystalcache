@@ -35,6 +35,7 @@ type MemoryCache struct {
 	geoData       *sync.Map
 	suggestions   *sync.Map // suggestion dictionaries
 	cms           *sync.Map // Count-Min Sketches
+	hlls          *sync.Map
 	bloomFilter   *models.BloomFilter
 	cuckooFilters *sync.Map
 	lastDefrag    time.Time
@@ -68,6 +69,7 @@ func NewMemoryCache() *MemoryCache {
 		suggestions:   &sync.Map{},
 		cms:           &sync.Map{},
 		cuckooFilters: &sync.Map{},
+		hlls:          &sync.Map{},
 		bloomFilter:   models.NewBloomFilter(config),
 	}
 
@@ -219,6 +221,10 @@ func (c *MemoryCache) Del(key string) (bool, error) {
 	}
 
 	if _, ok := c.cuckooFilters.LoadAndDelete(key); ok {
+		deleted = true
+	}
+
+	if _, ok := c.hlls.LoadAndDelete(key); ok {
 		deleted = true
 	}
 
@@ -703,6 +709,9 @@ func (c *MemoryCache) Type(key string) string {
 	if _, exists := c.cuckooFilters.Load(key); exists {
 		return "cuckoo"
 	}
+	if _, exists := c.hlls.Load(key); exists {
+		return "hll"
+	}
 	return "none"
 }
 
@@ -1170,10 +1179,18 @@ func (c *MemoryCache) Info() map[string]string {
 	})
 	stats["cuckoo_keys"] = fmt.Sprintf("%d", cuckooKeys)
 
+	var hllKeys int
+	c.hlls.Range(func(_, _ interface{}) bool {
+		hllKeys++
+		return true
+	})
+	stats["hll_keys"] = fmt.Sprintf("%d", hllKeys)
+
 	// Total keys
-	stats["total_keys"] = fmt.Sprintf("%d", stringKeys+hashKeys+listKeys+
-		setKeys+jsonKeys+streamKeys+bitmapKeys+zsetKeys+
-		suggestionKeys+geoKeys+cmsKeys+cuckooKeys)
+	totalKeys := stringKeys + hashKeys + listKeys + setKeys + jsonKeys +
+		streamKeys + bitmapKeys + zsetKeys + suggestionKeys +
+		geoKeys + cmsKeys + cuckooKeys + hllKeys
+	stats["total_keys"] = fmt.Sprintf("%d", totalKeys)
 
 	// Modules and Features
 	stats["json_native_storage"] = "enabled"
@@ -1487,6 +1504,7 @@ func (c *MemoryCache) Defragment() {
 	c.defragCMS()
 	c.defragSuggestions()
 	c.defragCuckooFilters()
+	c.defragHLL()
 
 	c.lastDefrag = time.Now()
 

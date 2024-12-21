@@ -273,11 +273,3 @@ func (h *CuckooHandlers) HandleCFLoadChunk(args []models.Value) models.Value {
 
 	return models.Value{Type: "string", Str: "OK"}
 }
-
-// Helper function to convert bool to int
-func boolToInt(b bool) int {
-	if b {
-		return 1
-	}
-	return 0
-}

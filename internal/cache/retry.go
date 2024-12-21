@@ -1774,6 +1774,69 @@ func (rd *RetryDecorator) CFLoadChunk(key string, iter uint64, data []byte) erro
 	})
 }
 
+func (rd *RetryDecorator) PFAdd(key string, elements ...string) (bool, error) {
+	var modified bool
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		modified, err = rd.cache.PFAdd(key, elements...)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return false, err
+	}
+	return modified, finalErr
+}
+
+func (rd *RetryDecorator) PFCount(keys ...string) (int64, error) {
+	var count int64
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		count, err = rd.cache.PFCount(keys...)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return 0, err
+	}
+	return count, finalErr
+}
+
+func (rd *RetryDecorator) PFMerge(destKey string, sourceKeys ...string) error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.PFMerge(destKey, sourceKeys...)
+	})
+}
+
+func (rd *RetryDecorator) PFDebug(key string) (map[string]interface{}, error) {
+	var info map[string]interface{}
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		info, err = rd.cache.PFDebug(key)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return info, finalErr
+}
+
+func (rd *RetryDecorator) PFSelfTest() error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.PFSelfTest()
+	})
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }

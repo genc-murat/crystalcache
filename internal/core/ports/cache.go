@@ -165,4 +165,10 @@ type Cache interface {
 	CFInfo(key string) (*models.CuckooInfo, error)
 	CFScanDump(key string, iter uint64) (uint64, []byte, error)
 	CFLoadChunk(key string, iter uint64, data []byte) error
+
+	PFAdd(key string, elements ...string) (bool, error)
+	PFCount(keys ...string) (int64, error)
+	PFMerge(destKey string, sourceKeys ...string) error
+	PFDebug(key string) (map[string]interface{}, error)
+	PFSelfTest() error
 }
