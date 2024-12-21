@@ -66,9 +66,6 @@ type Cache interface {
 	ZRangeByScoreWithScores(key string, min, max float64) []models.ZSetMember
 	ZInterStore(destination string, keys []string, weights []float64) (int, error)
 	ZUnionStore(destination string, keys []string, weights []float64) (int, error)
-	PFAdd(key string, elements ...string) (bool, error)
-	PFCount(keys ...string) (int64, error)
-	PFMerge(destKey string, sourceKeys ...string) error
 	GetMemoryStats() models.MemoryStats
 	StartDefragmentation(interval time.Duration, threshold float64)
 	Defragment()

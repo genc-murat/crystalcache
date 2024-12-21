@@ -15,7 +15,6 @@ import (
 	"github.com/genc-murat/crystalcache/internal/cache/zset"
 	"github.com/genc-murat/crystalcache/internal/core/models"
 	"github.com/genc-murat/crystalcache/internal/core/ports"
-	"github.com/genc-murat/crystalcache/pkg/utils/hash"
 	"github.com/genc-murat/crystalcache/pkg/utils/pattern"
 )
 
@@ -29,7 +28,6 @@ type MemoryCache struct {
 	transactions  *sync.Map
 	keyVersions   *sync.Map
 	zsets         *sync.Map
-	hlls          *sync.Map
 	jsonData      *sync.Map
 	streams       *sync.Map // stream entries
 	streamGroups  *sync.Map // stream consumer groups
@@ -62,7 +60,6 @@ func NewMemoryCache() *MemoryCache {
 		transactions:  &sync.Map{},
 		keyVersions:   &sync.Map{},
 		zsets:         &sync.Map{},
-		hlls:          &sync.Map{},
 		jsonData:      &sync.Map{},
 		streams:       &sync.Map{},
 		streamGroups:  &sync.Map{},
@@ -1420,60 +1417,6 @@ func (c *MemoryCache) Pipeline() *models.Pipeline {
 	return &models.Pipeline{
 		Commands: make([]models.PipelineCommand, 0),
 	}
-}
-
-func (c *MemoryCache) PFAdd(key string, elements ...string) (bool, error) {
-	value, _ := c.hlls.LoadOrStore(key, models.NewHyperLogLog())
-	hll := value.(*models.HyperLogLog)
-
-	modified := false
-	for _, element := range elements {
-		// Use the renamed function
-		hashValue := hash.Hash64([]byte(element))
-		if hll.Add(hashValue) {
-			modified = true
-		}
-	}
-
-	return modified, nil
-}
-
-func (c *MemoryCache) PFCount(keys ...string) (int64, error) {
-	if len(keys) == 0 {
-		return 0, nil
-	}
-
-	if len(keys) == 1 {
-		if value, exists := c.hlls.Load(keys[0]); exists {
-			hll := value.(*models.HyperLogLog)
-			return hll.Size, nil
-		}
-		return 0, nil
-	}
-
-	merged := models.NewHyperLogLog()
-	for _, key := range keys {
-		if value, exists := c.hlls.Load(key); exists {
-			hll := value.(*models.HyperLogLog)
-			merged.Merge(hll)
-		}
-	}
-
-	return merged.Size, nil
-}
-
-func (c *MemoryCache) PFMerge(destKey string, sourceKeys ...string) error {
-	merged := models.NewHyperLogLog()
-
-	for _, key := range sourceKeys {
-		if value, exists := c.hlls.Load(key); exists {
-			hll := value.(*models.HyperLogLog)
-			merged.Merge(hll)
-		}
-	}
-
-	c.hlls.Store(destKey, merged)
-	return nil
 }
 
 func (c *MemoryCache) ExecPipeline(pl *models.Pipeline) []models.Value {

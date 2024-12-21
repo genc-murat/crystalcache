@@ -43,12 +43,6 @@ var (
 		},
 	}
 
-	hllMapPool = sync.Pool{
-		New: func() interface{} {
-			return make(map[string]*models.HyperLogLog)
-		},
-	}
-
 	syncMapPool = sync.Pool{
 		New: func() interface{} {
 			return &sync.Map{}

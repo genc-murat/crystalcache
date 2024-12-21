@@ -128,15 +128,6 @@ func (c *MemoryCache) calculateStructureMemory(analytics *MemoryAnalytics) {
 		return true
 	})
 
-	// HyperLogLog memory
-	c.hlls.Range(func(key, hll interface{}) bool {
-		k := key.(string)
-		// Assuming a typical HLL implementation with 16KB registers
-		size := int64(len(k) + 16384)
-		atomic.AddInt64(&analytics.HLLMemory, size)
-		return true
-	})
-
 	// JSON data memory
 	c.jsonData.Range(func(key, value interface{}) bool {
 		k := key.(string)
@@ -221,12 +212,6 @@ func (c *MemoryCache) getKeyCount() int64 {
 
 	// Count keys in sorted sets
 	c.zsets.Range(func(_, _ interface{}) bool {
-		atomic.AddInt64(&count, 1)
-		return true
-	})
-
-	// Count keys in HyperLogLog structures
-	c.hlls.Range(func(_, _ interface{}) bool {
 		atomic.AddInt64(&count, 1)
 		return true
 	})
@@ -316,7 +301,6 @@ func (c *MemoryCache) evictKeys(targetBytes int64) {
 
 		maps := [...]*sync.Map{
 			c.sets,
-			c.hlls,
 			c.jsonData,
 			c.streams,
 			c.bitmaps,
