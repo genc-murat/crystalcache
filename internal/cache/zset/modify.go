@@ -60,15 +60,20 @@ func (m *ModifyOps) ZRemRangeByScore(key string, min, max float64) (int, error) 
 		return 0, nil
 	}
 
-	removed := 0
+	membersToRemove := []string{}
 	for _, member := range members {
 		if member.Score >= min && member.Score <= max {
-			err := m.basicOps.ZRem(key, member.Member)
-			if err != nil {
-				return removed, err
-			}
-			removed++
+			membersToRemove = append(membersToRemove, member.Member)
 		}
+	}
+
+	removed := 0
+	for _, memberToRemove := range membersToRemove {
+		err := m.basicOps.ZRem(key, memberToRemove)
+		if err != nil {
+			return removed, err
+		}
+		removed++
 	}
 
 	return removed, nil
@@ -95,10 +100,7 @@ func (m *ModifyOps) parseLexBound(bound string) (string, bool, bool) {
 }
 
 func (m *ModifyOps) isInLexRange(member, min, max string, minInc, maxInc bool, minInf, maxInf bool) bool {
-	if minInf || (minInc && member >= min) || (!minInc && member > min) {
-		if maxInf || (maxInc && member <= max) || (!maxInc && member < max) {
-			return true
-		}
-	}
-	return false
+	minCondition := minInf || (minInc && member >= min) || (!minInc && member > min)
+	maxCondition := maxInf || (maxInc && member <= max) || (!maxInc && member < max)
+	return minCondition && maxCondition
 }
