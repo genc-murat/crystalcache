@@ -35,6 +35,7 @@ type MemoryCache struct {
 	streamGroups *sync.Map // stream consumer groups
 	bitmaps      *sync.Map
 	geoData      *sync.Map
+	suggestions  *sync.Map // suggestion dictionaries
 	bloomFilter  *models.BloomFilter
 	lastDefrag   time.Time
 	defragMu     sync.Mutex
@@ -65,6 +66,7 @@ func NewMemoryCache() *MemoryCache {
 		streamGroups: &sync.Map{},
 		bitmaps:      &sync.Map{},
 		geoData:      &sync.Map{},
+		suggestions:  &sync.Map{},
 		bloomFilter:  models.NewBloomFilter(config),
 	}
 

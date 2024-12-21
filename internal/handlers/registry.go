@@ -9,43 +9,46 @@ import (
 type CommandHandler func(args []models.Value) models.Value
 
 type Registry struct {
-	handlers        map[string]CommandHandler
-	stringHandlers  *StringHandlers
-	hashHandlers    *HashHandlers
-	listHandlers    *ListHandlers
-	setHandlers     *SetHandlers
-	zsetHandlers    *ZSetHandlers
-	adminHandlers   *AdminHandlers
-	moduleHandlers  *ModuleHandlers
-	configHandlers  *ConfigHandlers
-	scanHandlers    *ScanHandlers
-	memoryHandlers  *MemoryHandlers
-	clusterHandlers *ClusterHandlers
-	jsonHandlers    *JSONHandlers
-	replicaHandlers *ReplicaHandlers
-	streamHandlers  *StreamHandlers
-	bitMapHandlers  *BitMapHandlers
-	geoHandlers     *GeoHandlers
+	handlers           map[string]CommandHandler
+	stringHandlers     *StringHandlers
+	hashHandlers       *HashHandlers
+	listHandlers       *ListHandlers
+	setHandlers        *SetHandlers
+	zsetHandlers       *ZSetHandlers
+	adminHandlers      *AdminHandlers
+	moduleHandlers     *ModuleHandlers
+	configHandlers     *ConfigHandlers
+	scanHandlers       *ScanHandlers
+	memoryHandlers     *MemoryHandlers
+	clusterHandlers    *ClusterHandlers
+	jsonHandlers       *JSONHandlers
+	replicaHandlers    *ReplicaHandlers
+	streamHandlers     *StreamHandlers
+	bitMapHandlers     *BitMapHandlers
+	geoHandlers        *GeoHandlers
+	suggestionHandlers *SuggestionHandlers
 }
 
 func NewRegistry(cache ports.Cache, clientManager *client.Manager) *Registry {
 	r := &Registry{
-		handlers:        make(map[string]CommandHandler),
-		stringHandlers:  NewStringHandlers(cache),
-		hashHandlers:    NewHashHandlers(cache),
-		listHandlers:    NewListHandlers(cache),
-		setHandlers:     NewSetHandlers(cache),
-		zsetHandlers:    NewZSetHandlers(cache),
-		adminHandlers:   NewAdminHandlers(cache, clientManager),
-		moduleHandlers:  NewModuleHandlers(cache),
-		configHandlers:  NewConfigHandlers(cache),
-		scanHandlers:    NewScanHandlers(cache),
-		memoryHandlers:  NewMemoryHandlers(cache),
-		clusterHandlers: NewClusterHandlers(cache),
-		jsonHandlers:    NewJSONHandlers(cache),
-		replicaHandlers: NewReplicaHandlers(cache, nil),
-		streamHandlers:  NewStreamHandlers(cache),
-		bitMapHandlers:  NewBitMapHandlers(cache),
+		handlers:           make(map[string]CommandHandler),
+		stringHandlers:     NewStringHandlers(cache),
+		hashHandlers:       NewHashHandlers(cache),
+		listHandlers:       NewListHandlers(cache),
+		setHandlers:        NewSetHandlers(cache),
+		zsetHandlers:       NewZSetHandlers(cache),
+		adminHandlers:      NewAdminHandlers(cache, clientManager),
+		moduleHandlers:     NewModuleHandlers(cache),
+		configHandlers:     NewConfigHandlers(cache),
+		scanHandlers:       NewScanHandlers(cache),
+		memoryHandlers:     NewMemoryHandlers(cache),
+		clusterHandlers:    NewClusterHandlers(cache),
+		jsonHandlers:       NewJSONHandlers(cache),
+		replicaHandlers:    NewReplicaHandlers(cache, nil),
+		streamHandlers:     NewStreamHandlers(cache),
+		bitMapHandlers:     NewBitMapHandlers(cache),
+		geoHandlers:        NewGeoHandlers(cache),
+		suggestionHandlers: NewSuggestionHandlers(cache),
 	}
 
 	r.registerHandlers()
@@ -257,6 +260,23 @@ func (r *Registry) registerHandlers() {
 	r.handlers["BITFIELD_RO"] = r.bitMapHandlers.HandleBitFieldRO
 	r.handlers["BITOP"] = r.bitMapHandlers.HandleBitOp
 	r.handlers["BITPOS"] = r.bitMapHandlers.HandleBitPos
+
+	// Suggestion Commands
+	r.handlers["FT.SUGADD"] = r.suggestionHandlers.HandleFTSugAdd
+	r.handlers["FT.SUGDEL"] = r.suggestionHandlers.HandleFTSugDel
+	r.handlers["FT.SUGGET"] = r.suggestionHandlers.HandleFTSugGet
+	r.handlers["FT.SUGLEN"] = r.suggestionHandlers.HandleFTSugLen
+
+	// Geospatial Commands
+	r.handlers["GEOADD"] = r.geoHandlers.HandleGeoAdd
+	r.handlers["GEODIST"] = r.geoHandlers.HandleGeoDist
+	r.handlers["GEOPOS"] = r.geoHandlers.HandleGeoPos
+	r.handlers["GEORADIUS"] = r.geoHandlers.HandleGeoRadius
+	r.handlers["GEORADIUS_RO"] = r.geoHandlers.HandleGeoRadius      // Read-only variant uses same handler
+	r.handlers["GEORADIUSBYMEMBER"] = r.geoHandlers.HandleGeoRadius // Uses same radius logic
+	r.handlers["GEORADIUSBYMEMBER_RO"] = r.geoHandlers.HandleGeoRadius
+	r.handlers["GEOSEARCH"] = r.geoHandlers.HandleGeoSearch
+	r.handlers["GEOSEARCHSTORE"] = r.geoHandlers.HandleGeoSearchStore
 
 }
 

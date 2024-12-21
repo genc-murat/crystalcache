@@ -1489,6 +1489,75 @@ func (rd *RetryDecorator) GeoSearchStore(destKey string, srcKey string, options 
 	return stored, finalErr
 }
 
+// Add suggestion methods to RetryDecorator
+func (rd *RetryDecorator) FTSugAdd(key, str string, score float64, opts ...string) (bool, error) {
+	var added bool
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		added, err = rd.cache.FTSugAdd(key, str, score, opts...)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return false, err
+	}
+	return added, finalErr
+}
+
+func (rd *RetryDecorator) FTSugDel(key, str string) (bool, error) {
+	var deleted bool
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		deleted, err = rd.cache.FTSugDel(key, str)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return false, err
+	}
+	return deleted, finalErr
+}
+
+func (rd *RetryDecorator) FTSugGet(key, prefix string, fuzzy bool, max int) ([]models.Suggestion, error) {
+	var suggestions []models.Suggestion
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		suggestions, err = rd.cache.FTSugGet(key, prefix, fuzzy, max)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return suggestions, finalErr
+}
+
+func (rd *RetryDecorator) FTSugLen(key string) (int64, error) {
+	var length int64
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		length, err = rd.cache.FTSugLen(key)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return 0, err
+	}
+	return length, finalErr
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }

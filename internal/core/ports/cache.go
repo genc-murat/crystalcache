@@ -136,4 +136,15 @@ type Cache interface {
 	GeoRadius(key string, longitude, latitude, radius float64, unit string, withDist, withCoord, withHash bool, count int, sort string) ([]models.GeoPoint, error)
 	GeoSearch(key string, options *models.GeoSearchOptions) ([]models.GeoPoint, error)
 	GeoSearchStore(destKey, srcKey string, options *models.GeoSearchOptions) (int, error)
+	// FTSugAdd adds a suggestion string to an auto-complete suggestion dictionary
+	FTSugAdd(key, str string, score float64, opts ...string) (bool, error)
+
+	// FTSugDel deletes a suggestion string from a suggestion dictionary
+	FTSugDel(key, str string) (bool, error)
+
+	// FTSugGet gets completion suggestions for a prefix
+	FTSugGet(key, prefix string, fuzzy bool, max int) ([]models.Suggestion, error)
+
+	// FTSugLen gets the size of an auto-complete suggestion dictionary
+	FTSugLen(key string) (int64, error)
 }
