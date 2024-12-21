@@ -307,6 +307,36 @@ func (c *MemoryCache) getKeyCount() int64 {
 		return true
 	})
 
+	// Count Geo keys
+	c.geoData.Range(func(_, _ interface{}) bool {
+		atomic.AddInt64(&count, 1)
+		return true
+	})
+
+	// Count Suggestion keys
+	c.suggestions.Range(func(_, _ interface{}) bool {
+		atomic.AddInt64(&count, 1)
+		return true
+	})
+
+	// Count Count-Min Sketch keys
+	c.cms.Range(func(_, _ interface{}) bool {
+		atomic.AddInt64(&count, 1)
+		return true
+	})
+
+	// Count HyperLogLog keys
+	c.hlls.Range(func(_, _ interface{}) bool {
+		atomic.AddInt64(&count, 1)
+		return true
+	})
+
+	// Count Cuckoo Filter keys
+	c.cuckooFilters.Range(func(_, _ interface{}) bool {
+		atomic.AddInt64(&count, 1)
+		return true
+	})
+
 	return count
 }
 
@@ -371,21 +401,38 @@ func (c *MemoryCache) evictKeys(targetBytes int64) {
 			c.jsonData,
 			c.streams,
 			c.bitmaps,
+			c.hsets,         // Hash maps
+			c.lists,         // Lists
+			c.sets_,         // Sets
+			c.zsets,         // Sorted sets
+			c.streamGroups,  // Stream groups
+			c.geoData,       // Geo data
+			c.suggestions,   // Suggestions
+			c.cms,           // Count-Min Sketches
+			c.hlls,          // HyperLogLog
+			c.cuckooFilters, // Cuckoo Filters
 		}
 
 		evicted := false
 		for _, m := range maps {
 			var keyToDelete interface{}
-			m.Range(func(key, _ interface{}) bool {
-				keyToDelete = key
-				return false
-			})
 
-			if keyToDelete != nil {
-				m.Delete(keyToDelete)
-				atomic.AddInt64(&c.stats.evictedKeys, 1)
-				evicted = true
-				break
+			// Get the map's memory usage before deciding to evict
+			memUsage := c.getMapMemoryUsage(m)
+
+			// Get the first available key if memory usage is significant
+			if memUsage > 0 {
+				m.Range(func(key, _ interface{}) bool {
+					keyToDelete = key
+					return false // Stop after first key
+				})
+
+				if keyToDelete != nil {
+					m.Delete(keyToDelete)
+					atomic.AddInt64(&c.stats.evictedKeys, 1)
+					evicted = true
+					break
+				}
 			}
 		}
 
@@ -393,4 +440,34 @@ func (c *MemoryCache) evictKeys(targetBytes int64) {
 			break
 		}
 	}
+}
+
+// Helper to estimate memory usage of a map
+func (c *MemoryCache) getMapMemoryUsage(m *sync.Map) int64 {
+	var size int64
+	m.Range(func(key, value interface{}) bool {
+		k := key.(string)
+		size += int64(len(k))
+
+		switch v := value.(type) {
+		case string:
+			size += int64(len(v))
+		case []byte:
+			size += int64(len(v))
+		case *models.HyperLogLog:
+			size += v.GetMemoryUsage()
+		case *models.CuckooFilter:
+			size += v.GetMemoryUsage()
+		case *sync.Map: // For nested maps (hsets, sets_, etc.)
+			v.Range(func(k, val interface{}) bool {
+				size += int64(len(k.(string)))
+				if str, ok := val.(string); ok {
+					size += int64(len(str))
+				}
+				return true
+			})
+		}
+		return true
+	})
+	return size
 }
