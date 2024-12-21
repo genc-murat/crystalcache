@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log"
 	"net"
-	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -49,28 +48,66 @@ func (h *AdminHandlers) HandleFlushAll(args []models.Value) models.Value {
 }
 
 func (h *AdminHandlers) HandleInfo(args []models.Value) models.Value {
-	if err := util.ValidateArgs(args, 0); err != nil {
-		return util.ToValue(err)
-	}
-
 	info := h.cache.Info()
-	var builder strings.Builder
 
-	keys := make([]string, 0, len(info))
-	for k := range info {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
+	// Get module list
+	modules := []string{"json_native", "geo", "suggestion", "cms"}
+	modulesEnabled := make([]string, 0)
 
-	for _, k := range keys {
-		builder.WriteString(k)
-		builder.WriteString(":")
-		builder.WriteString(info[k])
-		builder.WriteString("\r\n")
+	for _, module := range modules {
+		modulesEnabled = append(modulesEnabled, fmt.Sprintf("%s", module))
 	}
 
-	log.Printf("[DEBUG] handleClientInfo response: %+v", models.Value{Type: "bulk", Bulk: builder.String()})
-	return models.Value{Type: "bulk", Bulk: builder.String()}
+	// Update modules string
+	info["modules"] = strings.Join(modulesEnabled, ",")
+
+	// Module versions and details
+	info["module_list"] = "" // Initialize empty module list
+	moduleDetails := []string{
+		"name=json_native,ver=1.0,api=1.0",
+		"name=geo,ver=1.0,api=1.0",
+		"name=suggestion,ver=1.0,api=1.0",
+		"name=cms,ver=1.0,api=1.0",
+	}
+	info["module_list"] = strings.Join(moduleDetails, ",")
+
+	// Convert info map to response format
+	var response []string
+	response = append(response, "# Server")
+	response = append(response, fmt.Sprintf("redis_version:%s", info["redis_version"]))
+	response = append(response, fmt.Sprintf("redis_mode:%s", info["redis_mode"]))
+	response = append(response, fmt.Sprintf("uptime_in_seconds:%s", info["uptime_in_seconds"]))
+
+	response = append(response, "\n# Modules")
+	response = append(response, fmt.Sprintf("module_list:%s", info["module_list"]))
+
+	response = append(response, "\n# Memory")
+	response = append(response, fmt.Sprintf("used_memory:%s", info["used_memory"]))
+	response = append(response, fmt.Sprintf("used_memory_human:%s", info["used_memory_human"]))
+	response = append(response, fmt.Sprintf("used_memory_peak:%s", info["used_memory_peak"]))
+	response = append(response, fmt.Sprintf("used_memory_peak_human:%s", info["used_memory_peak_human"]))
+	response = append(response, fmt.Sprintf("mem_fragmentation_ratio:%s", info["mem_fragmentation_ratio"]))
+	response = append(response, fmt.Sprintf("mem_fragmentation_bytes:%s", info["mem_fragmentation_bytes"]))
+
+	response = append(response, "\n# Stats")
+	response = append(response, fmt.Sprintf("total_commands_processed:%s", info["total_commands_processed"]))
+	response = append(response, fmt.Sprintf("total_keys:%s", info["total_keys"]))
+	response = append(response, fmt.Sprintf("string_keys:%s", info["string_keys"]))
+	response = append(response, fmt.Sprintf("hash_keys:%s", info["hash_keys"]))
+	response = append(response, fmt.Sprintf("list_keys:%s", info["list_keys"]))
+	response = append(response, fmt.Sprintf("set_keys:%s", info["set_keys"]))
+	response = append(response, fmt.Sprintf("zset_keys:%s", info["zset_keys"]))
+	response = append(response, fmt.Sprintf("stream_keys:%s", info["stream_keys"]))
+	response = append(response, fmt.Sprintf("json_keys:%s", info["json_keys"]))
+	response = append(response, fmt.Sprintf("bitmap_keys:%s", info["bitmap_keys"]))
+	response = append(response, fmt.Sprintf("suggestion_keys:%s", info["suggestion_keys"]))
+	response = append(response, fmt.Sprintf("geo_keys:%s", info["geo_keys"]))
+	response = append(response, fmt.Sprintf("cms_keys:%s", info["cms_keys"]))
+
+	return models.Value{
+		Type: "string",
+		Str:  strings.Join(response, "\n"),
+	}
 }
 
 func (h *AdminHandlers) HandlePing(args []models.Value) models.Value {
