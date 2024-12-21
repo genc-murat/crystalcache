@@ -1076,6 +1076,7 @@ func (c *MemoryCache) Info() map[string]string {
 	stats["redis_version"] = "7.2.0"
 	stats["redis_mode"] = "standalone"
 
+	// Memory stats
 	stats["used_memory"] = fmt.Sprintf("%d", memStats.Alloc)
 	stats["used_memory_human"] = fmt.Sprintf("%.2fMB", float64(memStats.Alloc)/(1024*1024))
 	stats["used_memory_peak"] = fmt.Sprintf("%d", memStats.TotalAlloc)
@@ -1086,7 +1087,10 @@ func (c *MemoryCache) Info() map[string]string {
 	stats["total_system_memory_human"] = fmt.Sprintf("%.2fMB", float64(memStats.Sys)/(1024*1024))
 	stats["mem_allocator"] = "go"
 
-	var stringKeys, hashKeys, listKeys, setKeys, jsonKeys, streamKeys, bitmapKeys, zsetKeys int
+	// Keys count
+	var stringKeys, hashKeys, listKeys, setKeys, jsonKeys,
+		streamKeys, bitmapKeys, zsetKeys, suggestionKeys,
+		geoKeys, cmsKeys int
 
 	c.sets.Range(func(_, _ interface{}) bool {
 		stringKeys++
@@ -1130,19 +1134,49 @@ func (c *MemoryCache) Info() map[string]string {
 	})
 	stats["bitmap_keys"] = fmt.Sprintf("%d", bitmapKeys)
 
-	// ZSet keys sayısını hesapla
 	c.zsets.Range(func(_, _ interface{}) bool {
 		zsetKeys++
 		return true
 	})
 	stats["zset_keys"] = fmt.Sprintf("%d", zsetKeys)
 
-	// Total keys hesaplamasına zsetKeys'i ekle
-	stats["total_keys"] = fmt.Sprintf("%d", stringKeys+hashKeys+listKeys+setKeys+jsonKeys+streamKeys+bitmapKeys+zsetKeys)
+	c.suggestions.Range(func(_, _ interface{}) bool {
+		suggestionKeys++
+		return true
+	})
+	stats["suggestion_keys"] = fmt.Sprintf("%d", suggestionKeys)
 
+	c.geoData.Range(func(_, _ interface{}) bool {
+		geoKeys++
+		return true
+	})
+	stats["geo_keys"] = fmt.Sprintf("%d", geoKeys)
+
+	c.cms.Range(func(_, _ interface{}) bool {
+		cmsKeys++
+		return true
+	})
+	stats["cms_keys"] = fmt.Sprintf("%d", cmsKeys)
+
+	// Total keys
+	stats["total_keys"] = fmt.Sprintf("%d", stringKeys+hashKeys+listKeys+
+		setKeys+jsonKeys+streamKeys+bitmapKeys+zsetKeys+
+		suggestionKeys+geoKeys+cmsKeys)
+
+	// Modules and Features
 	stats["json_native_storage"] = "enabled"
 	stats["json_version"] = "1.0"
-	stats["modules"] = "json_native"
+	stats["modules"] = "json_native,geo,suggestion,cms"
+
+	// Module specific versions and info
+	stats["geo_version"] = "1.0"
+	stats["suggestion_version"] = "1.0"
+	stats["cms_version"] = "1.0"
+
+	// Additional module capabilities
+	stats["geo_search"] = "enabled"
+	stats["suggestion_fuzzy"] = "enabled"
+	stats["cms_merge"] = "enabled"
 
 	return stats
 }
