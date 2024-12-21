@@ -50,6 +50,8 @@ type AOF struct {
 	// Background sync
 	syncCh chan struct{}
 	done   chan struct{}
+
+	writeQueue chan models.Value
 }
 
 // NewAOF creates a new AOF instance
@@ -97,46 +99,59 @@ func NewAOF(config AOFConfig) (*AOF, error) {
 		go aof.backgroundSync()
 	}
 
+	aof.writeQueue = make(chan models.Value, 1000)
+	go aof.processWriteQueue()
 	return aof, nil
 }
 
-// Write implements Storage interface
 func (aof *AOF) Write(value models.Value) error {
+	aof.writeQueue <- value
+	return nil
+}
+
+func (aof *AOF) processWriteQueue() {
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+	var batch []models.Value
+	for {
+		select {
+		case value := <-aof.writeQueue:
+			batch = append(batch, value)
+		case <-ticker.C:
+			if len(batch) > 0 {
+				aof.writeBatch(batch)
+				batch = nil
+			}
+		case <-aof.done:
+			if len(batch) > 0 {
+				aof.writeBatch(batch)
+			}
+			return
+		}
+	}
+}
+
+func (aof *AOF) writeBatch(batch []models.Value) {
 	aof.mu.Lock()
 	defer aof.mu.Unlock()
 
-	// Validate data
-	if err := aof.validateData(value); err != nil {
-		aof.logger.Printf("Invalid data: %v", err)
-		return err
-	}
-
-	// Check rotation before write
-	if aof.config.EnableRotation {
-		if err := aof.checkRotation(); err != nil {
-			return fmt.Errorf("rotation check failed: %v", err)
+	writer := resp.NewWriter(aof.writer)
+	for _, value := range batch {
+		if err := writer.Write(value); err != nil {
+			aof.logger.Printf("Batch write failed: %v", err)
+			return
 		}
 	}
 
-	// Write the command
-	writer := resp.NewWriter(aof.writer)
-	if err := writer.Write(value); err != nil {
-		aof.logger.Printf("Write failed: %v", err)
-		return fmt.Errorf("failed to write value: %v", err)
-	}
-
-	// Handle sync strategy
-	switch aof.config.SyncStrategy {
-	case "always":
-		return aof.sync()
-	case "everysec":
+	if aof.config.SyncStrategy == "always" {
+		aof.sync()
+	} else if aof.config.SyncStrategy == "everysec" {
 		select {
 		case aof.syncCh <- struct{}{}:
 		default:
 		}
 	}
-
-	return nil
 }
 
 // Read implements Storage interface
