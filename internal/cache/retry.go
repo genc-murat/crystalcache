@@ -1387,6 +1387,108 @@ func (rd *RetryDecorator) LInsert(key string, before bool, pivot string, value s
 	return length, finalErr
 }
 
+func (rd *RetryDecorator) GeoAdd(key string, items ...models.GeoPoint) (int, error) {
+	var added int
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		added, err = rd.cache.GeoAdd(key, items...)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return 0, err
+	}
+	return added, finalErr
+}
+
+func (rd *RetryDecorator) GeoDist(key, member1, member2, unit string) (float64, error) {
+	var distance float64
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		distance, err = rd.cache.GeoDist(key, member1, member2, unit)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return 0, err
+	}
+	return distance, finalErr
+}
+
+func (rd *RetryDecorator) GeoPos(key string, members ...string) ([]*models.GeoPoint, error) {
+	var positions []*models.GeoPoint
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		positions, err = rd.cache.GeoPos(key, members...)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return positions, finalErr
+}
+
+func (rd *RetryDecorator) GeoRadius(key string, longitude, latitude, radius float64, unit string, withDist, withCoord, withHash bool, count int, sort string) ([]models.GeoPoint, error) {
+	var results []models.GeoPoint
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		results, err = rd.cache.GeoRadius(key, longitude, latitude, radius, unit, withDist, withCoord, withHash, count, sort)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return results, finalErr
+}
+
+func (rd *RetryDecorator) GeoSearch(key string, options *models.GeoSearchOptions) ([]models.GeoPoint, error) {
+	var results []models.GeoPoint
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		results, err = rd.cache.GeoSearch(key, options)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return results, finalErr
+}
+
+func (rd *RetryDecorator) GeoSearchStore(destKey string, srcKey string, options *models.GeoSearchOptions) (int, error) {
+	var stored int
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		stored, err = rd.cache.GeoSearchStore(destKey, srcKey, options)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return 0, err
+	}
+	return stored, finalErr
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }

@@ -130,4 +130,10 @@ type Cache interface {
 	BitFieldRO(key string, commands []models.BitFieldCommand) ([]int64, error)
 	BitOp(operation string, destkey string, keys ...string) (int64, error)
 	BitPos(key string, bit int, start, end int64, reverse bool) (int64, error)
+	GeoAdd(key string, items ...models.GeoPoint) (int, error)
+	GeoDist(key, member1, member2, unit string) (float64, error)
+	GeoPos(key string, members ...string) ([]*models.GeoPoint, error)
+	GeoRadius(key string, longitude, latitude, radius float64, unit string, withDist, withCoord, withHash bool, count int, sort string) ([]models.GeoPoint, error)
+	GeoSearch(key string, options *models.GeoSearchOptions) ([]models.GeoPoint, error)
+	GeoSearchStore(destKey, srcKey string, options *models.GeoSearchOptions) (int, error)
 }

@@ -25,6 +25,7 @@ type Registry struct {
 	replicaHandlers *ReplicaHandlers
 	streamHandlers  *StreamHandlers
 	bitMapHandlers  *BitMapHandlers
+	geoHandlers     *GeoHandlers
 }
 
 func NewRegistry(cache ports.Cache, clientManager *client.Manager) *Registry {

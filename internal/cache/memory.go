@@ -34,6 +34,7 @@ type MemoryCache struct {
 	streams      *sync.Map // stream entries
 	streamGroups *sync.Map // stream consumer groups
 	bitmaps      *sync.Map
+	geoData      *sync.Map
 	bloomFilter  *models.BloomFilter
 	lastDefrag   time.Time
 	defragMu     sync.Mutex
@@ -63,6 +64,7 @@ func NewMemoryCache() *MemoryCache {
 		streams:      &sync.Map{},
 		streamGroups: &sync.Map{},
 		bitmaps:      &sync.Map{},
+		geoData:      &sync.Map{},
 		bloomFilter:  models.NewBloomFilter(config),
 	}
 
@@ -195,6 +197,10 @@ func (c *MemoryCache) Del(key string) (bool, error) {
 
 	// zsets'i ekle
 	if _, ok := c.zsets.LoadAndDelete(key); ok {
+		deleted = true
+	}
+
+	if _, ok := c.geoData.LoadAndDelete(key); ok {
 		deleted = true
 	}
 
@@ -670,6 +676,9 @@ func (c *MemoryCache) Type(key string) string {
 	}
 	if _, exists := c.streams.Load(key); exists {
 		return "stream"
+	}
+	if _, exists := c.geoData.Load(key); exists {
+		return "geo"
 	}
 	return "none"
 }
@@ -1454,17 +1463,16 @@ func (c *MemoryCache) Defragment() {
 	c.defragMu.Lock()
 	defer c.defragMu.Unlock()
 
-	// Existing defragmentation
 	c.defragStrings()
 	c.defragHashes()
 	c.defragLists()
 	c.defragSets()
-
-	// New defragmentation
 	c.defragJSON()
 	c.defragStreams()
 	c.defragStreamGroups()
 	c.defragBitmaps()
+
+	c.defragGeoData()
 
 	c.lastDefrag = time.Now()
 
