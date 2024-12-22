@@ -1114,7 +1114,7 @@ func (c *MemoryCache) Info() map[string]string {
 	// Keys count
 	var stringKeys, hashKeys, listKeys, setKeys, jsonKeys,
 		streamKeys, bitmapKeys, zsetKeys, suggestionKeys,
-		geoKeys, cmsKeys, cuckooKeys int
+		geoKeys, cmsKeys, cuckooKeys, tdigestKeys int
 
 	c.sets.Range(func(_, _ interface{}) bool {
 		stringKeys++
@@ -1195,28 +1195,36 @@ func (c *MemoryCache) Info() map[string]string {
 	})
 	stats["hll_keys"] = fmt.Sprintf("%d", hllKeys)
 
+	c.tdigests.Range(func(_, _ interface{}) bool {
+		tdigestKeys++
+		return true
+	})
+	stats["tdigest_keys"] = fmt.Sprintf("%d", tdigestKeys)
+
 	// Total keys
 	totalKeys := stringKeys + hashKeys + listKeys + setKeys + jsonKeys +
 		streamKeys + bitmapKeys + zsetKeys + suggestionKeys +
-		geoKeys + cmsKeys + cuckooKeys + hllKeys
+		geoKeys + cmsKeys + cuckooKeys + hllKeys + tdigestKeys
 	stats["total_keys"] = fmt.Sprintf("%d", totalKeys)
 
 	// Modules and Features
 	stats["json_native_storage"] = "enabled"
 	stats["json_version"] = "1.0"
-	stats["modules"] = "json_native,geo,suggestion,cms,cuckoo" // Add cuckoo module
+	stats["modules"] = "json_native,geo,suggestion,cms,cuckoo,tdigest"
 
 	// Module specific versions and info
 	stats["geo_version"] = "1.0"
 	stats["suggestion_version"] = "1.0"
 	stats["cms_version"] = "1.0"
-	stats["cuckoo_version"] = "1.0" // Add cuckoo version
+	stats["cuckoo_version"] = "1.0"
+	stats["tdigest_version"] = "1.0"
 
 	// Additional module capabilities
 	stats["geo_search"] = "enabled"
 	stats["suggestion_fuzzy"] = "enabled"
 	stats["cms_merge"] = "enabled"
 	stats["cuckoo_capacity"] = "enabled"
+	stats["tdigest_compression"] = "enabled"
 
 	return stats
 }

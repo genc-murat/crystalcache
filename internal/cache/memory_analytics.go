@@ -47,6 +47,7 @@ type MemoryAnalytics struct {
 	SuggestionMemory int64
 	CMSMemory        int64
 	CuckooMemory     int64
+	TDigestMemory    int64
 }
 
 func (c *MemoryCache) GetMemoryAnalytics() *MemoryAnalytics {
@@ -245,6 +246,15 @@ func (c *MemoryCache) calculateStructureMemory(analytics *MemoryAnalytics) {
 		return true
 	})
 
+	// T-Digest memory
+	c.tdigests.Range(func(key, digest interface{}) bool {
+		k := key.(string)
+		td := digest.(*models.TDigest)
+		size := int64(len(k)) + td.GetMemoryUsage()
+		atomic.AddInt64(&analytics.TDigestMemory, size)
+		return true
+	})
+
 	// Key statistics
 	analytics.KeyCount = c.getKeyCount()
 	analytics.ExpiredKeyCount = c.getExpiredKeyCount()
@@ -337,6 +347,12 @@ func (c *MemoryCache) getKeyCount() int64 {
 		return true
 	})
 
+	// Count T-Digest keys
+	c.tdigests.Range(func(_, _ interface{}) bool {
+		atomic.AddInt64(&count, 1)
+		return true
+	})
+
 	return count
 }
 
@@ -411,6 +427,7 @@ func (c *MemoryCache) evictKeys(targetBytes int64) {
 			c.cms,           // Count-Min Sketches
 			c.hlls,          // HyperLogLog
 			c.cuckooFilters, // Cuckoo Filters
+			c.tdigests,      // T-Digest
 		}
 
 		evicted := false
@@ -457,6 +474,8 @@ func (c *MemoryCache) getMapMemoryUsage(m *sync.Map) int64 {
 		case *models.HyperLogLog:
 			size += v.GetMemoryUsage()
 		case *models.CuckooFilter:
+			size += v.GetMemoryUsage()
+		case *models.TDigest:
 			size += v.GetMemoryUsage()
 		case *sync.Map: // For nested maps (hsets, sets_, etc.)
 			v.Range(func(k, val interface{}) bool {
