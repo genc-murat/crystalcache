@@ -1837,6 +1837,132 @@ func (rd *RetryDecorator) PFSelfTest() error {
 	})
 }
 
+func (rd *RetryDecorator) TDigestCreate(key string, compression float64) error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.TDigestCreate(key, compression)
+	})
+}
+
+func (rd *RetryDecorator) TDigestAdd(key string, values ...float64) error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.TDigestAdd(key, values...)
+	})
+}
+
+func (rd *RetryDecorator) TDigestMerge(destKey string, sourceKeys []string, weights []float64) error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.TDigestMerge(destKey, sourceKeys, weights)
+	})
+}
+
+func (rd *RetryDecorator) TDigestReset(key string) error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.TDigestReset(key)
+	})
+}
+
+func (rd *RetryDecorator) TDigestQuantile(key string, quantiles ...float64) ([]float64, error) {
+	var results []float64
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		results, err = rd.cache.TDigestQuantile(key, quantiles...)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return results, finalErr
+}
+
+func (rd *RetryDecorator) TDigestMin(key string) (float64, error) {
+	var min float64
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		min, err = rd.cache.TDigestMin(key)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return 0, err
+	}
+	return min, finalErr
+}
+
+func (rd *RetryDecorator) TDigestMax(key string) (float64, error) {
+	var max float64
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		max, err = rd.cache.TDigestMax(key)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return 0, err
+	}
+	return max, finalErr
+}
+
+func (rd *RetryDecorator) TDigestInfo(key string) (map[string]interface{}, error) {
+	var info map[string]interface{}
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		info, err = rd.cache.TDigestInfo(key)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return info, finalErr
+}
+
+func (rd *RetryDecorator) TDigestCDF(key string, values ...float64) ([]float64, error) {
+	var results []float64
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		results, err = rd.cache.TDigestCDF(key, values...)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return results, finalErr
+}
+
+func (rd *RetryDecorator) TDigestTrimmedMean(key string, lowQuantile, highQuantile float64) (float64, error) {
+	var mean float64
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		mean, err = rd.cache.TDigestTrimmedMean(key, lowQuantile, highQuantile)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return 0, err
+	}
+	return mean, finalErr
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }

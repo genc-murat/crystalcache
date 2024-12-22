@@ -171,4 +171,15 @@ type Cache interface {
 	PFMerge(destKey string, sourceKeys ...string) error
 	PFDebug(key string) (map[string]interface{}, error)
 	PFSelfTest() error
+
+	TDigestCreate(key string, compression float64) error
+	TDigestAdd(key string, values ...float64) error
+	TDigestMerge(destKey string, sourceKeys []string, weights []float64) error
+	TDigestReset(key string) error
+	TDigestQuantile(key string, quantiles ...float64) ([]float64, error)
+	TDigestMin(key string) (float64, error)
+	TDigestMax(key string) (float64, error)
+	TDigestInfo(key string) (map[string]interface{}, error)
+	TDigestCDF(key string, values ...float64) ([]float64, error)
+	TDigestTrimmedMean(key string, lowQuantile, highQuantile float64) (float64, error)
 }

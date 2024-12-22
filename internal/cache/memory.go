@@ -38,6 +38,7 @@ type MemoryCache struct {
 	hlls          *sync.Map
 	bloomFilter   *models.BloomFilter
 	cuckooFilters *sync.Map
+	tdigests      *sync.Map // T-Digest storage
 	lastDefrag    time.Time
 	defragMu      sync.Mutex
 
@@ -71,6 +72,7 @@ func NewMemoryCache() *MemoryCache {
 		cuckooFilters: &sync.Map{},
 		hlls:          &sync.Map{},
 		bloomFilter:   models.NewBloomFilter(config),
+		tdigests:      &sync.Map{},
 	}
 
 	// Start background cleanup
@@ -225,6 +227,10 @@ func (c *MemoryCache) Del(key string) (bool, error) {
 	}
 
 	if _, ok := c.hlls.LoadAndDelete(key); ok {
+		deleted = true
+	}
+
+	if _, ok := c.tdigests.LoadAndDelete(key); ok {
 		deleted = true
 	}
 
@@ -711,6 +717,9 @@ func (c *MemoryCache) Type(key string) string {
 	}
 	if _, exists := c.hlls.Load(key); exists {
 		return "hll"
+	}
+	if _, exists := c.tdigests.Load(key); exists {
+		return "tdigest"
 	}
 	return "none"
 }
@@ -1505,6 +1514,7 @@ func (c *MemoryCache) Defragment() {
 	c.defragSuggestions()
 	c.defragCuckooFilters()
 	c.defragHLL()
+	c.defragTDigests()
 
 	c.lastDefrag = time.Now()
 

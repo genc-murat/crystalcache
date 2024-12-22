@@ -30,6 +30,7 @@ type Registry struct {
 	cmsHandlers        *CMSHandlers
 	cuckooHandlers     *CuckooHandlers
 	hllHandlers        *HLLHandlers
+	tdigestHandlers    *TDigestHandlers
 }
 
 func NewRegistry(cache ports.Cache, clientManager *client.Manager) *Registry {
@@ -55,6 +56,7 @@ func NewRegistry(cache ports.Cache, clientManager *client.Manager) *Registry {
 		cmsHandlers:        NewCMSHandlers(cache),
 		cuckooHandlers:     NewCuckooHandlers(cache),
 		hllHandlers:        NewHLLHandlers(cache),
+		tdigestHandlers:    NewTDigestHandlers(cache),
 	}
 
 	r.registerHandlers()
@@ -312,6 +314,18 @@ func (r *Registry) registerHandlers() {
 	r.handlers["PFMERGE"] = r.hllHandlers.HandlePFMerge
 	r.handlers["PFDEBUG"] = r.hllHandlers.HandlePFDebug
 	r.handlers["PFSELFTEST"] = r.hllHandlers.HandlePFSelfTest
+
+	// T-Digest Commands
+	r.handlers["TDIGEST.CREATE"] = r.tdigestHandlers.HandleTDigestCreate
+	r.handlers["TDIGEST.ADD"] = r.tdigestHandlers.HandleTDigestAdd
+	r.handlers["TDIGEST.MERGE"] = r.tdigestHandlers.HandleTDigestMerge
+	r.handlers["TDIGEST.RESET"] = r.tdigestHandlers.HandleTDigestReset
+	r.handlers["TDIGEST.QUANTILE"] = r.tdigestHandlers.HandleTDigestQuantile
+	r.handlers["TDIGEST.MIN"] = r.tdigestHandlers.HandleTDigestMin
+	r.handlers["TDIGEST.MAX"] = r.tdigestHandlers.HandleTDigestMax
+	r.handlers["TDIGEST.INFO"] = r.tdigestHandlers.HandleTDigestInfo
+	r.handlers["TDIGEST.CDF"] = r.tdigestHandlers.HandleTDigestCDF
+	r.handlers["TDIGEST.TRIMMED_MEAN"] = r.tdigestHandlers.HandleTDigestTrimmedMean
 
 }
 
