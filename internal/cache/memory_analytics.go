@@ -43,11 +43,13 @@ type MemoryAnalytics struct {
 	StreamGroupMemory int64
 	BitmapMemory      int64
 
-	GeoMemory        int64
-	SuggestionMemory int64
-	CMSMemory        int64
-	CuckooMemory     int64
-	TDigestMemory    int64
+	GeoMemory         int64
+	SuggestionMemory  int64
+	CMSMemory         int64
+	CuckooMemory      int64
+	TDigestMemory     int64
+	TopKMemory        int64
+	BloomFilterMemory int64
 }
 
 func (c *MemoryCache) GetMemoryAnalytics() *MemoryAnalytics {
@@ -72,6 +74,36 @@ func (c *MemoryCache) GetMemoryAnalytics() *MemoryAnalytics {
 }
 
 func (c *MemoryCache) calculateStructureMemory(analytics *MemoryAnalytics) {
+	// TopK memory calculation
+	c.topks.Range(func(key, value interface{}) bool {
+		k := key.(string)
+		tk := value.(*models.TopK)
+		size := int64(len(k))
+
+		// Use Info() to get structure information
+		info := tk.Info()
+		size += 24                             // Base structure (k, capacity, decay)
+		size += int64(info["size"].(int)) * 16 // Approximate size per item (string pointer + count)
+
+		atomic.AddInt64(&analytics.TopKMemory, size)
+		return true
+	})
+
+	// Bloom Filter memory calculation
+	c.bfilters.Range(func(key, value interface{}) bool {
+		k := key.(string)
+		bf := value.(*models.BloomFilter)
+		size := int64(len(k))
+
+		// Get stats from the bloom filter
+		stats := bf.Stats()
+		size += int64(stats.BitsetSize / 8) // Bitset size in bytes
+		size += 16                          // Size (uint) and HashCount (uint)
+
+		atomic.AddInt64(&analytics.BloomFilterMemory, size)
+		return true
+	})
+
 	// String memory
 	c.sets.Range(func(key, value interface{}) bool {
 		k := key.(string)
@@ -379,12 +411,16 @@ func (c *MemoryCache) StartMemoryMonitor(interval time.Duration) {
 		for range ticker.C {
 			analytics := c.GetMemoryAnalytics()
 
-			// Log analytics or expose metrics
-			log.Printf("Memory Analytics: In Use: %d MB, Fragmentation: %.2f%%",
+			// Log analytics including new structures
+			log.Printf("Memory Analytics: In Use: %d MB, Fragmentation: %.2f%%, "+
+				"TopK: %d MB, BloomFilter: %d MB, TDigest: %d MB",
 				analytics.CurrentlyInUse/(1024*1024),
-				analytics.FragmentationRatio*100)
+				analytics.FragmentationRatio*100,
+				analytics.TopKMemory/(1024*1024),
+				analytics.BloomFilterMemory/(1024*1024),
+				analytics.TDigestMemory/(1024*1024))
 
-			// Check for high memory usage
+			// Check for high fragmentation
 			if analytics.FragmentationRatio > 1.5 {
 				c.Defragment()
 			}
@@ -428,6 +464,8 @@ func (c *MemoryCache) evictKeys(targetBytes int64) {
 			c.hlls,          // HyperLogLog
 			c.cuckooFilters, // Cuckoo Filters
 			c.tdigests,      // T-Digest
+			c.bfilters,      // Bloom Filters
+			c.topks,         // TopK structures
 		}
 
 		evicted := false
@@ -477,7 +515,17 @@ func (c *MemoryCache) getMapMemoryUsage(m *sync.Map) int64 {
 			size += v.GetMemoryUsage()
 		case *models.TDigest:
 			size += v.GetMemoryUsage()
-		case *sync.Map: // For nested maps (hsets, sets_, etc.)
+		case *models.TopK:
+			// Use Info() method for TopK size estimation
+			info := v.Info()
+			size += 24                             // Base structure size
+			size += int64(info["size"].(int)) * 16 // Approximate size per item
+		case *models.BloomFilter:
+			// Calculate Bloom Filter size
+			stats := v.Stats()
+			size += int64(stats.BitsetSize / 8) // Bitset size in bytes
+			size += 16                          // Configuration overhead
+		case *sync.Map:
 			v.Range(func(k, val interface{}) bool {
 				size += int64(len(k.(string)))
 				if str, ok := val.(string); ok {
