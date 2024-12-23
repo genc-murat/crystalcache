@@ -193,4 +193,16 @@ type Cache interface {
 	BFCard(key string) (uint, error)
 	BFScanDump(key string, iterator int) (int, []byte, error)
 	BFLoadChunk(key string, iterator int, data []byte) error
+
+	// TopK Operations
+	TOPKReserve(key string, topk, capacity int, decay float64) error
+	TOPKAdd(key string, items ...string) ([]bool, error)
+	TOPKIncrBy(key string, itemsWithCount map[string]int64) ([]bool, error)
+	TOPKQuery(key string, items ...string) ([]bool, error)
+	TOPKCount(key string, items ...string) ([]int64, error)
+	TOPKList(key string) ([]struct {
+		Item  string
+		Count int64
+	}, error)
+	TOPKInfo(key string) (map[string]interface{}, error)
 }

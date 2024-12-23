@@ -2104,6 +2104,127 @@ func (rd *RetryDecorator) BFLoadChunk(key string, iterator int, data []byte) err
 	})
 }
 
+// TOPKReserve with retry logic
+func (rd *RetryDecorator) TOPKReserve(key string, topk, capacity int, decay float64) error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.TOPKReserve(key, topk, capacity, decay)
+	})
+}
+
+// TOPKAdd with retry logic
+func (rd *RetryDecorator) TOPKAdd(key string, items ...string) ([]bool, error) {
+	var results []bool
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		results, err = rd.cache.TOPKAdd(key, items...)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return results, finalErr
+}
+
+// TOPKIncrBy with retry logic
+func (rd *RetryDecorator) TOPKIncrBy(key string, itemsWithCount map[string]int64) ([]bool, error) {
+	var results []bool
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		results, err = rd.cache.TOPKIncrBy(key, itemsWithCount)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return results, finalErr
+}
+
+// TOPKQuery with retry logic
+func (rd *RetryDecorator) TOPKQuery(key string, items ...string) ([]bool, error) {
+	var results []bool
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		results, err = rd.cache.TOPKQuery(key, items...)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return results, finalErr
+}
+
+// TOPKCount with retry logic
+func (rd *RetryDecorator) TOPKCount(key string, items ...string) ([]int64, error) {
+	var counts []int64
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		counts, err = rd.cache.TOPKCount(key, items...)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return counts, finalErr
+}
+
+// TOPKList with retry logic
+func (rd *RetryDecorator) TOPKList(key string) ([]struct {
+	Item  string
+	Count int64
+}, error) {
+	var list []struct {
+		Item  string
+		Count int64
+	}
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		list, err = rd.cache.TOPKList(key)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return list, finalErr
+}
+
+// TOPKInfo with retry logic
+func (rd *RetryDecorator) TOPKInfo(key string) (map[string]interface{}, error) {
+	var info map[string]interface{}
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		info, err = rd.cache.TOPKInfo(key)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return info, finalErr
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }

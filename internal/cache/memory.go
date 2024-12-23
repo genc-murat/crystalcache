@@ -40,6 +40,7 @@ type MemoryCache struct {
 	cuckooFilters *sync.Map
 	tdigests      *sync.Map // T-Digest storage
 	bfilters      *sync.Map
+	topks         *sync.Map
 	lastDefrag    time.Time
 	defragMu      sync.Mutex
 
@@ -75,6 +76,7 @@ func NewMemoryCache() *MemoryCache {
 		bloomFilter:   models.NewBloomFilter(config),
 		bfilters:      &sync.Map{},
 		tdigests:      &sync.Map{},
+		topks:         &sync.Map{},
 	}
 
 	// Start background cleanup
@@ -726,6 +728,9 @@ func (c *MemoryCache) Type(key string) string {
 	if _, exists := c.bfilters.Load(key); exists {
 		return "bf"
 	}
+	if _, exists := c.topks.Load(key); exists {
+		return "topk"
+	}
 	return "none"
 }
 
@@ -1213,16 +1218,25 @@ func (c *MemoryCache) Info() map[string]string {
 	})
 	stats["bloomfilter_keys"] = fmt.Sprintf("%d", bloomFilterKeys)
 
+	var topkKeys int
+	c.topks.Range(func(_, _ interface{}) bool {
+		topkKeys++
+		return true
+	})
+	stats["topk_keys"] = fmt.Sprintf("%d", topkKeys)
+
 	// Total keys
 	totalKeys := stringKeys + hashKeys + listKeys + setKeys + jsonKeys +
 		streamKeys + bitmapKeys + zsetKeys + suggestionKeys +
-		geoKeys + cmsKeys + cuckooKeys + hllKeys + tdigestKeys + bloomFilterKeys
+		geoKeys + cmsKeys + cuckooKeys + hllKeys + tdigestKeys +
+		bloomFilterKeys + topkKeys
 	stats["total_keys"] = fmt.Sprintf("%d", totalKeys)
 
 	// Modules and Features
 	stats["json_native_storage"] = "enabled"
 	stats["json_version"] = "1.0"
-	stats["modules"] = "json_native,geo,suggestion,cms,cuckoo,tdigest,bloomfilter"
+	stats["modules"] = "json_native,geo,suggestion,cms,cuckoo,tdigest,bloomfilter,topk"
+	stats["topk_version"] = "1.0"
 
 	// Module specific versions and info
 	stats["geo_version"] = "1.0"
@@ -1239,6 +1253,19 @@ func (c *MemoryCache) Info() map[string]string {
 	stats["cuckoo_capacity"] = "enabled"
 	stats["tdigest_compression"] = "enabled"
 	stats["bloomfilter_scaling"] = "enabled"
+
+	// Module versions and details
+	moduleDetails := []string{
+		"name=json_native,ver=1.0,api=1.0",
+		"name=geo,ver=1.0,api=1.0",
+		"name=suggestion,ver=1.0,api=1.0",
+		"name=cms,ver=1.0,api=1.0",
+		"name=cuckoo,ver=1.0,api=1.0",
+		"name=tdigest,ver=1.0,api=1.0",
+		"name=bloomfilter,ver=1.0,api=1.0",
+		"name=topk,ver=1.0,api=1.0", // Add TopK module details
+	}
+	stats["module_list"] = strings.Join(moduleDetails, ",")
 
 	return stats
 }
@@ -1538,6 +1565,7 @@ func (c *MemoryCache) Defragment() {
 	c.defragHLL()
 	c.defragTDigests()
 	c.defragBloomFilters()
+	c.defragTopK()
 
 	c.lastDefrag = time.Now()
 

@@ -32,6 +32,7 @@ type Registry struct {
 	hllHandlers         *HLLHandlers
 	tdigestHandlers     *TDigestHandlers
 	bloomFilterHandlers *BloomFilterHandlers
+	topkHandlers        *TopKHandlers
 }
 
 func NewRegistry(cache ports.Cache, clientManager *client.Manager) *Registry {
@@ -59,6 +60,7 @@ func NewRegistry(cache ports.Cache, clientManager *client.Manager) *Registry {
 		hllHandlers:         NewHLLHandlers(cache),
 		tdigestHandlers:     NewTDigestHandlers(cache),
 		bloomFilterHandlers: NewBloomFilterHandlers(cache),
+		topkHandlers:        NewTopKHandlers(cache),
 	}
 
 	r.registerHandlers()
@@ -339,6 +341,15 @@ func (r *Registry) registerHandlers() {
 	r.handlers["BF.CARD"] = r.bloomFilterHandlers.HandleBFCard
 	r.handlers["BF.SCANDUMP"] = r.bloomFilterHandlers.HandleBFScanDump
 	r.handlers["BF.LOADCHUNK"] = r.bloomFilterHandlers.HandleBFLoadChunk
+
+	// TopK Commands
+	r.handlers["TOPK.RESERVE"] = r.topkHandlers.HandleTOPKReserve
+	r.handlers["TOPK.ADD"] = r.topkHandlers.HandleTOPKAdd
+	r.handlers["TOPK.INCRBY"] = r.topkHandlers.HandleTOPKIncrBy
+	r.handlers["TOPK.QUERY"] = r.topkHandlers.HandleTOPKQuery
+	r.handlers["TOPK.COUNT"] = r.topkHandlers.HandleTOPKCount
+	r.handlers["TOPK.LIST"] = r.topkHandlers.HandleTOPKList
+	r.handlers["TOPK.INFO"] = r.topkHandlers.HandleTOPKInfo
 
 }
 
