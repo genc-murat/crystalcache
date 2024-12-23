@@ -39,6 +39,7 @@ type MemoryCache struct {
 	bloomFilter   *models.BloomFilter
 	cuckooFilters *sync.Map
 	tdigests      *sync.Map // T-Digest storage
+	bfilters      *sync.Map
 	lastDefrag    time.Time
 	defragMu      sync.Mutex
 
@@ -72,6 +73,7 @@ func NewMemoryCache() *MemoryCache {
 		cuckooFilters: &sync.Map{},
 		hlls:          &sync.Map{},
 		bloomFilter:   models.NewBloomFilter(config),
+		bfilters:      &sync.Map{},
 		tdigests:      &sync.Map{},
 	}
 
@@ -721,6 +723,9 @@ func (c *MemoryCache) Type(key string) string {
 	if _, exists := c.tdigests.Load(key); exists {
 		return "tdigest"
 	}
+	if _, exists := c.bfilters.Load(key); exists {
+		return "bf"
+	}
 	return "none"
 }
 
@@ -1114,7 +1119,7 @@ func (c *MemoryCache) Info() map[string]string {
 	// Keys count
 	var stringKeys, hashKeys, listKeys, setKeys, jsonKeys,
 		streamKeys, bitmapKeys, zsetKeys, suggestionKeys,
-		geoKeys, cmsKeys, cuckooKeys, tdigestKeys int
+		geoKeys, cmsKeys, cuckooKeys, tdigestKeys, bloomFilterKeys int
 
 	c.sets.Range(func(_, _ interface{}) bool {
 		stringKeys++
@@ -1201,16 +1206,23 @@ func (c *MemoryCache) Info() map[string]string {
 	})
 	stats["tdigest_keys"] = fmt.Sprintf("%d", tdigestKeys)
 
+	// Count Bloom Filter keys
+	c.bfilters.Range(func(_, _ interface{}) bool {
+		bloomFilterKeys++
+		return true
+	})
+	stats["bloomfilter_keys"] = fmt.Sprintf("%d", bloomFilterKeys)
+
 	// Total keys
 	totalKeys := stringKeys + hashKeys + listKeys + setKeys + jsonKeys +
 		streamKeys + bitmapKeys + zsetKeys + suggestionKeys +
-		geoKeys + cmsKeys + cuckooKeys + hllKeys + tdigestKeys
+		geoKeys + cmsKeys + cuckooKeys + hllKeys + tdigestKeys + bloomFilterKeys
 	stats["total_keys"] = fmt.Sprintf("%d", totalKeys)
 
 	// Modules and Features
 	stats["json_native_storage"] = "enabled"
 	stats["json_version"] = "1.0"
-	stats["modules"] = "json_native,geo,suggestion,cms,cuckoo,tdigest"
+	stats["modules"] = "json_native,geo,suggestion,cms,cuckoo,tdigest,bloomfilter"
 
 	// Module specific versions and info
 	stats["geo_version"] = "1.0"
@@ -1218,6 +1230,7 @@ func (c *MemoryCache) Info() map[string]string {
 	stats["cms_version"] = "1.0"
 	stats["cuckoo_version"] = "1.0"
 	stats["tdigest_version"] = "1.0"
+	stats["bloomfilter_version"] = "1.0"
 
 	// Additional module capabilities
 	stats["geo_search"] = "enabled"
@@ -1225,6 +1238,7 @@ func (c *MemoryCache) Info() map[string]string {
 	stats["cms_merge"] = "enabled"
 	stats["cuckoo_capacity"] = "enabled"
 	stats["tdigest_compression"] = "enabled"
+	stats["bloomfilter_scaling"] = "enabled"
 
 	return stats
 }
@@ -1523,6 +1537,7 @@ func (c *MemoryCache) Defragment() {
 	c.defragCuckooFilters()
 	c.defragHLL()
 	c.defragTDigests()
+	c.defragBloomFilters()
 
 	c.lastDefrag = time.Now()
 

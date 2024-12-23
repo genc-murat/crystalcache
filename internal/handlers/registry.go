@@ -9,54 +9,56 @@ import (
 type CommandHandler func(args []models.Value) models.Value
 
 type Registry struct {
-	handlers           map[string]CommandHandler
-	stringHandlers     *StringHandlers
-	hashHandlers       *HashHandlers
-	listHandlers       *ListHandlers
-	setHandlers        *SetHandlers
-	zsetHandlers       *ZSetHandlers
-	adminHandlers      *AdminHandlers
-	moduleHandlers     *ModuleHandlers
-	configHandlers     *ConfigHandlers
-	scanHandlers       *ScanHandlers
-	memoryHandlers     *MemoryHandlers
-	clusterHandlers    *ClusterHandlers
-	jsonHandlers       *JSONHandlers
-	replicaHandlers    *ReplicaHandlers
-	streamHandlers     *StreamHandlers
-	bitMapHandlers     *BitMapHandlers
-	geoHandlers        *GeoHandlers
-	suggestionHandlers *SuggestionHandlers
-	cmsHandlers        *CMSHandlers
-	cuckooHandlers     *CuckooHandlers
-	hllHandlers        *HLLHandlers
-	tdigestHandlers    *TDigestHandlers
+	handlers            map[string]CommandHandler
+	stringHandlers      *StringHandlers
+	hashHandlers        *HashHandlers
+	listHandlers        *ListHandlers
+	setHandlers         *SetHandlers
+	zsetHandlers        *ZSetHandlers
+	adminHandlers       *AdminHandlers
+	moduleHandlers      *ModuleHandlers
+	configHandlers      *ConfigHandlers
+	scanHandlers        *ScanHandlers
+	memoryHandlers      *MemoryHandlers
+	clusterHandlers     *ClusterHandlers
+	jsonHandlers        *JSONHandlers
+	replicaHandlers     *ReplicaHandlers
+	streamHandlers      *StreamHandlers
+	bitMapHandlers      *BitMapHandlers
+	geoHandlers         *GeoHandlers
+	suggestionHandlers  *SuggestionHandlers
+	cmsHandlers         *CMSHandlers
+	cuckooHandlers      *CuckooHandlers
+	hllHandlers         *HLLHandlers
+	tdigestHandlers     *TDigestHandlers
+	bloomFilterHandlers *BloomFilterHandlers
 }
 
 func NewRegistry(cache ports.Cache, clientManager *client.Manager) *Registry {
 	r := &Registry{
-		handlers:           make(map[string]CommandHandler),
-		stringHandlers:     NewStringHandlers(cache),
-		hashHandlers:       NewHashHandlers(cache),
-		listHandlers:       NewListHandlers(cache),
-		setHandlers:        NewSetHandlers(cache),
-		zsetHandlers:       NewZSetHandlers(cache),
-		adminHandlers:      NewAdminHandlers(cache, clientManager),
-		moduleHandlers:     NewModuleHandlers(cache),
-		configHandlers:     NewConfigHandlers(cache),
-		scanHandlers:       NewScanHandlers(cache),
-		memoryHandlers:     NewMemoryHandlers(cache),
-		clusterHandlers:    NewClusterHandlers(cache),
-		jsonHandlers:       NewJSONHandlers(cache),
-		replicaHandlers:    NewReplicaHandlers(cache, nil),
-		streamHandlers:     NewStreamHandlers(cache),
-		bitMapHandlers:     NewBitMapHandlers(cache),
-		geoHandlers:        NewGeoHandlers(cache),
-		suggestionHandlers: NewSuggestionHandlers(cache),
-		cmsHandlers:        NewCMSHandlers(cache),
-		cuckooHandlers:     NewCuckooHandlers(cache),
-		hllHandlers:        NewHLLHandlers(cache),
-		tdigestHandlers:    NewTDigestHandlers(cache),
+		handlers:            make(map[string]CommandHandler),
+		stringHandlers:      NewStringHandlers(cache),
+		hashHandlers:        NewHashHandlers(cache),
+		listHandlers:        NewListHandlers(cache),
+		setHandlers:         NewSetHandlers(cache),
+		zsetHandlers:        NewZSetHandlers(cache),
+		adminHandlers:       NewAdminHandlers(cache, clientManager),
+		moduleHandlers:      NewModuleHandlers(cache),
+		configHandlers:      NewConfigHandlers(cache),
+		scanHandlers:        NewScanHandlers(cache),
+		memoryHandlers:      NewMemoryHandlers(cache),
+		clusterHandlers:     NewClusterHandlers(cache),
+		jsonHandlers:        NewJSONHandlers(cache),
+		replicaHandlers:     NewReplicaHandlers(cache, nil),
+		streamHandlers:      NewStreamHandlers(cache),
+		bitMapHandlers:      NewBitMapHandlers(cache),
+		geoHandlers:         NewGeoHandlers(cache),
+		suggestionHandlers:  NewSuggestionHandlers(cache),
+		cmsHandlers:         NewCMSHandlers(cache),
+		cuckooHandlers:      NewCuckooHandlers(cache),
+		hllHandlers:         NewHLLHandlers(cache),
+		tdigestHandlers:     NewTDigestHandlers(cache),
+		bloomFilterHandlers: NewBloomFilterHandlers(cache),
 	}
 
 	r.registerHandlers()
@@ -326,6 +328,17 @@ func (r *Registry) registerHandlers() {
 	r.handlers["TDIGEST.INFO"] = r.tdigestHandlers.HandleTDigestInfo
 	r.handlers["TDIGEST.CDF"] = r.tdigestHandlers.HandleTDigestCDF
 	r.handlers["TDIGEST.TRIMMED_MEAN"] = r.tdigestHandlers.HandleTDigestTrimmedMean
+
+	// Bloom Filter Commands
+	r.handlers["BF.ADD"] = r.bloomFilterHandlers.HandleBFAdd
+	r.handlers["BF.EXISTS"] = r.bloomFilterHandlers.HandleBFExists
+	r.handlers["BF.RESERVE"] = r.bloomFilterHandlers.HandleBFReserve
+	r.handlers["BF.MADD"] = r.bloomFilterHandlers.HandleBFMAdd
+	r.handlers["BF.MEXISTS"] = r.bloomFilterHandlers.HandleBFMExists
+	r.handlers["BF.INFO"] = r.bloomFilterHandlers.HandleBFInfo
+	r.handlers["BF.CARD"] = r.bloomFilterHandlers.HandleBFCard
+	r.handlers["BF.SCANDUMP"] = r.bloomFilterHandlers.HandleBFScanDump
+	r.handlers["BF.LOADCHUNK"] = r.bloomFilterHandlers.HandleBFLoadChunk
 
 }
 

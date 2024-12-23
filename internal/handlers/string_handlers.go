@@ -28,7 +28,7 @@ func (h *StringHandlers) HandleSet(args []models.Value) models.Value {
 	value := args[1].Bulk
 	nx := false
 	xx := false
-	expireSeconds := -1 // Changed to int since Expire expects int
+	expireSeconds := -1
 
 	// Parse optional arguments
 	for i := 2; i < len(args); i++ {
@@ -48,8 +48,8 @@ func (h *StringHandlers) HandleSet(args []models.Value) models.Value {
 			if seconds <= 0 {
 				return models.Value{Type: "error", Str: "ERR invalid expire time in set"}
 			}
-			expireSeconds = seconds // No conversion needed, keeping as int
-			i++                     // Skip the next argument since we consumed it
+			expireSeconds = seconds
+			i++
 		}
 	}
 

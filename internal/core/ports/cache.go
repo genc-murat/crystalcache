@@ -182,4 +182,15 @@ type Cache interface {
 	TDigestInfo(key string) (map[string]interface{}, error)
 	TDigestCDF(key string, values ...float64) ([]float64, error)
 	TDigestTrimmedMean(key string, lowQuantile, highQuantile float64) (float64, error)
+
+	// Bloom Filter Operations
+	BFAdd(key string, item string) (bool, error)
+	BFExists(key string, item string) (bool, error)
+	BFReserve(key string, errorRate float64, capacity uint) error
+	BFMAdd(key string, items []string) ([]bool, error)
+	BFMExists(key string, items []string) ([]bool, error)
+	BFInfo(key string) (map[string]interface{}, error)
+	BFCard(key string) (uint, error)
+	BFScanDump(key string, iterator int) (int, []byte, error)
+	BFLoadChunk(key string, iterator int, data []byte) error
 }

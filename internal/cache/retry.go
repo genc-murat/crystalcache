@@ -1963,6 +1963,147 @@ func (rd *RetryDecorator) TDigestTrimmedMean(key string, lowQuantile, highQuanti
 	return mean, finalErr
 }
 
+// BFAdd with retry logic
+func (rd *RetryDecorator) BFAdd(key string, item string) (bool, error) {
+	var added bool
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		added, err = rd.cache.BFAdd(key, item)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return false, err
+	}
+	return added, finalErr
+}
+
+// BFExists with retry logic
+func (rd *RetryDecorator) BFExists(key string, item string) (bool, error) {
+	var exists bool
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		exists, err = rd.cache.BFExists(key, item)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return false, err
+	}
+	return exists, finalErr
+}
+
+// BFReserve with retry logic
+func (rd *RetryDecorator) BFReserve(key string, errorRate float64, capacity uint) error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.BFReserve(key, errorRate, capacity)
+	})
+}
+
+// BFMAdd with retry logic
+func (rd *RetryDecorator) BFMAdd(key string, items []string) ([]bool, error) {
+	var results []bool
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		results, err = rd.cache.BFMAdd(key, items)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return results, finalErr
+}
+
+// BFMExists with retry logic
+func (rd *RetryDecorator) BFMExists(key string, items []string) ([]bool, error) {
+	var results []bool
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		results, err = rd.cache.BFMExists(key, items)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return results, finalErr
+}
+
+// BFInfo with retry logic
+func (rd *RetryDecorator) BFInfo(key string) (map[string]interface{}, error) {
+	var info map[string]interface{}
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		info, err = rd.cache.BFInfo(key)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return info, finalErr
+}
+
+// BFCard with retry logic
+func (rd *RetryDecorator) BFCard(key string) (uint, error) {
+	var card uint
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		card, err = rd.cache.BFCard(key)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return 0, err
+	}
+	return card, finalErr
+}
+
+// BFScanDump with retry logic
+func (rd *RetryDecorator) BFScanDump(key string, iterator int) (int, []byte, error) {
+	var nextIterator int
+	var data []byte
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		nextIterator, data, err = rd.cache.BFScanDump(key, iterator)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return 0, nil, err
+	}
+	return nextIterator, data, finalErr
+}
+
+// BFLoadChunk with retry logic
+func (rd *RetryDecorator) BFLoadChunk(key string, iterator int, data []byte) error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.BFLoadChunk(key, iterator, data)
+	})
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }
