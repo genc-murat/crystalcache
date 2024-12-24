@@ -1696,23 +1696,24 @@ func (c *MemoryCache) StartDefragmentation(interval time.Duration, threshold flo
 				c.Defragment()
 
 				// Log stats after defragmentation
-				newStats := c.GetDefragStats()
-				log.Printf("Defragmentation completed. New heap objects: %v", newStats["heap_objects"])
+				newStats := c.GetMemoryStats() // Using GetMemoryStats for simplicity, can create GetDefragStats if needed
+				log.Printf("Defragmentation completed. New heap objects: %v", newStats.HeapObjects())
 			}
 		}
 	}()
 }
 
-// Memory istatistiklerini getir
+// GetMemoryStats returns memory statistics
 func (c *MemoryCache) GetMemoryStats() models.MemoryStats {
 	var ms runtime.MemStats
 	runtime.ReadMemStats(&ms)
 
 	return models.MemoryStats{
-		TotalMemory:     int64(ms.Sys),
-		UsedMemory:      int64(ms.Alloc),
-		FragmentedBytes: int64(ms.Sys - ms.Alloc),
-		LastDefrag:      c.lastDefrag,
+		TotalMemory:      int64(ms.Sys),
+		UsedMemory:       int64(ms.Alloc),
+		FragmentedBytes:  int64(ms.Sys - ms.Alloc),
+		LastDefrag:       c.lastDefrag,
+		HeapObjectsCount: ms.HeapObjects,
 	}
 }
 
