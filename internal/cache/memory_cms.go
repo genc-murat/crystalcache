@@ -2,7 +2,6 @@ package cache
 
 import (
 	"fmt"
-	"sync"
 
 	"github.com/genc-murat/crystalcache/internal/core/models"
 )
@@ -115,11 +114,5 @@ func (c *MemoryCache) CMSInfo(key string) (map[string]interface{}, error) {
 }
 
 func (c *MemoryCache) defragCMS() {
-	newCMS := &sync.Map{}
-	c.cms.Range(func(key, valueI interface{}) bool {
-		sketch := valueI.(*models.CountMinSketch)
-		newCMS.Store(key, sketch)
-		return true
-	})
-	c.cms = newCMS
+	c.cms = c.defragSyncMap(c.cms)
 }

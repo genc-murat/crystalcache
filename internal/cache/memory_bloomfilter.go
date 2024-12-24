@@ -3,7 +3,6 @@ package cache
 import (
 	"encoding/binary"
 	"fmt"
-	"sync"
 
 	"github.com/genc-murat/crystalcache/internal/core/models"
 )
@@ -195,17 +194,6 @@ func (c *MemoryCache) BFLoadChunk(key string, iterator int, data []byte) error {
 	return nil
 }
 
-// Add defragmentation for Bloom Filters
 func (c *MemoryCache) defragBloomFilters() {
-	// Create new sync.Map for bloom filters
-	newBFilters := &sync.Map{}
-
-	// Copy all filters to new map
-	c.bfilters.Range(func(key, filterI interface{}) bool {
-		newBFilters.Store(key, filterI)
-		return true
-	})
-
-	// Replace old map with new one
-	c.bfilters = newBFilters
+	c.bfilters = c.defragSyncMap(c.bfilters)
 }

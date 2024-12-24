@@ -2,7 +2,6 @@ package cache
 
 import (
 	"fmt"
-	"sync"
 
 	"github.com/genc-murat/crystalcache/internal/core/models"
 )
@@ -146,11 +145,5 @@ func (c *MemoryCache) TDigestTrimmedMean(key string, lowQuantile, highQuantile f
 }
 
 func (c *MemoryCache) defragTDigests() {
-	newTDigests := &sync.Map{}
-	c.tdigests.Range(func(key, valueI interface{}) bool {
-		tdigest := valueI.(*models.TDigest)
-		newTDigests.Store(key, tdigest)
-		return true
-	})
-	c.tdigests = newTDigests
+	c.tdigests = c.defragSyncMap(c.tdigests)
 }

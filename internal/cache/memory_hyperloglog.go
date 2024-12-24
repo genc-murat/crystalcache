@@ -3,7 +3,6 @@ package cache
 import (
 	"fmt"
 	"hash/fnv"
-	"sync"
 
 	"github.com/genc-murat/crystalcache/internal/core/models"
 )
@@ -118,13 +117,5 @@ func (c *MemoryCache) PFSelfTest() error {
 }
 
 func (c *MemoryCache) defragHLL() {
-	newHLLs := &sync.Map{}
-
-	c.hlls.Range(func(key, valueI interface{}) bool {
-		hll := valueI.(*models.HyperLogLog)
-		newHLLs.Store(key, hll)
-		return true
-	})
-
-	c.hlls = newHLLs
+	c.hlls = c.defragSyncMap(c.hlls)
 }

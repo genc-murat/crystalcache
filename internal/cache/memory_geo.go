@@ -291,22 +291,14 @@ func (c *MemoryCache) GeoSearchStore(destKey, srcKey string, options *models.Geo
 
 	return stored, nil
 }
+
 func (c *MemoryCache) defragGeoData() {
 	newGeoData := &sync.Map{}
-
 	c.geoData.Range(func(key, valueI interface{}) bool {
 		geoSet := valueI.(*sync.Map)
-		newGeoSet := &sync.Map{}
-
-		geoSet.Range(func(member, pointI interface{}) bool {
-			point := pointI.(*models.GeoPoint)
-			newGeoSet.Store(member, point)
-			return true
-		})
-
+		newGeoSet := c.defragSyncMap(geoSet)
 		newGeoData.Store(key, newGeoSet)
 		return true
 	})
-
 	c.geoData = newGeoData
 }

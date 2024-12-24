@@ -1545,6 +1545,15 @@ func (c *MemoryCache) GetBloomFilterStats() models.BloomFilterStats {
 	return c.bloomFilter.Stats()
 }
 
+func (c *MemoryCache) defragSyncMap(oldMap *sync.Map) *sync.Map {
+	newMap := &sync.Map{}
+	oldMap.Range(func(key, value interface{}) bool {
+		newMap.Store(key, value)
+		return true
+	})
+	return newMap
+}
+
 func (c *MemoryCache) Defragment() {
 	c.defragMu.Lock()
 	defer c.defragMu.Unlock()
@@ -1574,63 +1583,35 @@ func (c *MemoryCache) Defragment() {
 }
 
 func (c *MemoryCache) defragJSON() {
-	newJSON := &sync.Map{}
-
-	c.jsonData.Range(func(key, value interface{}) bool {
-		newJSON.Store(key, value)
-		return true
-	})
-
-	c.jsonData = newJSON
+	c.jsonData = c.defragSyncMap(c.jsonData)
 }
 
 func (c *MemoryCache) defragStreams() {
 	newStreams := &sync.Map{}
-
 	c.streams.Range(func(key, streamI interface{}) bool {
 		stream := streamI.(*sync.Map)
-		newStream := &sync.Map{}
-
-		// Copy all stream entries
-		stream.Range(func(entryID, entryData interface{}) bool {
-			newStream.Store(entryID, entryData)
-			return true
-		})
-
+		newStream := c.defragSyncMap(stream)
 		newStreams.Store(key, newStream)
 		return true
 	})
-
 	c.streams = newStreams
 }
 
 func (c *MemoryCache) defragStreamGroups() {
 	newGroups := &sync.Map{}
-
 	c.streamGroups.Range(func(key, groupI interface{}) bool {
 		group := groupI.(*sync.Map)
-		newGroup := &sync.Map{}
-
-		// Copy all consumer group data
-		group.Range(func(consumerKey, consumerData interface{}) bool {
-			newGroup.Store(consumerKey, consumerData)
-			return true
-		})
-
+		newGroup := c.defragSyncMap(group)
 		newGroups.Store(key, newGroup)
 		return true
 	})
-
 	c.streamGroups = newGroups
 }
 
 func (c *MemoryCache) defragBitmaps() {
 	newBitmaps := &sync.Map{}
-
 	c.bitmaps.Range(func(key, bitmapI interface{}) bool {
 		bitmap := bitmapI.([]byte)
-
-		// Only defrag if capacity is more than twice the length
 		if cap(bitmap) > 2*len(bitmap) {
 			newBitmap := make([]byte, len(bitmap))
 			copy(newBitmap, bitmap)
@@ -1640,57 +1621,28 @@ func (c *MemoryCache) defragBitmaps() {
 		}
 		return true
 	})
-
 	c.bitmaps = newBitmaps
 }
 
 func (c *MemoryCache) defragStrings() {
-	// Create new sync.Map for strings
-	newSets := &sync.Map{}
-
-	// Copy all key-value pairs to new map
-	c.sets.Range(func(key, value interface{}) bool {
-		newSets.Store(key, value)
-		return true
-	})
-
-	// Replace old map with new one
-	c.sets = newSets
+	c.sets = c.defragSyncMap(c.sets)
 }
 
 func (c *MemoryCache) defragHashes() {
-	// Create new sync.Map for hashes
 	newHsets := &sync.Map{}
-
-	// Iterate through all hash maps
 	c.hsets.Range(func(hashKey, hashMapI interface{}) bool {
 		hashMap := hashMapI.(*sync.Map)
-		newHashMap := &sync.Map{}
-
-		// Copy all fields to new hash map
-		hashMap.Range(func(fieldKey, fieldValue interface{}) bool {
-			newHashMap.Store(fieldKey, fieldValue)
-			return true
-		})
-
-		// Store new hash map in new hsets
+		newHashMap := c.defragSyncMap(hashMap)
 		newHsets.Store(hashKey, newHashMap)
 		return true
 	})
-
-	// Replace old map with new one
 	c.hsets = newHsets
 }
 
 func (c *MemoryCache) defragLists() {
-	// Create new sync.Map for lists
 	newLists := &sync.Map{}
-
-	// Iterate through all lists
 	c.lists.Range(func(key, listI interface{}) bool {
 		list := listI.(*[]string)
-
-		// Only defrag if capacity is more than twice the length
 		if cap(*list) > 2*len(*list) {
 			newList := make([]string, len(*list))
 			copy(newList, *list)
@@ -1700,32 +1652,17 @@ func (c *MemoryCache) defragLists() {
 		}
 		return true
 	})
-
-	// Replace old map with new one
 	c.lists = newLists
 }
 
 func (c *MemoryCache) defragSets() {
-	// Create new sync.Map for sets
 	newSets := &sync.Map{}
-
-	// Iterate through all sets
 	c.sets_.Range(func(key, setI interface{}) bool {
 		set := setI.(*sync.Map)
-		newSet := &sync.Map{}
-
-		// Copy all members to new set
-		set.Range(func(member, _ interface{}) bool {
-			newSet.Store(member, true)
-			return true
-		})
-
-		// Store new set in new sets
+		newSet := c.defragSyncMap(set)
 		newSets.Store(key, newSet)
 		return true
 	})
-
-	// Replace old map with new one
 	c.sets_ = newSets
 }
 

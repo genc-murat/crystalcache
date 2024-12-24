@@ -160,21 +160,17 @@ func min(a, b, c int) int {
 
 func (c *MemoryCache) defragSuggestions() {
 	newSuggestions := &sync.Map{}
-
 	c.suggestions.Range(func(key, valueI interface{}) bool {
 		dict := valueI.(*models.SuggestionDict)
-
-		// Create a new dictionary
+		// Create a new dictionary with the correct capacity
 		newDict := models.NewSuggestionDict()
-
+		newDict.Entries = make(map[string]*models.Suggestion, len(dict.Entries))
 		// Copy all entries
 		for str, sug := range dict.Entries {
 			newDict.Entries[str] = sug
 		}
-
 		newSuggestions.Store(key, newDict)
 		return true
 	})
-
 	c.suggestions = newSuggestions
 }

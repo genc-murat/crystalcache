@@ -2,7 +2,6 @@ package cache
 
 import (
 	"fmt"
-	"sync"
 
 	"github.com/genc-murat/crystalcache/internal/core/models"
 )
@@ -97,17 +96,6 @@ func (c *MemoryCache) TOPKInfo(key string) (map[string]interface{}, error) {
 	return sketch.Info(), nil
 }
 
-// Add defragmentation for TopK structures
 func (c *MemoryCache) defragTopK() {
-	// Create new sync.Map for topk structures
-	newTopKs := &sync.Map{}
-
-	// Copy all TopK structures to new map
-	c.topks.Range(func(key, value interface{}) bool {
-		newTopKs.Store(key, value)
-		return true
-	})
-
-	// Replace old map with new one
-	c.topks = newTopKs
+	c.topks = c.defragSyncMap(c.topks)
 }

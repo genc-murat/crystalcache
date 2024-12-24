@@ -2,7 +2,6 @@ package cache
 
 import (
 	"fmt"
-	"sync"
 
 	"github.com/genc-murat/crystalcache/internal/core/models"
 )
@@ -177,13 +176,5 @@ func (c *MemoryCache) CFLoadChunk(key string, iter uint64, data []byte) error {
 }
 
 func (c *MemoryCache) defragCuckooFilters() {
-	newCuckooFilters := &sync.Map{}
-
-	c.cuckooFilters.Range(func(key, valueI interface{}) bool {
-		filter := valueI.(*models.CuckooFilter)
-		newCuckooFilters.Store(key, filter)
-		return true
-	})
-
-	c.cuckooFilters = newCuckooFilters
+	c.cuckooFilters = c.defragSyncMap(c.cuckooFilters)
 }
