@@ -296,9 +296,9 @@ func (h *StreamHandlers) HandleXREVRANGE(args []models.Value) models.Value {
 	}
 
 	count := 0
-	if len(args) >= 4 {
+	if len(args) >= 5 && strings.ToUpper(args[3].Bulk) == "COUNT" {
 		var err error
-		count, err = strconv.Atoi(args[3].Bulk)
+		count, err = strconv.Atoi(args[4].Bulk)
 		if err != nil {
 			return models.Value{Type: "error", Str: "ERR invalid COUNT"}
 		}
