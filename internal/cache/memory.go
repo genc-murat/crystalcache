@@ -2055,12 +2055,9 @@ func (c *MemoryCache) LTrim(key string, start int, stop int) error {
 }
 
 func (c *MemoryCache) XAdd(key string, id string, fields map[string]string) error {
-	// Ensure streams map exists
-	var stream sync.Map
-	streamI, _ := c.streams.LoadOrStore(key, &stream)
+	streamI, _ := c.streams.LoadOrStore(key, &sync.Map{})
 	streamMap := streamI.(*sync.Map)
 
-	// Store entry
 	entry := &models.StreamEntry{
 		ID:     id,
 		Fields: fields,
@@ -2209,20 +2206,43 @@ func (c *MemoryCache) XRANGE(key, start, end string, count int) ([]models.Stream
 func (c *MemoryCache) XREAD(keys []string, ids []string, count int) (map[string][]models.StreamEntry, error) {
 	result := make(map[string][]models.StreamEntry)
 
+	if len(keys) != len(ids) {
+		return nil, fmt.Errorf("XREAD: keys and ids slices must have the same length")
+	}
+
 	for i, key := range keys {
+		log.Printf("XREAD: Processing key=%s, startID=%s", key, ids[i]) // Added logging
+
 		streamI, exists := c.streams.Load(key)
 		if !exists {
+			log.Printf("XREAD: Stream not found for key=%s", key) // Added logging
 			continue
 		}
 
-		stream := streamI.(*sync.Map)
+		streamMap, ok := streamI.(*sync.Map)
+		if !ok {
+			return nil, fmt.Errorf("XREAD: Unexpected type for stream: %T", streamI)
+		}
+
 		var entries []models.StreamEntry
 		startID := ids[i]
 
-		stream.Range(func(k, v interface{}) bool {
-			id := k.(string)
+		streamMap.Range(func(k, v interface{}) bool {
+			id, ok := k.(string)
+			if !ok {
+				log.Printf("XREAD: Unexpected key type in stream: %T", k) // Added logging
+				return true                                               // Continue to the next entry
+			}
+
+			entryPtr, ok := v.(*models.StreamEntry)
+			if !ok {
+				log.Printf("XREAD: Unexpected value type in stream: %T for key=%s", v, id) // Added logging
+				return true                                                                // Continue to the next entry
+			}
+			entry := *entryPtr
+
 			if id > startID {
-				entries = append(entries, *v.(*models.StreamEntry))
+				entries = append(entries, entry)
 				if count > 0 && len(entries) >= count {
 					return false
 				}
@@ -2232,6 +2252,9 @@ func (c *MemoryCache) XREAD(keys []string, ids []string, count int) (map[string]
 
 		if len(entries) > 0 {
 			result[key] = entries
+			log.Printf("XREAD: Found %d entries for key=%s", len(entries), key) // Added logging
+		} else {
+			log.Printf("XREAD: No entries found for key=%s after ID=%s", key, startID) // Added logging
 		}
 	}
 

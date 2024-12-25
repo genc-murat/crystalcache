@@ -234,32 +234,46 @@ func (h *StreamHandlers) HandleXRANGE(args []models.Value) models.Value {
 }
 
 func (h *StreamHandlers) HandleXREAD(args []models.Value) models.Value {
-	if len(args) < 3 {
+	if len(args) < 3 { // At minimum: STREAMS key id
 		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'xread' command"}
 	}
 
 	count := 0
 	argIndex := 0
 
+	// Handle COUNT if present
 	if strings.ToUpper(args[0].Bulk) == "COUNT" {
-		if len(args) < 5 {
+		if len(args) < 5 { // COUNT n STREAMS key id
 			return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'xread' command"}
 		}
 		var err error
 		count, err = strconv.Atoi(args[1].Bulk)
 		if err != nil {
-			return models.Value{Type: "error", Str: "ERR invalid COUNT"}
+			return models.Value{Type: "error", Str: "ERR value is not an integer or out of range"}
 		}
 		argIndex = 2
 	}
 
-	numKeys := (len(args) - argIndex) / 2
+	// Verify STREAMS keyword
+	if strings.ToUpper(args[argIndex].Bulk) != "STREAMS" {
+		return models.Value{Type: "error", Str: "ERR syntax error"}
+	}
+	argIndex++ // Move past STREAMS keyword
+
+	// Check remaining arguments for key-id pairs
+	remainingArgs := len(args) - argIndex
+	if remainingArgs < 2 || remainingArgs%2 != 0 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'xread' command"}
+	}
+
+	numKeys := remainingArgs / 2
 	keys := make([]string, numKeys)
 	ids := make([]string, numKeys)
 
+	// Parse keys and IDs
 	for i := 0; i < numKeys; i++ {
-		keys[i] = args[argIndex+i].Bulk
-		ids[i] = args[argIndex+numKeys+i].Bulk
+		keys[i] = args[argIndex+i*2].Bulk
+		ids[i] = args[argIndex+i*2+1].Bulk
 	}
 
 	entries, err := h.cache.XREAD(keys, ids, count)
@@ -269,6 +283,9 @@ func (h *StreamHandlers) HandleXREAD(args []models.Value) models.Value {
 
 	result := make([]models.Value, 0, len(entries))
 	for key, keyEntries := range entries {
+		if len(keyEntries) == 0 {
+			continue
+		}
 		entryValues := make([]models.Value, len(keyEntries))
 		for i, entry := range keyEntries {
 			fields := make([]models.Value, 0, len(entry.Fields)*2)
