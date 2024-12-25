@@ -591,6 +591,8 @@ func (s *Server) handleCommand(value models.Value) models.Value {
 
 	cmd := strings.ToUpper(value.Array[0].Bulk)
 
+	log.Printf("Received command: %s", cmd)
+
 	// Handle regular commands
 	handler, exists := s.registry.GetHandler(cmd)
 	if !exists {

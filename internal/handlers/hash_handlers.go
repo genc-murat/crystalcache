@@ -378,6 +378,34 @@ func (h *HashHandlers) HandleHKeys(args []models.Value) models.Value {
 	return models.Value{Type: "array", Array: result}
 }
 
+// HandleHMSet handles the HMSET command which sets multiple field-value pairs in a hash
+// Parameters:
+//   - args: Array of Values containing:
+//   - key: hash key
+//   - field value pairs: one or more field-value pairs to set
+//
+// Returns:
+//   - models.Value: "OK" if successful
+//     Returns error if wrong number of arguments
+func (h *HashHandlers) HandleHMSet(args []models.Value) models.Value {
+	if len(args) < 3 || len(args)%2 != 1 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'hmset' command"}
+	}
+
+	hashKey := args[0].Bulk
+
+	// Set each field-value pair
+	for i := 1; i < len(args); i += 2 {
+		err := h.cache.HSet(hashKey, args[i].Bulk, args[i+1].Bulk)
+		if err != nil {
+			return util.ToValue(err)
+		}
+	}
+
+	// HMSET always returns "OK" on success (different from HSET which returns number of fields added)
+	return models.Value{Type: "string", Str: "OK"}
+}
+
 // HandleHMGet handles the HMGET command which gets values for multiple fields in a hash
 // Parameters:
 //   - args: Array of Values containing the hash key followed by field names

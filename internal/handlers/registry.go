@@ -108,6 +108,7 @@ func (r *Registry) registerHandlers() {
 	r.handlers["HINCRBYFLOAT"] = r.hashHandlers.HandleHIncrByFloat
 	r.handlers["HKEYS"] = r.hashHandlers.HandleHKeys
 	r.handlers["HMGET"] = r.hashHandlers.HandleHMGet
+	r.handlers["HMSET"] = r.hashHandlers.HandleHMSet
 	r.handlers["HPERSIST"] = r.hashHandlers.HandleHPersist
 	r.handlers["HSETNX"] = r.hashHandlers.HandleHSetNX
 	r.handlers["HSTRLEN"] = r.hashHandlers.HandleHStrLen
