@@ -3,20 +3,20 @@ package cache
 import (
 	"encoding/binary"
 	"fmt"
+	"math"
+	"sync/atomic"
 
 	"github.com/genc-murat/crystalcache/internal/core/models"
 )
 
 // BFAdd adds an item to a Bloom Filter
 func (c *MemoryCache) BFAdd(key string, item string) (bool, error) {
-	// Create a new filter if it doesn't exist
 	filterI, _ := c.bfilters.LoadOrStore(key, models.NewBloomFilter(models.BloomFilterConfig{
 		ExpectedItems:     1000000, // Default capacity
 		FalsePositiveRate: 0.01,    // Default error rate
 	}))
 	filter := filterI.(*models.BloomFilter)
 
-	// Check if item already exists
 	exists := filter.Contains([]byte(item))
 	if !exists {
 		filter.Add([]byte(item))
@@ -46,13 +46,11 @@ func (c *MemoryCache) BFReserve(key string, errorRate float64, capacity uint) er
 		return fmt.Errorf("ERR capacity must be positive")
 	}
 
-	// Create new filter with specified parameters
 	filter := models.NewBloomFilter(models.BloomFilterConfig{
 		ExpectedItems:     capacity,
 		FalsePositiveRate: errorRate,
 	})
 
-	// Store the filter
 	c.bfilters.Store(key, filter)
 	c.incrementKeyVersion(key)
 
@@ -61,7 +59,6 @@ func (c *MemoryCache) BFReserve(key string, errorRate float64, capacity uint) er
 
 // BFMAdd adds multiple items to a Bloom Filter
 func (c *MemoryCache) BFMAdd(key string, items []string) ([]bool, error) {
-	// Create or get filter
 	filterI, _ := c.bfilters.LoadOrStore(key, models.NewBloomFilter(models.BloomFilterConfig{
 		ExpectedItems:     1000000,
 		FalsePositiveRate: 0.01,
@@ -71,7 +68,6 @@ func (c *MemoryCache) BFMAdd(key string, items []string) ([]bool, error) {
 	results := make([]bool, len(items))
 	modified := false
 
-	// Add each item and track if it was newly added
 	for i, item := range items {
 		exists := filter.Contains([]byte(item))
 		results[i] = !exists
@@ -119,9 +115,9 @@ func (c *MemoryCache) BFInfo(key string) (map[string]interface{}, error) {
 	return map[string]interface{}{
 		"Size":              stats.Size,
 		"HashCount":         stats.HashCount,
-		"Count":             stats.Count,
+		"Count":             atomic.LoadUint64(&stats.Count),
 		"BitsetSize":        stats.BitsetSize,
-		"SetBits":           stats.SetBits,
+		"SetBits":           atomic.LoadUint64(&stats.SetBits),
 		"FalsePositiveRate": stats.FalsePositiveRate,
 		"MemoryUsage":       stats.MemoryUsage,
 	}, nil
@@ -138,55 +134,68 @@ func (c *MemoryCache) BFCard(key string) (uint, error) {
 	return filter.ApproximateCount(), nil
 }
 
-// BFScanDump begins an incremental save of the bloom filter
+// BFScanDump begins an incremental save of the bloom filter's state.
+// For Bloom Filters, a full dump is typically more practical than incremental.
+// This implementation returns the entire filter's data on the first call (iterator 0).
 func (c *MemoryCache) BFScanDump(key string, iterator int) (int, []byte, error) {
 	filterI, exists := c.bfilters.Load(key)
 	if !exists {
 		return 0, nil, fmt.Errorf("ERR no such key")
 	}
 
-	filter := filterI.(*models.BloomFilter)
-	stats := filter.Stats()
-
-	// Encode filter configuration and state
-	// Format: [Size(8)][HashCount(8)][Count(8)][BitsetSize(8)]
-	data := make([]byte, 32)
-	binary.BigEndian.PutUint64(data[0:8], uint64(stats.Size))
-	binary.BigEndian.PutUint64(data[8:16], uint64(stats.HashCount))
-	binary.BigEndian.PutUint64(data[16:24], uint64(stats.Count))
-	binary.BigEndian.PutUint64(data[24:32], uint64(stats.BitsetSize))
-
-	// Since we can't access the bitset directly, we can only save the configuration
-	// The filter will need to be rebuilt by re-adding items
-	if iterator == 0 {
-		return 1, data, nil
+	if iterator != 0 {
+		return 0, nil, nil // No more chunks to dump
 	}
 
-	return 0, nil, nil
+	filter := filterI.(*models.BloomFilter)
+
+	// Serialize the Bloom Filter's configuration and bitset
+	config := filter.GetConfig()
+	bitSetData, err := filter.SerializeBitSet()
+	if err != nil {
+		return 0, nil, fmt.Errorf("ERR failed to serialize bitset: %w", err)
+	}
+
+	// Format: [ExpectedItems(8)][FalsePositiveRate(8)][BitSetDataLength(8)][BitSetData]
+	data := make([]byte, 8+8+8+len(bitSetData))
+	binary.BigEndian.PutUint64(data[0:8], uint64(config.ExpectedItems))
+	binary.LittleEndian.PutUint64(data[8:16], math.Float64bits(config.FalsePositiveRate))
+	binary.BigEndian.PutUint64(data[16:24], uint64(len(bitSetData)))
+	copy(data[24:], bitSetData)
+
+	return 1, data, nil
 }
 
-// BFLoadChunk restores a filter previously saved using SCANDUMP
+// BFLoadChunk restores a filter previously saved using SCANDUMP.
+// This implementation expects a single chunk containing the entire filter data.
 func (c *MemoryCache) BFLoadChunk(key string, iterator int, data []byte) error {
-	if iterator != 0 {
-		return fmt.Errorf("ERR invalid iterator value")
+	if iterator != 1 {
+		return fmt.Errorf("ERR invalid iterator value for BFLoadChunk, expected 1, got %d", iterator)
 	}
 
-	if len(data) < 32 {
-		return fmt.Errorf("ERR invalid data format")
+	if len(data) < 24 {
+		return fmt.Errorf("ERR invalid data format for Bloom Filter chunk")
 	}
 
-	// Decode filter configuration
-	size := uint(binary.BigEndian.Uint64(data[0:8]))
-	// Create a new filter with decoded configuration
-	// Note: We'll need to approximate the configuration parameters to achieve
-	// similar size and hash count
-	expectedItems := size / 10 // Rough approximation
-	falsePositiveRate := 0.01  // Default rate
+	expectedItems := binary.BigEndian.Uint64(data[0:8])
+	falsePositiveRate := math.Float64frombits(binary.LittleEndian.Uint64(data[8:16]))
+	bitSetDataLength := binary.BigEndian.Uint64(data[16:24])
 
-	filter := models.NewBloomFilter(models.BloomFilterConfig{
-		ExpectedItems:     expectedItems,
+	if len(data) < 24+int(bitSetDataLength) {
+		return fmt.Errorf("ERR incomplete data for Bloom Filter bitset")
+	}
+
+	bitSetData := data[24 : 24+bitSetDataLength]
+
+	config := models.BloomFilterConfig{
+		ExpectedItems:     uint(expectedItems),
 		FalsePositiveRate: falsePositiveRate,
-	})
+	}
+	filter := models.NewBloomFilter(config)
+
+	if err := filter.DeserializeBitSet(bitSetData); err != nil {
+		return fmt.Errorf("ERR failed to deserialize bitset: %w", err)
+	}
 
 	c.bfilters.Store(key, filter)
 	c.incrementKeyVersion(key)
@@ -203,7 +212,6 @@ func (c *MemoryCache) BFInsert(key string, errorRate float64, capacity uint, ite
 		return nil, fmt.Errorf("ERR capacity must be positive")
 	}
 
-	// Create new filter with specified parameters
 	filter := models.NewBloomFilter(models.BloomFilterConfig{
 		ExpectedItems:     capacity,
 		FalsePositiveRate: errorRate,
@@ -216,7 +224,6 @@ func (c *MemoryCache) BFInsert(key string, errorRate float64, capacity uint, ite
 		filter.Add([]byte(item))
 	}
 
-	// Store the filter
 	c.bfilters.Store(key, filter)
 	c.incrementKeyVersion(key)
 

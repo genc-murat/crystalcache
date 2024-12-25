@@ -1,6 +1,7 @@
 package models
 
 import (
+	"fmt"
 	"hash/fnv"
 	"math"
 	"sync"
@@ -10,7 +11,8 @@ type BloomFilter struct {
 	bitset    []bool
 	size      uint
 	hashCount uint
-	count     uint
+	count     uint64 // Changed to uint64
+	config    BloomFilterConfig
 	mu        sync.RWMutex
 }
 
@@ -28,7 +30,12 @@ func NewBloomFilter(config BloomFilterConfig) *BloomFilter {
 		size:      size,
 		hashCount: hashCount,
 		count:     0,
+		config:    config,
 	}
+}
+
+func (bf *BloomFilter) GetConfig() BloomFilterConfig {
+	return bf.config
 }
 
 func optimalSize(n uint, p float64) uint {
@@ -119,9 +126,9 @@ func (bf *BloomFilter) FalsePositiveRate() float64 {
 type BloomFilterStats struct {
 	Size              uint
 	HashCount         uint
-	Count             uint
+	Count             uint64 // Changed to uint64
 	BitsetSize        uint
-	SetBits           uint
+	SetBits           uint64 // Changed to uint64
 	FalsePositiveRate float64
 	MemoryUsage       uint // bytes
 }
@@ -130,7 +137,7 @@ func (bf *BloomFilter) Stats() BloomFilterStats {
 	bf.mu.RLock()
 	defer bf.mu.RUnlock()
 
-	setBits := uint(0)
+	setBits := uint64(0)
 	for _, bit := range bf.bitset {
 		if bit {
 			setBits++
@@ -146,4 +153,35 @@ func (bf *BloomFilter) Stats() BloomFilterStats {
 		FalsePositiveRate: bf.FalsePositiveRate(),
 		MemoryUsage:       uint(len(bf.bitset) / 8), // bits to bytes
 	}
+}
+
+func (bf *BloomFilter) SerializeBitSet() ([]byte, error) {
+	bf.mu.RLock()
+	defer bf.mu.RUnlock()
+
+	bitSetSizeBytes := (len(bf.bitset) + 7) / 8
+	data := make([]byte, bitSetSizeBytes)
+	for i, bit := range bf.bitset {
+		if bit {
+			data[i/8] |= 1 << (i % 8)
+		}
+	}
+	return data, nil
+}
+
+func (bf *BloomFilter) DeserializeBitSet(data []byte) error {
+	bf.mu.Lock()
+	defer bf.mu.Unlock()
+
+	if len(data)*8 < len(bf.bitset) {
+		return fmt.Errorf("data size is smaller than expected for bitset")
+	}
+	for i := 0; i < len(bf.bitset); i++ {
+		if (data[i/8] & (1 << (i % 8))) != 0 {
+			bf.bitset[i] = true
+		} else {
+			bf.bitset[i] = false
+		}
+	}
+	return nil
 }
