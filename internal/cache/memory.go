@@ -944,7 +944,7 @@ func (c *MemoryCache) DBSize() int {
 	countMap(c.hsets)
 	countMap(c.lists)
 	countMap(c.sets_)
-	countMap(c.zsets) // zsets eklendi
+	countMap(c.zsets)
 	countMap(c.streams)
 	countMap(c.bitmaps)
 	countMap(c.jsonData)
@@ -1126,7 +1126,8 @@ func (c *MemoryCache) Info() map[string]string {
 	// Keys count
 	var stringKeys, hashKeys, listKeys, setKeys, jsonKeys,
 		streamKeys, bitmapKeys, zsetKeys, suggestionKeys,
-		geoKeys, cmsKeys, cuckooKeys, tdigestKeys, bloomFilterKeys int
+		geoKeys, cmsKeys, cuckooKeys, tdigestKeys, bloomFilterKeys,
+		timeseriesKeys int
 
 	c.sets.Range(func(_, _ interface{}) bool {
 		stringKeys++
@@ -1227,18 +1228,25 @@ func (c *MemoryCache) Info() map[string]string {
 	})
 	stats["topk_keys"] = fmt.Sprintf("%d", topkKeys)
 
+	// Count TimeSeries keys
+	c.timeSeries.Range(func(_, _ interface{}) bool {
+		timeseriesKeys++
+		return true
+	})
+	stats["timeseries_keys"] = fmt.Sprintf("%d", timeseriesKeys)
+
 	// Total keys
 	totalKeys := stringKeys + hashKeys + listKeys + setKeys + jsonKeys +
 		streamKeys + bitmapKeys + zsetKeys + suggestionKeys +
 		geoKeys + cmsKeys + cuckooKeys + hllKeys + tdigestKeys +
-		bloomFilterKeys + topkKeys
+		bloomFilterKeys + topkKeys + timeseriesKeys
 	stats["total_keys"] = fmt.Sprintf("%d", totalKeys)
 
 	// Modules and Features
 	stats["json_native_storage"] = "enabled"
 	stats["json_version"] = "1.0"
-	stats["modules"] = "json_native,geo,suggestion,cms,cuckoo,tdigest,bloomfilter,topk"
-	stats["topk_version"] = "1.0"
+	stats["modules"] = "json_native,geo,suggestion,cms,cuckoo,tdigest,bloomfilter,topk,timeseries"
+	stats["timeseries_version"] = "1.0"
 
 	// Module specific versions and info
 	stats["geo_version"] = "1.0"
@@ -1247,6 +1255,7 @@ func (c *MemoryCache) Info() map[string]string {
 	stats["cuckoo_version"] = "1.0"
 	stats["tdigest_version"] = "1.0"
 	stats["bloomfilter_version"] = "1.0"
+	stats["timeseries_version"] = "1.0"
 
 	// Additional module capabilities
 	stats["geo_search"] = "enabled"
@@ -1255,6 +1264,7 @@ func (c *MemoryCache) Info() map[string]string {
 	stats["cuckoo_capacity"] = "enabled"
 	stats["tdigest_compression"] = "enabled"
 	stats["bloomfilter_scaling"] = "enabled"
+	stats["timeseries_compaction"] = "enabled"
 
 	// Module versions and details
 	moduleDetails := []string{
@@ -1265,7 +1275,8 @@ func (c *MemoryCache) Info() map[string]string {
 		"name=cuckoo,ver=1.0,api=1.0",
 		"name=tdigest,ver=1.0,api=1.0",
 		"name=bloomfilter,ver=1.0,api=1.0",
-		"name=topk,ver=1.0,api=1.0", // Add TopK module details
+		"name=topk,ver=1.0,api=1.0",
+		"name=timeseries,ver=1.0,api=1.0",
 	}
 	stats["module_list"] = strings.Join(moduleDetails, ",")
 
