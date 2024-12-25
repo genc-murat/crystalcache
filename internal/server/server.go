@@ -428,7 +428,6 @@ func (s *Server) GetReplicaCount() int {
 	return len(s.replicas)
 }
 
-// Server struct'ındaki handleConnection metodunu güncelleyelim
 func (s *Server) handleConnection(conn net.Conn) {
 	defer conn.Close()
 	defer s.wg.Done()
