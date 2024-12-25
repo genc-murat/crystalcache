@@ -41,6 +41,58 @@ func (h *BloomFilterHandlers) HandleBFAdd(args []models.Value) models.Value {
 	}
 }
 
+// HandleBFInsert handles BF.INSERT command
+func (h *BloomFilterHandlers) HandleBFInsert(args []models.Value) models.Value {
+	if len(args) < 4 {
+		return models.Value{
+			Type: "error",
+			Str:  "ERR wrong number of arguments for 'BF.INSERT' command",
+		}
+	}
+
+	errorRate, err := strconv.ParseFloat(args[1].Bulk, 64)
+	if err != nil {
+		return models.Value{
+			Type: "error",
+			Str:  "ERR invalid error rate. Must be between 0 and 1",
+		}
+	}
+
+	capacity, err := strconv.ParseUint(args[2].Bulk, 10, 64)
+	if err != nil {
+		return models.Value{
+			Type: "error",
+			Str:  "ERR invalid capacity. Must be a positive integer",
+		}
+	}
+
+	items := make([]string, len(args)-3)
+	for i := 3; i < len(args); i++ {
+		items[i-3] = args[i].Bulk
+	}
+
+	results, err := h.cache.BFInsert(args[0].Bulk, errorRate, uint(capacity), items)
+	if err != nil {
+		return models.Value{
+			Type: "error",
+			Str:  fmt.Sprintf("ERR %v", err),
+		}
+	}
+
+	response := make([]models.Value, len(results))
+	for i, added := range results {
+		response[i] = models.Value{
+			Type: "integer",
+			Num:  boolToInt(added),
+		}
+	}
+
+	return models.Value{
+		Type:  "array",
+		Array: response,
+	}
+}
+
 // HandleBFExists handles BF.EXISTS command
 func (h *BloomFilterHandlers) HandleBFExists(args []models.Value) models.Value {
 	if len(args) != 2 {

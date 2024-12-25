@@ -343,6 +343,7 @@ func (r *Registry) registerHandlers() {
 	r.handlers["BF.CARD"] = r.bloomFilterHandlers.HandleBFCard
 	r.handlers["BF.SCANDUMP"] = r.bloomFilterHandlers.HandleBFScanDump
 	r.handlers["BF.LOADCHUNK"] = r.bloomFilterHandlers.HandleBFLoadChunk
+	r.handlers["BF.INSERT"] = r.bloomFilterHandlers.HandleBFInsert
 
 	// TopK Commands
 	r.handlers["TOPK.RESERVE"] = r.topkHandlers.HandleTOPKReserve

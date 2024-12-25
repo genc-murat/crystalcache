@@ -194,6 +194,35 @@ func (c *MemoryCache) BFLoadChunk(key string, iterator int, data []byte) error {
 	return nil
 }
 
+// BFInsert creates a new Bloom Filter and adds items in one operation
+func (c *MemoryCache) BFInsert(key string, errorRate float64, capacity uint, items []string) ([]bool, error) {
+	if errorRate <= 0 || errorRate >= 1 {
+		return nil, fmt.Errorf("ERR error rate should be between 0 and 1")
+	}
+	if capacity == 0 {
+		return nil, fmt.Errorf("ERR capacity must be positive")
+	}
+
+	// Create new filter with specified parameters
+	filter := models.NewBloomFilter(models.BloomFilterConfig{
+		ExpectedItems:     capacity,
+		FalsePositiveRate: errorRate,
+	})
+
+	results := make([]bool, len(items))
+	for i, item := range items {
+		exists := filter.Contains([]byte(item))
+		results[i] = !exists
+		filter.Add([]byte(item))
+	}
+
+	// Store the filter
+	c.bfilters.Store(key, filter)
+	c.incrementKeyVersion(key)
+
+	return results, nil
+}
+
 func (c *MemoryCache) defragBloomFilters() {
 	c.bfilters = c.defragSyncMap(c.bfilters)
 }

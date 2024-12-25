@@ -2104,6 +2104,24 @@ func (rd *RetryDecorator) BFLoadChunk(key string, iterator int, data []byte) err
 	})
 }
 
+// Add BFInsert to RetryDecorator
+func (rd *RetryDecorator) BFInsert(key string, errorRate float64, capacity uint, items []string) ([]bool, error) {
+	var results []bool
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		results, err = rd.cache.BFInsert(key, errorRate, capacity, items)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return results, finalErr
+}
+
 // TOPKReserve with retry logic
 func (rd *RetryDecorator) TOPKReserve(key string, topk, capacity int, decay float64) error {
 	return rd.executeWithRetry(func() error {
