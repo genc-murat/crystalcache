@@ -2211,11 +2211,8 @@ func (c *MemoryCache) XREAD(keys []string, ids []string, count int) (map[string]
 	}
 
 	for i, key := range keys {
-		log.Printf("XREAD: Processing key=%s, startID=%s", key, ids[i]) // Added logging
-
 		streamI, exists := c.streams.Load(key)
 		if !exists {
-			log.Printf("XREAD: Stream not found for key=%s", key) // Added logging
 			continue
 		}
 
