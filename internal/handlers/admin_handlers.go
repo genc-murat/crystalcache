@@ -59,6 +59,7 @@ func (h *AdminHandlers) HandleInfo(args []models.Value) models.Value {
 		"cuckoo",
 		"tdigest",
 		"bloomfilter",
+		"timeseries",
 	}
 	modulesEnabled := make([]string, 0)
 
@@ -78,7 +79,8 @@ func (h *AdminHandlers) HandleInfo(args []models.Value) models.Value {
 		"name=cms,ver=1.0,api=1.0",
 		"name=cuckoo,ver=1.0,api=1.0",
 		"name=tdigest,ver=1.0,api=1.0",
-		"name=bloomfilter,ver=1.0,api=1.0", // Add bloomfilter details
+		"name=bloomfilter,ver=1.0,api=1.0",
+		"name=timeseries,ver=1.0,api=1.0", // Add timeseries details
 	}
 	info["module_list"] = strings.Join(moduleDetails, ",")
 
@@ -116,7 +118,8 @@ func (h *AdminHandlers) HandleInfo(args []models.Value) models.Value {
 	response = append(response, fmt.Sprintf("cms_keys:%s", info["cms_keys"]))
 	response = append(response, fmt.Sprintf("cuckoo_keys:%s", info["cuckoo_keys"]))
 	response = append(response, fmt.Sprintf("tdigest_keys:%s", info["tdigest_keys"]))
-	response = append(response, fmt.Sprintf("bloomfilter_keys:%s", info["bloomfilter_keys"])) // Add bloomfilter keys count
+	response = append(response, fmt.Sprintf("bloomfilter_keys:%s", info["bloomfilter_keys"]))
+	response = append(response, fmt.Sprintf("timeseries_keys:%s", info["timeseries_keys"]))
 
 	return models.Value{
 		Type: "string",

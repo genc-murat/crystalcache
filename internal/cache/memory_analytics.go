@@ -50,6 +50,8 @@ type MemoryAnalytics struct {
 	TDigestMemory     int64
 	TopKMemory        int64
 	BloomFilterMemory int64
+
+	TimeSeriesMemory int64
 }
 
 func (c *MemoryCache) GetMemoryAnalytics() *MemoryAnalytics {
@@ -287,6 +289,22 @@ func (c *MemoryCache) calculateStructureMemory(analytics *MemoryAnalytics) {
 		return true
 	})
 
+	// Time Series memory calculation
+	c.timeSeries.Range(func(key, value interface{}) bool {
+		k := key.(string)
+		ts := value.(*models.TimeSeries)
+		size := int64(len(k))
+
+		size += int64(len(ts.Samples) * 16) // Bulk calculate sample memory
+
+		for labelKey, labelValue := range ts.Labels {
+			size += int64(len(labelKey) + len(labelValue))
+		}
+
+		atomic.AddInt64(&analytics.TimeSeriesMemory, size)
+		return true
+	})
+
 	// Key statistics
 	analytics.KeyCount = c.getKeyCount()
 	analytics.ExpiredKeyCount = c.getExpiredKeyCount()
@@ -385,6 +403,11 @@ func (c *MemoryCache) getKeyCount() int64 {
 		return true
 	})
 
+	c.timeSeries.Range(func(_, _ interface{}) bool {
+		atomic.AddInt64(&count, 1)
+		return true
+	})
+
 	return count
 }
 
@@ -466,6 +489,7 @@ func (c *MemoryCache) evictKeys(targetBytes int64) {
 			c.tdigests,      // T-Digest
 			c.bfilters,      // Bloom Filters
 			c.topks,         // TopK structures
+			c.timeSeries,    // Time Series
 		}
 
 		evicted := false
@@ -533,6 +557,19 @@ func (c *MemoryCache) getMapMemoryUsage(m *sync.Map) int64 {
 				}
 				return true
 			})
+		case *models.TimeSeries:
+			// Calculate TimeSeries size
+			ts := v
+			ts.Mutex.Lock()
+			defer ts.Mutex.Unlock()
+
+			// Add memory used by labels
+			for labelKey, labelValue := range ts.Labels {
+				size += int64(len(labelKey) + len(labelValue))
+			}
+
+			// Add memory used by samples
+			size += int64(len(ts.Samples) * 16)
 		}
 		return true
 	})
