@@ -30,6 +30,23 @@ func (w *Writer) Write(v models.Value) error {
 		err = w.writeNull()
 	case "array":
 		err = w.writeArray(v.Array)
+	case "bool":
+		err = w.writeBoolean(v.Bool)
+	case "double":
+		err = w.writeDouble(v.Double)
+	case "bignum":
+		err = w.writeBigNumber(v.BigNum)
+	case "map":
+		err = w.writeMap(v.Map)
+	case "set":
+		err = w.writeSet(v.Set)
+	case "blob":
+		err = w.writeBlob(v.Blob)
+	case "verbatim":
+		err = w.writeVerbatimString(v.Str)
+	case "attribute":
+		// Write attributes as metadata, then the actual value
+		err = w.writeAttribute(v.Attribute, v)
 	default:
 		err = fmt.Errorf("unknown type: %s", v.Type)
 	}
@@ -74,4 +91,83 @@ func (w *Writer) writeArray(array []models.Value) error {
 		}
 	}
 	return nil
+}
+
+func (w *Writer) writeBoolean(b bool) error {
+	if b {
+		_, err := fmt.Fprintf(w.wr, "#t\r\n")
+		return err
+	}
+	_, err := fmt.Fprintf(w.wr, "#f\r\n")
+	return err
+}
+
+func (w *Writer) writeDouble(f float64) error {
+	_, err := fmt.Fprintf(w.wr, ",%f\r\n", f)
+	return err
+}
+
+func (w *Writer) writeBigNumber(bn string) error {
+	_, err := fmt.Fprintf(w.wr, "(%s\r\n", bn)
+	return err
+}
+
+func (w *Writer) writeVerbatimString(s string) error {
+	_, err := fmt.Fprintf(w.wr, "=%d\r\ntxt:%s\r\n", len(s), s) // Assuming txt encoding
+	return err
+}
+
+func (w *Writer) writeBlob(b []byte) error {
+	_, err := fmt.Fprintf(w.wr, "_%d\r\n%s\r\n", len(b), string(b))
+	return err
+}
+
+func (w *Writer) writeMap(m map[string]models.Value) error {
+	_, err := fmt.Fprintf(w.wr, "%%%d\r\n", len(m))
+	if err != nil {
+		return err
+	}
+	for key, value := range m {
+		err := w.writeString(key) // Maps keys are typically strings
+		if err != nil {
+			return err
+		}
+		err = w.Write(value)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (w *Writer) writeSet(s []models.Value) error {
+	_, err := fmt.Fprintf(w.wr, "~%d\r\n", len(s))
+	if err != nil {
+		return err
+	}
+	for _, value := range s {
+		err := w.Write(value)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (w *Writer) writeAttribute(attr map[string]models.Value, actualValue models.Value) error {
+	_, err := fmt.Fprintf(w.wr, "|%d\r\n", len(attr))
+	if err != nil {
+		return err
+	}
+	for key, value := range attr {
+		err := w.writeString(key)
+		if err != nil {
+			return err
+		}
+		err = w.Write(value)
+		if err != nil {
+			return err
+		}
+	}
+	return w.Write(actualValue)
 }

@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 
@@ -84,7 +83,7 @@ func (h *TimeSeriesHandlers) HandleTSRange(args []models.Value) models.Value {
 	for i, sample := range samples {
 		result[i] = models.Value{Type: "array", Array: []models.Value{
 			{Type: "integer", Num: int(sample.Timestamp)},
-			{Type: "float", Str: fmt.Sprintf("%f", sample.Value)},
+			{Type: "double", Double: sample.Value},
 		}}
 	}
 	return models.Value{Type: "array", Array: result}
@@ -103,11 +102,11 @@ func (h *TimeSeriesHandlers) HandleTSInfo(args []models.Value) models.Value {
 		{Type: "string", Str: "total_samples"},
 		{Type: "integer", Num: stats.TotalSamples},
 		{Type: "string", Str: "max_value"},
-		{Type: "float", Str: fmt.Sprintf("%f", stats.MaxValue)},
+		{Type: "double", Double: stats.MaxValue},
 		{Type: "string", Str: "min_value"},
-		{Type: "float", Str: fmt.Sprintf("%f", stats.MinValue)},
+		{Type: "double", Double: stats.MinValue},
 		{Type: "string", Str: "avg_value"},
-		{Type: "float", Str: fmt.Sprintf("%f", stats.AvgValue)},
+		{Type: "double", Double: stats.AvgValue},
 	}}
 }
 
@@ -183,7 +182,7 @@ func (h *TimeSeriesHandlers) HandleTSGet(args []models.Value) models.Value {
 
 	return models.Value{Type: "array", Array: []models.Value{
 		{Type: "integer", Num: int(sample.Timestamp)},
-		{Type: "float", Float: sample.Value},
+		{Type: "double", Double: sample.Value},
 	}}
 }
 
@@ -207,7 +206,7 @@ func (h *TimeSeriesHandlers) HandleTSMGet(args []models.Value) models.Value {
 		resultArray = append(resultArray, models.Value{Type: "array", Array: []models.Value{
 			{Type: "string", Str: key},
 			{Type: "integer", Num: int(sample.Timestamp)},
-			{Type: "float", Float: sample.Value},
+			{Type: "double", Double: sample.Value},
 		}})
 	}
 
@@ -239,7 +238,7 @@ func (h *TimeSeriesHandlers) HandleTSMRange(args []models.Value) models.Value {
 		for _, sample := range samples {
 			sampleArray = append(sampleArray, models.Value{Type: "array", Array: []models.Value{
 				{Type: "integer", Num: int(sample.Timestamp)},
-				{Type: "float", Float: sample.Value},
+				{Type: "double", Double: sample.Value},
 			}})
 		}
 		resultArray = append(resultArray, models.Value{Type: "array", Array: []models.Value{
@@ -276,7 +275,7 @@ func (h *TimeSeriesHandlers) HandleTSMRevRange(args []models.Value) models.Value
 		for _, sample := range samples {
 			sampleArray = append(sampleArray, models.Value{Type: "array", Array: []models.Value{
 				{Type: "integer", Num: int(sample.Timestamp)},
-				{Type: "float", Float: sample.Value},
+				{Type: "double", Double: sample.Value},
 			}})
 		}
 		resultArray = append(resultArray, models.Value{Type: "array", Array: []models.Value{
@@ -302,7 +301,7 @@ func (h *TimeSeriesHandlers) HandleTSRevRange(args []models.Value) models.Value 
 	for i, sample := range samples {
 		resultArray[i] = models.Value{Type: "array", Array: []models.Value{
 			{Type: "integer", Num: int(sample.Timestamp)},
-			{Type: "float", Float: sample.Value},
+			{Type: "double", Double: sample.Value},
 		}}
 	}
 
