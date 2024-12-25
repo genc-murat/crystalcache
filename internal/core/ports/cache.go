@@ -205,4 +205,22 @@ type Cache interface {
 		Count int64
 	}, error)
 	TOPKInfo(key string) (map[string]interface{}, error)
+
+	TSCreate(key string, labels map[string]string) error
+	TSAdd(key string, timestamp int64, value float64) error
+	TSGet(key string) (*models.TimeSeriesSample, error)
+	TSMAdd(entries map[string][]models.TimeSeriesSample) error
+	TSDel(key string, from, to int64) (int, error)
+	TSRange(key string, from, to int64) ([]models.TimeSeriesSample, error)
+	TSMRange(filters map[string]string, from, to int64) (map[string][]models.TimeSeriesSample, error)
+	TSIncrBy(key string, increment float64) error
+	TSDecrBy(key string, decrement float64) error
+	TSInfo(key string) (*models.TimeSeriesStats, error)
+	TSAlter(key string, labels map[string]string) error
+	TSCreateRule(sourceKey, destKey string, aggregationType string, bucketSize int64) error
+	TSDeleteRule(sourceKey, destinationKey string) error
+	TSMGet(filters map[string]string) (map[string]*models.TimeSeriesSample, error)
+	TSMRevRange(filters map[string]string, from, to int64) (map[string][]models.TimeSeriesSample, error)
+	TSQueryIndex(filters map[string]string) ([]string, error)
+	TSRevRange(key string, from, to int64) ([]models.TimeSeriesSample, error)
 }

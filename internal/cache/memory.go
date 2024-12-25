@@ -43,6 +43,7 @@ type MemoryCache struct {
 	topks         *sync.Map
 	lastDefrag    time.Time
 	defragMu      sync.Mutex
+	timeSeries    *sync.Map
 
 	zsetManager   *zset.Manager
 	bitmapManager *bitmap.Manager
@@ -77,6 +78,7 @@ func NewMemoryCache() *MemoryCache {
 		bfilters:      &sync.Map{},
 		tdigests:      &sync.Map{},
 		topks:         &sync.Map{},
+		timeSeries:    &sync.Map{},
 	}
 
 	// Start background cleanup

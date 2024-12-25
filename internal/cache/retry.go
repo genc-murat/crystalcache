@@ -2225,6 +2225,217 @@ func (rd *RetryDecorator) TOPKInfo(key string) (map[string]interface{}, error) {
 	return info, finalErr
 }
 
+// TSCreate with retry logic
+func (rd *RetryDecorator) TSCreate(key string, labels map[string]string) error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.TSCreate(key, labels)
+	})
+}
+
+// TSAdd with retry logic
+func (rd *RetryDecorator) TSAdd(key string, timestamp int64, value float64) error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.TSAdd(key, timestamp, value)
+	})
+}
+
+func (rd *RetryDecorator) TSMGet(filters map[string]string) (map[string]*models.TimeSeriesSample, error) {
+	var results map[string]*models.TimeSeriesSample
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		results, err = rd.cache.TSMGet(filters)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return results, finalErr
+}
+
+// TSGet with retry logic
+func (rd *RetryDecorator) TSGet(key string) (*models.TimeSeriesSample, error) {
+	var sample *models.TimeSeriesSample
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		sample, err = rd.cache.TSGet(key)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return sample, finalErr
+}
+
+// TSMAdd with retry logic
+func (rd *RetryDecorator) TSMAdd(entries map[string][]models.TimeSeriesSample) error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.TSMAdd(entries)
+	})
+}
+
+// TSDel with retry logic
+func (rd *RetryDecorator) TSDel(key string, from, to int64) (int, error) {
+	var deleted int
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		deleted, err = rd.cache.TSDel(key, from, to)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return 0, err
+	}
+	return deleted, finalErr
+}
+
+// TSRange with retry logic
+func (rd *RetryDecorator) TSRange(key string, from, to int64) ([]models.TimeSeriesSample, error) {
+	var samples []models.TimeSeriesSample
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		samples, err = rd.cache.TSRange(key, from, to)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return samples, finalErr
+}
+
+// TSMRange with retry logic
+func (rd *RetryDecorator) TSMRange(filters map[string]string, from, to int64) (map[string][]models.TimeSeriesSample, error) {
+	var results map[string][]models.TimeSeriesSample
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		results, err = rd.cache.TSMRange(filters, from, to)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return results, finalErr
+}
+
+func (rd *RetryDecorator) TSRevRange(key string, from, to int64) ([]models.TimeSeriesSample, error) {
+	var results []models.TimeSeriesSample
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		results, err = rd.cache.TSRevRange(key, from, to)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return results, finalErr
+}
+
+func (rd *RetryDecorator) TSQueryIndex(filters map[string]string) ([]string, error) {
+	var results []string
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		results, err = rd.cache.TSQueryIndex(filters)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return results, finalErr
+}
+
+func (rd *RetryDecorator) TSMRevRange(filters map[string]string, from, to int64) (map[string][]models.TimeSeriesSample, error) {
+	var results map[string][]models.TimeSeriesSample
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		results, err = rd.cache.TSMRevRange(filters, from, to)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return results, finalErr
+}
+
+// TSIncrBy with retry logic
+func (rd *RetryDecorator) TSIncrBy(key string, increment float64) error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.TSIncrBy(key, increment)
+	})
+}
+
+// TSDecrBy with retry logic
+func (rd *RetryDecorator) TSDecrBy(key string, decrement float64) error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.TSDecrBy(key, decrement)
+	})
+}
+
+// TSInfo with retry logic
+func (rd *RetryDecorator) TSInfo(key string) (*models.TimeSeriesStats, error) {
+	var stats *models.TimeSeriesStats
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		stats, err = rd.cache.TSInfo(key)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return stats, finalErr
+}
+
+func (rd *RetryDecorator) TSAlter(key string, labels map[string]string) error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.TSAlter(key, labels)
+	})
+}
+
+func (rd *RetryDecorator) TSCreateRule(sourceKey, destKey string, aggregationType string, bucketSize int64) error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.TSCreateRule(sourceKey, destKey, aggregationType, bucketSize)
+	})
+}
+
+func (rd *RetryDecorator) TSDeleteRule(sourceKey, destinationKey string) error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.TSDeleteRule(sourceKey, destinationKey)
+	})
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }

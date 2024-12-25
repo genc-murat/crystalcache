@@ -6,6 +6,7 @@ type Value struct {
 	Num   int
 	Bulk  string
 	Array []Value
+	Float float64
 }
 
 func (v Value) IsCommand(cmd string) bool {

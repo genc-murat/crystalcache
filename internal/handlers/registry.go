@@ -33,6 +33,7 @@ type Registry struct {
 	tdigestHandlers     *TDigestHandlers
 	bloomFilterHandlers *BloomFilterHandlers
 	topkHandlers        *TopKHandlers
+	timeSeriesHandlers  *TimeSeriesHandlers
 }
 
 func NewRegistry(cache ports.Cache, clientManager *client.Manager) *Registry {
@@ -61,6 +62,7 @@ func NewRegistry(cache ports.Cache, clientManager *client.Manager) *Registry {
 		tdigestHandlers:     NewTDigestHandlers(cache),
 		bloomFilterHandlers: NewBloomFilterHandlers(cache),
 		topkHandlers:        NewTopKHandlers(cache),
+		timeSeriesHandlers:  NewTimeSeriesHandlers(cache),
 	}
 
 	r.registerHandlers()
@@ -351,6 +353,23 @@ func (r *Registry) registerHandlers() {
 	r.handlers["TOPK.LIST"] = r.topkHandlers.HandleTOPKList
 	r.handlers["TOPK.INFO"] = r.topkHandlers.HandleTOPKInfo
 
+	r.handlers["TS.CREATE"] = r.timeSeriesHandlers.HandleTSCreate
+	r.handlers["TS.ADD"] = r.timeSeriesHandlers.HandleTSAdd
+	r.handlers["TS.MADD"] = r.timeSeriesHandlers.HandleTSMAdd
+	r.handlers["TS.RANGE"] = r.timeSeriesHandlers.HandleTSRange
+	r.handlers["TS.INFO"] = r.timeSeriesHandlers.HandleTSInfo
+	r.handlers["TS.INCRBY"] = r.timeSeriesHandlers.HandleTSIncrBy
+	r.handlers["TS.DECRBY"] = r.timeSeriesHandlers.HandleTSDecrBy
+	r.handlers["TS.DEL"] = r.timeSeriesHandlers.HandleTSDel
+	r.handlers["TS.ALTER"] = r.timeSeriesHandlers.HandleTSAlter
+	r.handlers["TS.CREATERULE"] = r.timeSeriesHandlers.HandleTSCreateRule
+	r.handlers["TS.DELETERULE"] = r.timeSeriesHandlers.HandleTSDeleteRule
+	r.handlers["TS.GET"] = r.timeSeriesHandlers.HandleTSGet
+	r.handlers["TS.MGET"] = r.timeSeriesHandlers.HandleTSMGet
+	r.handlers["TS.MRANGE"] = r.timeSeriesHandlers.HandleTSMRange
+	r.handlers["TS.MREVRANGE"] = r.timeSeriesHandlers.HandleTSMRevRange
+	r.handlers["TS.QUERYINDEX"] = r.timeSeriesHandlers.HandleTSQueryIndex
+	r.handlers["TS.REVRANGE"] = r.timeSeriesHandlers.HandleTSRevRange
 }
 
 func (r *Registry) GetHandler(cmd string) (CommandHandler, bool) {
