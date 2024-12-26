@@ -197,7 +197,7 @@ type Cache interface {
 	BFInsert(key string, errorRate float64, capacity uint, items []string) ([]bool, error)
 
 	// TopK Operations
-	TOPKReserve(key string, topk, capacity int, decay float64) error
+	TOPKReserve(key string, topk, width, depth int, decay float64) error
 	TOPKAdd(key string, items ...string) ([]bool, error)
 	TOPKIncrBy(key string, itemsWithCount map[string]int64) ([]bool, error)
 	TOPKQuery(key string, items ...string) ([]bool, error)

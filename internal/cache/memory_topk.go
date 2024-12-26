@@ -7,12 +7,13 @@ import (
 )
 
 // TOPKReserve initializes a TopK sketch
-func (c *MemoryCache) TOPKReserve(key string, topk, capacity int, decay float64) error {
-	if topk <= 0 || capacity <= 0 || decay < 0 || decay > 1 {
+func (c *MemoryCache) TOPKReserve(key string, topk, width, depth int, decay float64) error {
+	// Validate parameters
+	if topk <= 0 || width <= 0 || depth <= 0 || decay < 0 || decay > 1 {
 		return fmt.Errorf("ERR invalid parameters")
 	}
 
-	sketch := models.NewTopK(topk, capacity, decay)
+	sketch := models.NewTopK(topk, width*depth, decay)
 	c.topks.Store(key, sketch)
 	c.incrementKeyVersion(key)
 	return nil

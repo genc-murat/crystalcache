@@ -20,29 +20,53 @@ func NewTopKHandlers(cache ports.Cache) *TopKHandlers {
 
 // HandleTOPKReserve handles TOPK.RESERVE command
 func (h *TopKHandlers) HandleTOPKReserve(args []models.Value) models.Value {
-	if len(args) != 4 {
+	// Validate minimum required arguments (key and topk)
+	if len(args) < 2 {
 		return models.Value{
 			Type: "error",
 			Str:  "ERR wrong number of arguments for 'TOPK.RESERVE' command",
 		}
 	}
 
+	// Default values
+	width := 8   // default width
+	depth := 7   // default depth
+	decay := 0.9 // default decay
+
+	// Parse required parameters
+	key := args[0].Bulk
 	topk, err := strconv.Atoi(args[1].Bulk)
 	if err != nil {
 		return models.Value{Type: "error", Str: "ERR invalid topk"}
 	}
 
-	capacity, err := strconv.Atoi(args[2].Bulk)
-	if err != nil {
-		return models.Value{Type: "error", Str: "ERR invalid capacity"}
+	// Parse optional parameters if provided
+	if len(args) == 5 {
+		customWidth, err := strconv.Atoi(args[2].Bulk)
+		if err != nil {
+			return models.Value{Type: "error", Str: "ERR invalid width"}
+		}
+		width = customWidth
+
+		customDepth, err := strconv.Atoi(args[3].Bulk)
+		if err != nil {
+			return models.Value{Type: "error", Str: "ERR invalid depth"}
+		}
+		depth = customDepth
+
+		customDecay, err := strconv.ParseFloat(args[4].Bulk, 64)
+		if err != nil {
+			return models.Value{Type: "error", Str: "ERR invalid decay"}
+		}
+		decay = customDecay
+	} else if len(args) != 2 {
+		return models.Value{
+			Type: "error",
+			Str:  "ERR wrong number of arguments for 'TOPK.RESERVE' command",
+		}
 	}
 
-	decay, err := strconv.ParseFloat(args[3].Bulk, 64)
-	if err != nil {
-		return models.Value{Type: "error", Str: "ERR invalid decay"}
-	}
-
-	err = h.cache.TOPKReserve(args[0].Bulk, topk, capacity, decay)
+	err = h.cache.TOPKReserve(key, topk, width, depth, decay)
 	if err != nil {
 		return models.Value{Type: "error", Str: err.Error()}
 	}

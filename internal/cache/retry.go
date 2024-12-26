@@ -2132,9 +2132,9 @@ func (rd *RetryDecorator) BFInsert(key string, errorRate float64, capacity uint,
 }
 
 // TOPKReserve with retry logic
-func (rd *RetryDecorator) TOPKReserve(key string, topk, capacity int, decay float64) error {
+func (rd *RetryDecorator) TOPKReserve(key string, topk, width, depth int, decay float64) error {
 	return rd.executeWithRetry(func() error {
-		return rd.cache.TOPKReserve(key, topk, capacity, decay)
+		return rd.cache.TOPKReserve(key, topk, width, depth, decay)
 	})
 }
 
