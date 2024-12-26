@@ -685,3 +685,14 @@ func (h *StringHandlers) HandleIncrByFloat(args []models.Value) models.Value {
 
 	return models.Value{Type: "bulk", Bulk: resultStr}
 }
+
+func (h *StringHandlers) HandlePTTL(args []models.Value) models.Value {
+	if err := util.ValidateArgs(args, 1); err != nil {
+		return util.ToValue(err)
+	}
+
+	// Get time-to-live in milliseconds
+	ttlMs := h.cache.PTTL(args[0].Bulk)
+
+	return models.Value{Type: "integer", Num: int(ttlMs)}
+}

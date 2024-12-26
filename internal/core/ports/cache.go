@@ -31,6 +31,7 @@ type Cache interface {
 	LSet(key string, index int, value string) error
 	SInter(keys ...string) []string
 	SUnion(keys ...string) []string
+	PTTL(key string) int64
 	Type(key string) string
 	Exists(key string) bool
 	FlushAll()

@@ -2104,6 +2104,15 @@ func (rd *RetryDecorator) BFLoadChunk(key string, iterator int, data []byte) err
 	})
 }
 
+func (rd *RetryDecorator) PTTL(key string) int64 {
+	var ttlMs int64
+	rd.executeWithRetry(func() error {
+		ttlMs = rd.cache.PTTL(key)
+		return nil
+	})
+	return ttlMs
+}
+
 // Add BFInsert to RetryDecorator
 func (rd *RetryDecorator) BFInsert(key string, errorRate float64, capacity uint, items []string) ([]bool, error) {
 	var results []bool
