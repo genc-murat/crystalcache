@@ -2479,6 +2479,39 @@ func (rd *RetryDecorator) DelType(typeName string) (int64, error) {
 	}
 	return deleted, finalErr
 }
+func (rd *RetryDecorator) KeyCount(typeName string) (int64, error) {
+	var count int64
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		count, err = rd.cache.KeyCount(typeName)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return 0, err
+	}
+	return count, finalErr
+}
+
+func (rd *RetryDecorator) MemoryUsage(key string) (*models.MemoryUsageInfo, error) {
+	var info *models.MemoryUsageInfo
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		info, err = rd.cache.MemoryUsage(key)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return info, finalErr
+}
 
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)

@@ -377,6 +377,8 @@ func (r *Registry) registerHandlers() {
 
 	// new commands
 	r.handlers["DELTYPE"] = r.stringHandlers.HandleDelType
+	r.handlers["KEYCOUNT"] = r.adminHandlers.HandleKeyCount
+	r.handlers["MEMORYUSAGE"] = r.adminHandlers.HandleMemoryUsage
 }
 
 func (r *Registry) GetHandler(cmd string) (CommandHandler, bool) {

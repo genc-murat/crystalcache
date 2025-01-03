@@ -228,4 +228,6 @@ type Cache interface {
 
 	// New Commands
 	DelType(typeName string) (int64, error)
+	KeyCount(typeName string) (int64, error)
+	MemoryUsage(key string) (*models.MemoryUsageInfo, error)
 }

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -356,5 +357,79 @@ func (h *AdminHandlers) getCurrentConn() net.Conn {
 		return conn
 	default:
 		return h.currentConn
+	}
+}
+
+func (h *AdminHandlers) HandleKeyCount(args []models.Value) models.Value {
+	if len(args) != 1 {
+		return models.Value{
+			Type: "error",
+			Str:  "ERR wrong number of arguments for 'keycount' command",
+		}
+	}
+
+	typeName := strings.ToLower(args[0].Bulk)
+	count, err := h.cache.KeyCount(typeName)
+
+	if err != nil {
+		return models.Value{
+			Type: "error",
+			Str:  err.Error(),
+		}
+	}
+
+	return models.Value{
+		Type: "integer",
+		Num:  int(count),
+	}
+}
+
+func (h *AdminHandlers) HandleMemoryUsage(args []models.Value) models.Value {
+	if len(args) != 1 {
+		return models.Value{
+			Type: "error",
+			Str:  "ERR wrong number of arguments for 'memoryusage' command",
+		}
+	}
+
+	key := args[0].Bulk
+	info, err := h.cache.MemoryUsage(key)
+
+	if err != nil {
+		return models.Value{
+			Type: "error",
+			Str:  err.Error(),
+		}
+	}
+
+	// Return detailed memory usage as a map
+	return models.Value{
+		Type: "map",
+		Map: map[string]models.Value{
+			"total_bytes": {
+				Type: "string",
+				Str:  strconv.FormatInt(info.TotalBytes, 10),
+			},
+			"overhead_bytes": {
+				Type: "string",
+				Str:  strconv.FormatInt(info.OverheadBytes, 10),
+			},
+			"value_bytes": {
+				Type: "string",
+				Str:  strconv.FormatInt(info.ValueBytes, 10),
+			},
+			"aligned_bytes": {
+				Type: "string",
+				Str:  strconv.FormatInt(info.AlignedBytes, 10),
+			},
+			"allocator_overhead": {
+				Type: "string",
+				Str:  strconv.FormatInt(info.AllocatorOverhead, 10),
+			},
+			"pointer_size": {
+				Type: "string",
+				Str:  strconv.Itoa(info.PointerSize),
+			},
+		},
 	}
 }
