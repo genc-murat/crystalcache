@@ -1,8 +1,10 @@
 package cache
 
 import (
+	"math/rand"
 	"sort"
 	"sync"
+	"sync/atomic"
 )
 
 func (c *MemoryCache) SAdd(key string, member string) (bool, error) {
@@ -212,4 +214,55 @@ func (c *MemoryCache) SDiff(keys ...string) []string {
 	}
 	sort.Strings(diff)
 	return diff
+}
+
+// SMemRandomCount returns the specified number of random members from a set
+func (c *MemoryCache) SMemRandomCount(key string, count int, allowDuplicates bool) ([]string, error) {
+	// Get the set from sync.Map
+	setI, exists := c.sets_.Load(key)
+	if !exists {
+		return []string{}, nil
+	}
+
+	setMap := setI.(*sync.Map)
+
+	// Collect all members into a slice for random selection
+	var members []string
+	setMap.Range(func(key, _ interface{}) bool {
+		members = append(members, key.(string))
+		return true
+	})
+
+	if len(members) == 0 {
+		return []string{}, nil
+	}
+
+	// If count is greater than set size and duplicates are not allowed,
+	// return all members in random order
+	if count > len(members) && !allowDuplicates {
+		count = len(members)
+	}
+
+	result := make([]string, 0, count)
+
+	if allowDuplicates {
+		// With duplicates: simply select random members count times
+		for i := 0; i < count; i++ {
+			idx := rand.Intn(len(members))
+			result = append(result, members[idx])
+		}
+	} else {
+		// Without duplicates: shuffle and take first count elements
+		rand.Shuffle(len(members), func(i, j int) {
+			members[i], members[j] = members[j], members[i]
+		})
+		result = append(result, members[:count]...)
+	}
+
+	// Update stats if needed
+	if c.stats != nil {
+		atomic.AddInt64(&c.stats.cmdCount, 1)
+	}
+
+	return result, nil
 }

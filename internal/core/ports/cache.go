@@ -232,4 +232,5 @@ type Cache interface {
 	MemoryUsage(key string) (*models.MemoryUsageInfo, error)
 	RPushXGet(key string, value string) (int, error)
 	LPushXGet(key string, value string) (int, error)
+	SMemRandomCount(key string, count int, allowDuplicates bool) ([]string, error)
 }

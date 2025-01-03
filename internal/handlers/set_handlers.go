@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -519,4 +520,41 @@ func (h *SetHandlers) HandleSUnionStore(args []models.Value) models.Value {
 	}
 
 	return models.Value{Type: "integer", Num: stored}
+}
+
+func (h *SetHandlers) HandleSMemRandomCount(args []models.Value) models.Value {
+	if len(args) < 2 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for SMEMRANDOMCOUNT command"}
+	}
+
+	key := args[0].Bulk
+	count, err := strconv.Atoi(args[1].Bulk)
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR count argument must be an integer"}
+	}
+
+	if count < 0 {
+		return models.Value{Type: "error", Str: "ERR count cannot be negative"}
+	}
+
+	// Default to allowing duplicates if not specified
+	allowDuplicates := true
+	if len(args) >= 3 {
+		if strings.ToLower(args[2].Bulk) == "unique" {
+			allowDuplicates = false
+		}
+	}
+
+	members, err := h.cache.SMemRandomCount(key, count, allowDuplicates)
+	if err != nil {
+		return models.Value{Type: "error", Str: fmt.Sprintf("ERR %v", err)}
+	}
+
+	// Convert string slice to Value slice
+	result := make([]models.Value, len(members))
+	for i, member := range members {
+		result[i] = models.Value{Type: "bulk", Bulk: member}
+	}
+
+	return models.Value{Type: "array", Array: result}
 }

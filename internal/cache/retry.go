@@ -2549,6 +2549,23 @@ func (rd *RetryDecorator) RPushXGet(key string, value string) (int, error) {
 	return length, finalErr
 }
 
+func (rd *RetryDecorator) SMemRandomCount(key string, count int, allowDuplicates bool) ([]string, error) {
+	var members []string
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		members, err = rd.cache.SMemRandomCount(key, count, allowDuplicates)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return members, finalErr
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }
