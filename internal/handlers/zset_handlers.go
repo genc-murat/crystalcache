@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"math/rand"
 	"strconv"
 	"time"
@@ -1132,4 +1133,38 @@ func (h *ZSetHandlers) HandleZUnionStore(args []models.Value) models.Value {
 	}
 
 	return models.Value{Type: "integer", Num: count}
+}
+
+func (h *ZSetHandlers) HandleZRemRangeByRankCount(args []models.Value) models.Value {
+	if len(args) != 4 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for ZREMRANGEBYRANKCOUNT command"}
+	}
+
+	key := args[0].Bulk
+
+	start, err := strconv.Atoi(args[1].Bulk)
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR start argument must be an integer"}
+	}
+
+	stop, err := strconv.Atoi(args[2].Bulk)
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR stop argument must be an integer"}
+	}
+
+	count, err := strconv.Atoi(args[3].Bulk)
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR count argument must be an integer"}
+	}
+
+	if count < 0 {
+		return models.Value{Type: "error", Str: "ERR count cannot be negative"}
+	}
+
+	removed, err := h.cache.ZRemRangeByRankCount(key, start, stop, count)
+	if err != nil {
+		return models.Value{Type: "error", Str: fmt.Sprintf("ERR %v", err)}
+	}
+
+	return models.Value{Type: "integer", Num: removed}
 }

@@ -79,6 +79,54 @@ func (m *ModifyOps) ZRemRangeByScore(key string, min, max float64) (int, error) 
 	return removed, nil
 }
 
+// ZRemRangeByRankCount removes a specified number of elements from the sorted set at given ranks
+func (m *ModifyOps) ZRemRangeByRankCount(key string, start, stop, count int) (int, error) {
+	// Get sorted members
+	members, err := m.basicOps.getSortedMembers(key)
+	if err != nil || len(members) == 0 {
+		return 0, nil
+	}
+
+	// Adjust negative indices
+	if start < 0 {
+		start = len(members) + start
+	}
+	if stop < 0 {
+		stop = len(members) + stop
+	}
+
+	// Boundary checks
+	if start < 0 {
+		start = 0
+	}
+	if stop >= len(members) {
+		stop = len(members) - 1
+	}
+	if start > stop {
+		return 0, nil
+	}
+
+	// Calculate available elements in range
+	available := stop - start + 1
+
+	// Adjust count if it's larger than available elements
+	if count > available {
+		count = available
+	}
+
+	// Remove the specified number of members
+	removed := 0
+	for i := start; i < start+count && i <= stop; i++ {
+		err := m.basicOps.ZRem(key, members[i].Member)
+		if err != nil {
+			return removed, err
+		}
+		removed++
+	}
+
+	return removed, nil
+}
+
 // Helper methods
 func (m *ModifyOps) parseLexBound(bound string) (string, bool, bool) {
 	isInclusive := true

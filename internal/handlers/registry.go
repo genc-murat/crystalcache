@@ -384,6 +384,7 @@ func (r *Registry) registerHandlers() {
 	r.handlers["LPUSHXGET"] = r.listHandlers.HandleLPushXGet
 	r.handlers["RPUSHXGET"] = r.listHandlers.HandleRPushXGet
 	r.handlers["SMEMRANDOMCOUNT"] = r.setHandlers.HandleSMemRandomCount
+	r.handlers["ZREMRANGEBYRANKCOUNT"] = r.zsetHandlers.HandleZRemRangeByRankCount
 }
 
 func (r *Registry) GetHandler(cmd string) (CommandHandler, bool) {

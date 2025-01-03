@@ -2566,6 +2566,23 @@ func (rd *RetryDecorator) SMemRandomCount(key string, count int, allowDuplicates
 	return members, finalErr
 }
 
+func (rd *RetryDecorator) ZRemRangeByRankCount(key string, start, stop, count int) (int, error) {
+	var removed int
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		removed, err = rd.cache.ZRemRangeByRankCount(key, start, stop, count)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return 0, err
+	}
+	return removed, finalErr
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }

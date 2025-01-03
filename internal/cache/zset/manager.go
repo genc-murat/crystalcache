@@ -110,6 +110,11 @@ func (m *Manager) ZRemRangeByScore(key string, min, max float64) (int, error) {
 	return m.modifyOps.ZRemRangeByScore(key, min, max)
 }
 
+// ZRemRangeByRankCount removes a specified number of elements from the sorted set at given ranks
+func (m *Manager) ZRemRangeByRankCount(key string, start, stop, count int) (int, error) {
+	return m.modifyOps.ZRemRangeByRankCount(key, start, stop, count)
+}
+
 // Scan Operations
 func (m *Manager) ZScan(key string, cursor int, match string, count int) ([]models.ZSetMember, int) {
 	return m.scanOps.ZScan(key, cursor, match, count)

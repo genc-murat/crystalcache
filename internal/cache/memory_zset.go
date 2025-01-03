@@ -154,3 +154,7 @@ func (c *MemoryCache) ZRemRangeByScore(key string, min, max float64) (int, error
 func (c *MemoryCache) ZRemRangeByRank(key string, start, stop int) (int, error) {
 	return c.zsetManager.ZRemRangeByRank(key, start, stop)
 }
+
+func (c *MemoryCache) ZRemRangeByRankCount(key string, start, stop, count int) (int, error) {
+	return c.zsetManager.ZRemRangeByRankCount(key, start, stop, count)
+}
