@@ -124,6 +124,8 @@ func (r *Registry) registerHandlers() {
 	// List Commands
 	r.handlers["LPUSH"] = r.listHandlers.HandleLPush
 	r.handlers["RPUSH"] = r.listHandlers.HandleRPush
+	r.handlers["LPUSHX"] = r.listHandlers.HandleLPushX
+	r.handlers["RPUSHX"] = r.listHandlers.HandleRPushX
 	r.handlers["LRANGE"] = r.listHandlers.HandleLRange
 	r.handlers["LPOP"] = r.listHandlers.HandleLPop
 	r.handlers["RPOP"] = r.listHandlers.HandleRPop
