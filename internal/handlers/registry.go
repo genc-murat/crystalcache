@@ -381,6 +381,8 @@ func (r *Registry) registerHandlers() {
 	r.handlers["DELTYPE"] = r.stringHandlers.HandleDelType
 	r.handlers["KEYCOUNT"] = r.adminHandlers.HandleKeyCount
 	r.handlers["MEMORYUSAGE"] = r.adminHandlers.HandleMemoryUsage
+	r.handlers["LPUSHXGET"] = r.listHandlers.HandleLPushXGet
+	r.handlers["RPUSHXGET"] = r.listHandlers.HandleRPushXGet
 }
 
 func (r *Registry) GetHandler(cmd string) (CommandHandler, bool) {

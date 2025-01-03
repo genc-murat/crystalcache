@@ -2513,6 +2513,42 @@ func (rd *RetryDecorator) MemoryUsage(key string) (*models.MemoryUsageInfo, erro
 	return info, finalErr
 }
 
+// LPushXGet with retry logic
+func (rd *RetryDecorator) LPushXGet(key string, value string) (int, error) {
+	var length int
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		length, err = rd.cache.LPushXGet(key, value)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return 0, err
+	}
+	return length, finalErr
+}
+
+// RPushXGet with retry logic
+func (rd *RetryDecorator) RPushXGet(key string, value string) (int, error) {
+	var length int
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		length, err = rd.cache.RPushXGet(key, value)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return 0, err
+	}
+	return length, finalErr
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }

@@ -1895,6 +1895,56 @@ func (c *MemoryCache) RPushX(key string, value string) (int, error) {
 	return c.RPush(key, value)
 }
 
+// LPushXGet atomically pushes a value to the front of an existing list and returns its new length.
+// If the list doesn't exist, it returns 0 without performing any operation.
+func (c *MemoryCache) LPushXGet(key string, value string) (int, error) {
+	for {
+		listI, exists := c.lists.Load(key)
+		if !exists {
+			return 0, nil // List doesn't exist, return 0
+		}
+
+		list := listI.(*[]string)
+		newList := make([]string, len(*list)+1)
+
+		// Add new value at the beginning
+		newList[0] = value
+		copy(newList[1:], *list)
+
+		// Try to update atomically
+		if c.lists.CompareAndSwap(key, listI, &newList) {
+			c.incrementKeyVersion(key)
+			return len(newList), nil
+		}
+		// If CAS failed, retry the operation
+	}
+}
+
+// RPushXGet atomically pushes a value to the end of an existing list and returns its new length.
+// If the list doesn't exist, it returns 0 without performing any operation.
+func (c *MemoryCache) RPushXGet(key string, value string) (int, error) {
+	for {
+		listI, exists := c.lists.Load(key)
+		if !exists {
+			return 0, nil // List doesn't exist, return 0
+		}
+
+		list := listI.(*[]string)
+		newList := make([]string, len(*list)+1)
+
+		// Copy existing elements and add new value at the end
+		copy(newList, *list)
+		newList[len(*list)] = value
+
+		// Try to update atomically
+		if c.lists.CompareAndSwap(key, listI, &newList) {
+			c.incrementKeyVersion(key)
+			return len(newList), nil
+		}
+		// If CAS failed, retry the operation
+	}
+}
+
 // LTRIM trims a list to the specified range
 func (c *MemoryCache) LTrim(key string, start int, stop int) error {
 	for {

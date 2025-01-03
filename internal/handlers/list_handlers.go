@@ -723,6 +723,56 @@ func (h *ListHandlers) HandleLPos(args []models.Value) models.Value {
 	return models.Value{Type: "integer", Num: position}
 }
 
+func (h *ListHandlers) HandleLPushXGet(args []models.Value) models.Value {
+	if len(args) != 2 {
+		return models.Value{
+			Type: "error",
+			Str:  "ERR wrong number of arguments for 'lpushxget' command",
+		}
+	}
+
+	key := args[0].Bulk
+	value := args[1].Bulk
+
+	length, err := h.cache.LPushXGet(key, value)
+	if err != nil {
+		return models.Value{
+			Type: "error",
+			Str:  err.Error(),
+		}
+	}
+
+	return models.Value{
+		Type: "integer",
+		Num:  length,
+	}
+}
+
+func (h *ListHandlers) HandleRPushXGet(args []models.Value) models.Value {
+	if len(args) != 2 {
+		return models.Value{
+			Type: "error",
+			Str:  "ERR wrong number of arguments for 'rpushxget' command",
+		}
+	}
+
+	key := args[0].Bulk
+	value := args[1].Bulk
+
+	length, err := h.cache.RPushXGet(key, value)
+	if err != nil {
+		return models.Value{
+			Type: "error",
+			Str:  err.Error(),
+		}
+	}
+
+	return models.Value{
+		Type: "integer",
+		Num:  length,
+	}
+}
+
 // HandleLPushX handles the LPUSHX command which inserts an element at the head of an existing list
 // Parameters:
 //   - args: Array of Values containing the key and value to push

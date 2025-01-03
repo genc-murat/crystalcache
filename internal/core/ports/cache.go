@@ -230,4 +230,6 @@ type Cache interface {
 	DelType(typeName string) (int64, error)
 	KeyCount(typeName string) (int64, error)
 	MemoryUsage(key string) (*models.MemoryUsageInfo, error)
+	RPushXGet(key string, value string) (int, error)
+	LPushXGet(key string, value string) (int, error)
 }
