@@ -696,3 +696,27 @@ func (h *StringHandlers) HandlePTTL(args []models.Value) models.Value {
 
 	return models.Value{Type: "integer", Num: int(ttlMs)}
 }
+
+func (h *StringHandlers) HandleDelType(args []models.Value) models.Value {
+	if len(args) != 1 {
+		return models.Value{
+			Type: "error",
+			Str:  "ERR wrong number of arguments for 'deltype' command",
+		}
+	}
+
+	typeName := strings.ToLower(args[0].Bulk)
+	deletedCount, err := h.cache.DelType(typeName)
+
+	if err != nil {
+		return models.Value{
+			Type: "error",
+			Str:  err.Error(),
+		}
+	}
+
+	return models.Value{
+		Type: "integer",
+		Num:  int(deletedCount),
+	}
+}

@@ -374,6 +374,9 @@ func (r *Registry) registerHandlers() {
 	r.handlers["TS.MREVRANGE"] = r.timeSeriesHandlers.HandleTSMRevRange
 	r.handlers["TS.QUERYINDEX"] = r.timeSeriesHandlers.HandleTSQueryIndex
 	r.handlers["TS.REVRANGE"] = r.timeSeriesHandlers.HandleTSRevRange
+
+	// new commands
+	r.handlers["DELTYPE"] = r.stringHandlers.HandleDelType
 }
 
 func (r *Registry) GetHandler(cmd string) (CommandHandler, bool) {

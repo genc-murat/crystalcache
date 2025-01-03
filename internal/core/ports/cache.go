@@ -225,4 +225,7 @@ type Cache interface {
 	TSMRevRange(filters map[string]string, from, to int64) (map[string][]models.TimeSeriesSample, error)
 	TSQueryIndex(filters map[string]string) ([]string, error)
 	TSRevRange(key string, from, to int64) ([]models.TimeSeriesSample, error)
+
+	// New Commands
+	DelType(typeName string) (int64, error)
 }

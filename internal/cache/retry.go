@@ -2463,6 +2463,23 @@ func (rd *RetryDecorator) TSDeleteRule(sourceKey, destinationKey string) error {
 	})
 }
 
+func (rd *RetryDecorator) DelType(typeName string) (int64, error) {
+	var deleted int64
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		deleted, err = rd.cache.DelType(typeName)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return 0, err
+	}
+	return deleted, finalErr
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }
