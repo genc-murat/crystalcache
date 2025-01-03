@@ -19,6 +19,34 @@ func NewGeoHandlers(cache ports.Cache) *GeoHandlers {
 	}
 }
 
+func (h *GeoHandlers) HandleGeoHash(args []models.Value) models.Value {
+	if len(args) < 2 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments"}
+	}
+
+	key := args[0].Bulk
+	var members []string
+	for i := 1; i < len(args); i++ {
+		members = append(members, args[i].Bulk)
+	}
+
+	points, err := h.cache.GeoPos(key, members...)
+	if err != nil {
+		return models.Value{Type: "error", Str: err.Error()}
+	}
+
+	results := make([]models.Value, len(points))
+	for i, point := range points {
+		if point == nil {
+			results[i] = models.Value{Type: "null"}
+		} else {
+			results[i] = models.Value{Type: "bulk", Bulk: point.GeoHash}
+		}
+	}
+
+	return models.Value{Type: "array", Array: results}
+}
+
 func (h *GeoHandlers) HandleGeoAdd(args []models.Value) models.Value {
 	if len(args) < 4 || (len(args)-1)%3 != 0 {
 		return models.Value{Type: "error", Str: "ERR wrong number of arguments"}

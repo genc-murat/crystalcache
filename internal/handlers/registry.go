@@ -293,6 +293,7 @@ func (r *Registry) registerHandlers() {
 	r.handlers["GEORADIUSBYMEMBER_RO"] = r.geoHandlers.HandleGeoRadius
 	r.handlers["GEOSEARCH"] = r.geoHandlers.HandleGeoSearch
 	r.handlers["GEOSEARCHSTORE"] = r.geoHandlers.HandleGeoSearchStore
+	r.handlers["GEOHASH"] = r.geoHandlers.HandleGeoHash
 
 	// Count-Min Sketch Commands
 	r.handlers["CMS.INCRBY"] = r.cmsHandlers.HandleCMSIncrBy
