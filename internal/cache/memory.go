@@ -1895,6 +1895,63 @@ func (c *MemoryCache) RPushX(key string, value string) (int, error) {
 	return c.RPush(key, value)
 }
 
+func (c *MemoryCache) LInsertBeforeAfter(key string, before bool, pivot string, values []string, count int) (int, error) {
+	if count <= 0 {
+		count = len(values)
+	}
+	if count > len(values) {
+		count = len(values)
+	}
+
+	for {
+		// Load or create the list
+		listI, exists := c.lists.Load(key)
+		if !exists {
+			return 0, nil // Return 0 if key doesn't exist
+		}
+
+		list := listI.(*[]string)
+		pivotIndex := -1
+
+		// Find pivot element
+		for i, element := range *list {
+			if element == pivot {
+				pivotIndex = i
+				break
+			}
+		}
+
+		// If pivot wasn't found, return -1
+		if pivotIndex == -1 {
+			return -1, nil
+		}
+
+		// Calculate insertion index
+		insertIndex := pivotIndex
+		if !before {
+			insertIndex++
+		}
+
+		// Create new list with appropriate capacity
+		newList := make([]string, len(*list)+count)
+
+		// Copy elements up to insertion point
+		copy(newList, (*list)[:insertIndex])
+
+		// Insert new values
+		copy(newList[insertIndex:], values[:count])
+
+		// Copy remaining elements
+		copy(newList[insertIndex+count:], (*list)[insertIndex:])
+
+		// Try to update the list atomically
+		if c.lists.CompareAndSwap(key, listI, &newList) {
+			c.incrementKeyVersion(key)
+			return len(newList), nil
+		}
+	}
+}
+
 // LPushXGet atomically pushes a value to the front of an existing list and returns its new length.
 // If the list doesn't exist, it returns 0 without performing any operation.
 func (c *MemoryCache) LPushXGet(key string, value string) (int, error) {

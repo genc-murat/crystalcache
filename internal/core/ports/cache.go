@@ -235,4 +235,5 @@ type Cache interface {
 	SMemRandomCount(key string, count int, allowDuplicates bool) ([]string, error)
 	ZRemRangeByRankCount(key string, start, stop, count int) (int, error)
 	ZPopMinMaxBy(key string, by string, isMax bool, count int) []models.ZSetMember
+	LInsertBeforeAfter(key string, before bool, pivot string, values []string, count int) (int, error)
 }

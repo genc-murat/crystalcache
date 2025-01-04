@@ -2592,6 +2592,23 @@ func (rd *RetryDecorator) ZPopMinMaxBy(key string, by string, isMax bool, count 
 	return result
 }
 
+func (rd *RetryDecorator) LInsertBeforeAfter(key string, before bool, pivot string, values []string, count int) (int, error) {
+	var length int
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		length, err = rd.cache.LInsertBeforeAfter(key, before, pivot, values, count)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return 0, err
+	}
+	return length, finalErr
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }

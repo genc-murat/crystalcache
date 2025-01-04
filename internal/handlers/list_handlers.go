@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/genc-murat/crystalcache/internal/core/models"
@@ -841,4 +843,72 @@ func (h *ListHandlers) HandleLTrim(args []models.Value) models.Value {
 	}
 
 	return models.Value{Type: "string", Str: "OK"}
+}
+
+func (h *ListHandlers) HandleLInsertBeforeAfter(args []models.Value) models.Value {
+	if len(args) < 4 {
+		return models.Value{
+			Type: "error",
+			Str:  "ERR wrong number of arguments for 'linsertbeforeafter' command",
+		}
+	}
+
+	key := args[0].Bulk
+	operation := strings.ToLower(args[1].Bulk)
+	if operation != "before" && operation != "after" {
+		return models.Value{
+			Type: "error",
+			Str:  "ERR syntax error",
+		}
+	}
+
+	pivot := args[2].Bulk
+	values := make([]string, len(args)-3)
+	for i := 3; i < len(args); i++ {
+		values[i-3] = args[i].Bulk
+	}
+
+	// Default count is all values
+	count := len(values)
+
+	// Check for COUNT option
+	for i := 3; i < len(args)-1; i++ {
+		if strings.ToUpper(args[i].Bulk) == "COUNT" {
+			var err error
+			count, err = strconv.Atoi(args[i+1].Bulk)
+			if err != nil {
+				return models.Value{
+					Type: "error",
+					Str:  "ERR value is not an integer or out of range",
+				}
+			}
+			if count <= 0 {
+				return models.Value{
+					Type: "error",
+					Str:  "ERR COUNT must be positive",
+				}
+			}
+			values = values[:i-3] // Exclude COUNT and its value from values slice
+			break
+		}
+	}
+
+	newLength, err := h.cache.LInsertBeforeAfter(key, operation == "before", pivot, values, count)
+	if err != nil {
+		return models.Value{
+			Type: "error",
+			Str:  err.Error(),
+		}
+	}
+	if newLength == -1 {
+		return models.Value{
+			Type: "integer",
+			Num:  -1, // Pivot was not found
+		}
+	}
+
+	return models.Value{
+		Type: "integer",
+		Num:  newLength,
+	}
 }
