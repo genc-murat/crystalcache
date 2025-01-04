@@ -117,38 +117,29 @@ func (b *BasicOps) ZScore(key string, member string) (float64, bool) {
 
 // ZRem removes a member from a sorted set
 func (b *BasicOps) ZRem(key string, member string) error {
-	// Attempt to load the key from the cache
 	value, exists := b.cache.Load(key)
 	if !exists {
-		// Key does not exist; nothing to remove
-		return nil
+		return nil // Key doesn't exist, nothing to remove
 	}
 
-	// Assert the value is of type *sync.Map
 	set, ok := value.(*sync.Map)
 	if !ok {
-		// Handle unexpected type gracefully
-		return fmt.Errorf("invalid value type for key: %s", key)
+		return fmt.Errorf("invalid cache value type for key: %s", key)
 	}
 
-	// Remove the member from the set
 	set.Delete(member)
 
-	// Check if the set is now empty
-	empty := true
+	isEmpty := true
 	set.Range(func(_, _ interface{}) bool {
-		empty = false
-		return false // Stop iteration after finding the first element
+		isEmpty = false
+		return false // Stop on the first element
 	})
 
-	// If the set is empty, remove the key from the cache
-	if empty {
+	if isEmpty {
 		b.cache.Delete(key)
 	}
 
-	// Increment the version of the key
 	b.incrementKeyVersion(key)
-
 	return nil
 }
 
