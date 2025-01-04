@@ -1,7 +1,9 @@
 package handlers
 
 import (
+	"fmt"
 	"math/rand"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -971,6 +973,61 @@ func (h *HashHandlers) HandleHScanMatch(args []models.Value) models.Value {
 	response[1] = models.Value{
 		Type:  "array",
 		Array: arrayElements,
+	}
+
+	return models.Value{
+		Type:  "array",
+		Array: response,
+	}
+}
+
+func (h *HashHandlers) HandleHIncrByMulti(args []models.Value) models.Value {
+	if len(args) < 3 || len(args)%2 != 1 {
+		return models.Value{
+			Type: "error",
+			Str:  "ERR wrong number of arguments for 'hincrbymulti' command",
+		}
+	}
+
+	key := args[0].Bulk
+	fieldsAndIncrements := make(map[string]int64)
+
+	// Parse field-increment pairs
+	for i := 1; i < len(args); i += 2 {
+		field := args[i].Bulk
+		increment, err := strconv.ParseInt(args[i+1].Bulk, 10, 64)
+		if err != nil {
+			return models.Value{
+				Type: "error",
+				Str:  fmt.Sprintf("ERR value is not an integer or out of range for field '%s'", field),
+			}
+		}
+		fieldsAndIncrements[field] = increment
+	}
+
+	// Perform the multi-increment
+	results, err := h.cache.HIncrByMulti(key, fieldsAndIncrements)
+	if err != nil {
+		return models.Value{
+			Type: "error",
+			Str:  err.Error(),
+		}
+	}
+
+	// Create response array
+	response := make([]models.Value, len(results)*2)
+	i := 0
+	// Sort fields for consistent response ordering
+	fields := make([]string, 0, len(results))
+	for field := range results {
+		fields = append(fields, field)
+	}
+	sort.Strings(fields)
+
+	for _, field := range fields {
+		response[i] = models.Value{Type: "bulk", Bulk: field}
+		response[i+1] = models.Value{Type: "bulk", Bulk: strconv.FormatInt(results[field], 10)}
+		i += 2
 	}
 
 	return models.Value{

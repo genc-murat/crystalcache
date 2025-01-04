@@ -396,6 +396,7 @@ func (r *Registry) registerHandlers() {
 	r.handlers["HSCANMATCH"] = r.hashHandlers.HandleHScanMatch
 	r.handlers["ZSCANBYSCORE"] = r.zsetHandlers.HandleZScanByScore
 	r.handlers["SEEXPIRE"] = r.stringHandlers.HandleSEExpire
+	r.handlers["HINCRBYMULTI"] = r.hashHandlers.HandleHIncrByMulti
 }
 
 func (r *Registry) GetHandler(cmd string) (CommandHandler, bool) {

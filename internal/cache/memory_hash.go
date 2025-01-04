@@ -402,3 +402,42 @@ func (c *MemoryCache) HScanMatch(hash string, cursor int, matchPattern string, c
 
 	return result, nextCursor
 }
+
+func (c *MemoryCache) HIncrByMulti(key string, fieldsAndIncrements map[string]int64) (map[string]int64, error) {
+	// Get or create the hash
+	hashI, _ := c.hsets.LoadOrStore(key, &sync.Map{})
+	hash := hashI.(*sync.Map)
+
+	results := make(map[string]int64)
+	var err error
+
+	// Process all increments atomically
+	for field, increment := range fieldsAndIncrements {
+		// Get current value
+		currentI, exists := hash.Load(field)
+		var current int64 = 0
+
+		if exists {
+			// Try to convert existing value to int64
+			currentStr := currentI.(string)
+			current, err = strconv.ParseInt(currentStr, 10, 64)
+			if err != nil {
+				return nil, fmt.Errorf("ERR hash value is not an integer")
+			}
+		}
+
+		// Calculate new value
+		newValue := current + increment
+
+		// Store new value
+		hash.Store(field, strconv.FormatInt(newValue, 10))
+
+		// Store result
+		results[field] = newValue
+	}
+
+	// Increment key version
+	c.incrementKeyVersion(key)
+
+	return results, nil
+}

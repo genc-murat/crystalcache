@@ -2759,6 +2759,23 @@ func (rd *RetryDecorator) SEExpire(key string, seconds int, condition string) (b
 	return success, finalErr
 }
 
+func (rd *RetryDecorator) HIncrByMulti(key string, fieldsAndIncrements map[string]int64) (map[string]int64, error) {
+	var results map[string]int64
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		results, err = rd.cache.HIncrByMulti(key, fieldsAndIncrements)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return results, finalErr
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }
