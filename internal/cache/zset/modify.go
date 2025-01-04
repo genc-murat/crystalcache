@@ -81,50 +81,51 @@ func (m *ModifyOps) ZRemRangeByScore(key string, min, max float64) (int, error) 
 
 // ZRemRangeByRankCount removes a specified number of elements from the sorted set at given ranks
 func (m *ModifyOps) ZRemRangeByRankCount(key string, start, stop, count int) (int, error) {
-	// Get sorted members
 	members, err := m.basicOps.getSortedMembers(key)
 	if err != nil || len(members) == 0 {
 		return 0, nil
 	}
 
-	// Adjust negative indices
-	if start < 0 {
-		start = len(members) + start
+	// Adjust indices for easier slicing
+	adjustedStart := start
+	adjustedStop := stop
+	if adjustedStart < 0 {
+		adjustedStart = len(members) + adjustedStart
 	}
-	if stop < 0 {
-		stop = len(members) + stop
+	if adjustedStop < 0 {
+		adjustedStop = len(members) + adjustedStop
 	}
 
-	// Boundary checks
-	if start < 0 {
-		start = 0
+	// Clamp indices to valid range
+	if adjustedStart < 0 {
+		adjustedStart = 0
 	}
-	if stop >= len(members) {
-		stop = len(members) - 1
+	if adjustedStop >= len(members) {
+		adjustedStop = len(members) - 1
 	}
-	if start > stop {
+
+	// Handle cases with no overlap
+	if adjustedStart > adjustedStop {
 		return 0, nil
 	}
 
-	// Calculate available elements in range
-	available := stop - start + 1
-
-	// Adjust count if it's larger than available elements
-	if count > available {
-		count = available
+	// Determine the actual number of elements to remove
+	numToRemove := count
+	available := adjustedStop - adjustedStart + 1
+	if numToRemove > available {
+		numToRemove = available
 	}
 
-	// Remove the specified number of members
-	removed := 0
-	for i := start; i < start+count && i <= stop; i++ {
-		err := m.basicOps.ZRem(key, members[i].Member)
-		if err != nil {
-			return removed, err
+	removedCount := 0
+	for i := 0; i < numToRemove; i++ {
+		memberToRemove := members[adjustedStart+i].Member
+		if err := m.basicOps.ZRem(key, memberToRemove); err != nil {
+			return removedCount, err
 		}
-		removed++
+		removedCount++
 	}
 
-	return removed, nil
+	return removedCount, nil
 }
 
 // Helper methods
