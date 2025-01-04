@@ -228,3 +228,32 @@ func (c *MemoryCache) MGetType(keys []string) map[string]string {
 
 	return results
 }
+
+func (c *MemoryCache) PExpireAt(key string, timestampMs int64) error {
+	// Convert millisecond timestamp to time.Time
+	expireTime := time.Unix(0, timestampMs*int64(time.Millisecond))
+
+	// Store expiration time
+	c.expires.Store(key, expireTime)
+
+	// Start a background goroutine to handle expiration
+	go func() {
+		timer := time.NewTimer(time.Until(expireTime))
+		defer timer.Stop()
+
+		<-timer.C
+
+		// Check if the key still exists with the same expiration time
+		if expTime, exists := c.expires.Load(key); exists {
+			if expTime.(time.Time).Equal(expireTime) {
+				c.Del(key)
+				// Increment expired keys counter
+				if c.stats != nil {
+					atomic.AddInt64(&c.stats.expiredKeys, 1)
+				}
+			}
+		}
+	}()
+
+	return nil
+}

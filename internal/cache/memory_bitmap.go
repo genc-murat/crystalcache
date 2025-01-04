@@ -2,6 +2,16 @@ package cache
 
 import "github.com/genc-murat/crystalcache/internal/core/models"
 
+// GetBit retrieves the bit value at the specified offset for the given key from the memory cache.
+// It returns the bit value (0 or 1) and an error if the operation fails.
+//
+// Parameters:
+//   - key: The key associated with the bitmap.
+//   - offset: The position of the bit to retrieve.
+//
+// Returns:
+//   - int: The bit value at the specified offset (0 or 1).
+//   - error: An error if the operation fails.
 func (c *MemoryCache) GetBit(key string, offset int64) (int, error) {
 	return c.bitmapManager.GetBit(key, offset)
 }

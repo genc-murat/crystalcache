@@ -93,6 +93,8 @@ func (r *Registry) registerHandlers() {
 	r.handlers["INCRBY"] = r.stringHandlers.HandleIncrBy
 	r.handlers["INCRBYFLOAT"] = r.stringHandlers.HandleIncrByFloat
 	r.handlers["PTTL"] = r.stringHandlers.HandlePTTL
+	r.handlers["EXPIREAT"] = r.stringHandlers.HandleExpireAt
+	r.handlers["PEXPIREAT"] = r.stringHandlers.HandlePExpireAt
 
 	// Hash Commands
 	r.handlers["HSET"] = r.hashHandlers.HandleHSet

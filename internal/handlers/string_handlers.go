@@ -757,3 +757,81 @@ func (h *StringHandlers) HandleMGetType(args []models.Value) models.Value {
 		Array: response,
 	}
 }
+
+func (h *StringHandlers) HandleExpireAt(args []models.Value) models.Value {
+	if len(args) != 2 {
+		return models.Value{
+			Type: "error",
+			Str:  "ERR wrong number of arguments for 'expireat' command",
+		}
+	}
+
+	key := args[0].Bulk
+	timestamp, err := strconv.ParseInt(args[1].Bulk, 10, 64)
+	if err != nil {
+		return models.Value{
+			Type: "error",
+			Str:  "ERR value is not an integer or out of range",
+		}
+	}
+
+	// Check if key exists
+	if !h.cache.Exists(key) {
+		return models.Value{
+			Type: "integer",
+			Num:  0,
+		}
+	}
+
+	err = h.cache.ExpireAt(key, timestamp)
+	if err != nil {
+		return models.Value{
+			Type: "integer",
+			Num:  0,
+		}
+	}
+
+	return models.Value{
+		Type: "integer",
+		Num:  1,
+	}
+}
+
+func (h *StringHandlers) HandlePExpireAt(args []models.Value) models.Value {
+	if len(args) != 2 {
+		return models.Value{
+			Type: "error",
+			Str:  "ERR wrong number of arguments for 'pexpireat' command",
+		}
+	}
+
+	key := args[0].Bulk
+	timestampMs, err := strconv.ParseInt(args[1].Bulk, 10, 64)
+	if err != nil {
+		return models.Value{
+			Type: "error",
+			Str:  "ERR value is not an integer or out of range",
+		}
+	}
+
+	// Check if key exists
+	if !h.cache.Exists(key) {
+		return models.Value{
+			Type: "integer",
+			Num:  0,
+		}
+	}
+
+	err = h.cache.PExpireAt(key, timestampMs)
+	if err != nil {
+		return models.Value{
+			Type: "integer",
+			Num:  0,
+		}
+	}
+
+	return models.Value{
+		Type: "integer",
+		Num:  1,
+	}
+}

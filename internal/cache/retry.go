@@ -2712,6 +2712,12 @@ func (rd *RetryDecorator) ZScanByScore(key string, min, max float64, count int, 
 	return results
 }
 
+func (rd *RetryDecorator) PExpireAt(key string, timestampMs int64) error {
+	return rd.executeWithRetry(func() error {
+		return rd.cache.PExpireAt(key, timestampMs)
+	})
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }

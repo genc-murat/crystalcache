@@ -14,6 +14,7 @@ type Cache interface {
 	HGetAll(hash string) map[string]string
 	Incr(key string) (int, error)
 	Expire(key string, seconds int) error
+	PExpireAt(key string, timestampMs int64) error
 	Del(key string) (bool, error)
 	Keys(pattern string) []string
 	TTL(key string) int // TTL in seconds, -2 if not exists, -1 if no expire
