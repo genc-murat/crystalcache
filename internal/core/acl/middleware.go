@@ -11,14 +11,29 @@ type Middleware struct {
 	aclManager *ACLManager
 }
 
-// NewMiddleware creates a new ACL middleware instance
+// NewMiddleware creates a new instance of Middleware with the provided ACLManager.
+// It initializes the Middleware with the given ACLManager to handle access control logic.
+//
+// Parameters:
+//   - aclManager: A pointer to an ACLManager instance that manages access control lists.
+//
+// Returns:
+//   - A pointer to a newly created Middleware instance.
 func NewMiddleware(aclManager *ACLManager) *Middleware {
 	return &Middleware{
 		aclManager: aclManager,
 	}
 }
 
-// CheckCommand validates if a user has permission to execute a command
+// CheckCommand verifies if a given user has permission to execute a specific command.
+// It handles special cases for the default user with no authentication and always allows the AUTH command.
+//
+// Parameters:
+// - username: The name of the user attempting to execute the command.
+// - cmd: The command to be checked, represented as a models.Value.
+//
+// Returns:
+// - bool: True if the user has permission to execute the command, false otherwise.
 func (m *Middleware) CheckCommand(username string, cmd models.Value) bool {
 	if len(cmd.Array) == 0 {
 		return false
@@ -49,7 +64,10 @@ func (m *Middleware) CheckCommand(username string, cmd models.Value) bool {
 	return m.aclManager.CheckCommandPerm(username, command)
 }
 
-// readOnlyCommands contains commands that don't modify data
+// readOnlyCommands is a map that defines a set of Redis commands that are considered read-only.
+// Each command is mapped to a boolean value of true, indicating that the command does not modify
+// the state of the Redis database. This map includes commands for various data types such as
+// strings, hashes, lists, sets, sorted sets, keys, and server operations.
 var readOnlyCommands = map[string]bool{
 	// String Commands
 	"GET":      true,
@@ -110,6 +128,15 @@ var readOnlyCommands = map[string]bool{
 	"COMMAND": true,
 }
 
+// isWriteCommand checks if a given Redis command is a write command.
+// It returns true if the command modifies the state of the Redis database,
+// and false otherwise.
+//
+// Parameters:
+// - cmd: A string representing the Redis command to check.
+//
+// Returns:
+// - bool: true if the command is a write command, false otherwise.
 func isWriteCommand(cmd string) bool {
 	writeCommands := map[string]bool{
 		// String Commands
@@ -208,6 +235,20 @@ func isWriteCommand(cmd string) bool {
 	return writeCommands[cmd]
 }
 
+// isAdminCommand checks if a given command is an administrative command.
+// It returns true if the command is an admin command, otherwise false.
+//
+// The following categories of commands are considered admin commands:
+// - Server Management: ACL, CONFIG, FLUSHALL, FLUSHDB, SHUTDOWN, DEBUG, MONITOR, SAVE, BGSAVE, LASTSAVE
+// - Replication Commands: REPLICAOF, SLAVEOF, ROLE, SYNC, PSYNC, REPLCONF
+// - Client Management: CLIENT, KILL
+// - Other Admin Commands: SLOWLOG, MEMORY, SWAPDB, MODULE, SCRIPT, FUNCTION, CLUSTER, SENTINEL, COMMAND
+//
+// Parameters:
+// - cmd: The command to check.
+//
+// Returns:
+// - bool: true if the command is an admin command, false otherwise.
 func isAdminCommand(cmd string) bool {
 	adminCommands := map[string]bool{
 		// Server Management
@@ -248,7 +289,19 @@ func isAdminCommand(cmd string) bool {
 	return adminCommands[cmd]
 }
 
-// Helper function to determine command category
+// getCommandCategory categorizes a given command string into one of the predefined
+// categories: "@admin", "@write", "@read", or "@all". The function checks the command
+// against specific conditions to determine its category:
+// - If the command is an admin command, it returns "@admin".
+// - If the command is a write command, it returns "@write".
+// - If the command is a read-only command, it returns "@read".
+// - If none of the above conditions are met, it returns "@all".
+//
+// Parameters:
+// - cmd: The command string to be categorized.
+//
+// Returns:
+// - A string representing the category of the command.
 func getCommandCategory(cmd string) string {
 	switch {
 	case isAdminCommand(cmd):
