@@ -386,6 +386,7 @@ func (r *Registry) registerHandlers() {
 	r.handlers["SMEMRANDOMCOUNT"] = r.setHandlers.HandleSMemRandomCount
 	r.handlers["ZREMRANGEBYRANKCOUNT"] = r.zsetHandlers.HandleZRemRangeByRankCount
 	r.handlers["ZPOPMINMAXBY"] = r.zsetHandlers.HandleZPopMinMaxBy
+	r.handlers["HDELIF"] = r.hashHandlers.HandleHDelIf
 }
 
 func (r *Registry) GetHandler(cmd string) (CommandHandler, bool) {

@@ -2609,6 +2609,23 @@ func (rd *RetryDecorator) LInsertBeforeAfter(key string, before bool, pivot stri
 	return length, finalErr
 }
 
+func (rd *RetryDecorator) HDelIf(key string, field string, value string) (bool, error) {
+	var deleted bool
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		deleted, err = rd.cache.HDelIf(key, field, value)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return false, err
+	}
+	return deleted, finalErr
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }

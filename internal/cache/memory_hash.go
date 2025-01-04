@@ -185,3 +185,42 @@ func (c *MemoryCache) HIncrByFloat(key, field string, increment float64) (float6
 		}
 	}
 }
+
+func (c *MemoryCache) HDelIf(key string, field string, expectedValue string) (bool, error) {
+	// Get the hash map
+	hashI, exists := c.hsets.Load(key)
+	if !exists {
+		return false, nil
+	}
+
+	hash := hashI.(*sync.Map)
+
+	// Get current value and check condition
+	actualValueI, exists := hash.Load(field)
+	if !exists {
+		return false, nil
+	}
+
+	actualValue := actualValueI.(string)
+	if actualValue != expectedValue {
+		return false, nil
+	}
+
+	// Delete the field only if condition is met
+	hash.Delete(field)
+
+	// Check if hash is now empty
+	empty := true
+	hash.Range(func(_, _ interface{}) bool {
+		empty = false
+		return false
+	})
+
+	// If hash is empty, remove it entirely
+	if empty {
+		c.hsets.Delete(key)
+	}
+
+	c.incrementKeyVersion(key)
+	return true, nil
+}

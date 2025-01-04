@@ -821,3 +821,36 @@ func (h *HashHandlers) HandleHPExpireTime(args []models.Value) models.Value {
 	// Convert seconds to milliseconds
 	return models.Value{Type: "integer", Num: int(expireTime * 1000)}
 }
+
+func (h *HashHandlers) HandleHDelIf(args []models.Value) models.Value {
+	if len(args) != 3 {
+		return models.Value{
+			Type: "error",
+			Str:  "ERR wrong number of arguments for 'hdelif' command",
+		}
+	}
+
+	key := args[0].Bulk
+	field := args[1].Bulk
+	expectedValue := args[2].Bulk
+
+	deleted, err := h.cache.HDelIf(key, field, expectedValue)
+	if err != nil {
+		return models.Value{
+			Type: "error",
+			Str:  err.Error(),
+		}
+	}
+
+	if deleted {
+		return models.Value{
+			Type: "integer",
+			Num:  1,
+		}
+	}
+
+	return models.Value{
+		Type: "integer",
+		Num:  0,
+	}
+}

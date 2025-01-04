@@ -236,4 +236,5 @@ type Cache interface {
 	ZRemRangeByRankCount(key string, start, stop, count int) (int, error)
 	ZPopMinMaxBy(key string, by string, isMax bool, count int) []models.ZSetMember
 	LInsertBeforeAfter(key string, before bool, pivot string, values []string, count int) (int, error)
+	HDelIf(key string, field string, value string) (bool, error)
 }
