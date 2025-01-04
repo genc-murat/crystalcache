@@ -721,6 +721,17 @@ func (h *StringHandlers) HandleDelType(args []models.Value) models.Value {
 	}
 }
 
+// HandleMGetType handles the 'mgettype' command which retrieves the types of multiple keys from the cache.
+// It expects at least one argument which represents the keys to be checked.
+//
+// Args:
+//
+//	args ([]models.Value): A slice of Value objects where each Value contains a key to be checked.
+//
+// Returns:
+//
+//	models.Value: A Value object containing an array of types corresponding to the provided keys.
+//	              If the number of arguments is less than one, it returns an error Value.
 func (h *StringHandlers) HandleMGetType(args []models.Value) models.Value {
 	if len(args) < 1 {
 		return models.Value{
@@ -758,6 +769,20 @@ func (h *StringHandlers) HandleMGetType(args []models.Value) models.Value {
 	}
 }
 
+// HandleExpireAt sets an expiration time on a key.
+//
+// Args:
+//
+//	args ([]models.Value): A slice of Value objects where the first element is the key
+//	                       and the second element is the expiration timestamp.
+//
+// Returns:
+//
+//	models.Value: A Value object indicating the result of the operation. If the number
+//	              of arguments is incorrect, it returns an error Value. If the key does
+//	              not exist, it returns an integer Value with Num set to 0. If the
+//	              expiration is successfully set, it returns an integer Value with Num
+//	              set to 1.
 func (h *StringHandlers) HandleExpireAt(args []models.Value) models.Value {
 	if len(args) != 2 {
 		return models.Value{
@@ -797,6 +822,14 @@ func (h *StringHandlers) HandleExpireAt(args []models.Value) models.Value {
 	}
 }
 
+// HandlePExpireAt handles the 'pexpireat' command which sets the expiration time of a key to a specific timestamp in milliseconds.
+//
+// Arguments:
+// - args: A slice of models.Value containing the key and the timestamp in milliseconds.
+//
+// Returns:
+//   - models.Value: An object representing the result of the operation. It returns an error if the number of arguments is incorrect or if the timestamp is not a valid integer.
+//     If the key does not exist, it returns an integer value of 0. If the expiration is successfully set, it returns an integer value of 1.
 func (h *StringHandlers) HandlePExpireAt(args []models.Value) models.Value {
 	if len(args) != 2 {
 		return models.Value{
@@ -836,6 +869,26 @@ func (h *StringHandlers) HandlePExpireAt(args []models.Value) models.Value {
 	}
 }
 
+// HandleSEExpire processes the 'seexpire' command which sets an expiration
+// time on a key in seconds with an optional condition.
+//
+// Arguments:
+//   - args: A slice of models.Value containing the key, expiration time in seconds,
+//     and an optional condition.
+//
+// Returns:
+//   - models.Value: An object containing the result of the operation. If the
+//     operation is successful, it returns an integer type with value 1. If the
+//     operation fails, it returns an integer type with value 0. In case of an error,
+//     it returns an error type with an appropriate error message.
+//
+// The function performs the following steps:
+//  1. Validates the number of arguments.
+//  2. Parses the expiration time from the arguments.
+//  3. Optionally processes and validates the condition argument.
+//  4. Calls the SEExpire method on the cache with the provided key, expiration time,
+//     and condition.
+//  5. Returns the result of the operation as a models.Value object.
 func (h *StringHandlers) HandleSEExpire(args []models.Value) models.Value {
 	if len(args) < 2 || len(args) > 3 {
 		return models.Value{

@@ -229,6 +229,16 @@ func (c *MemoryCache) MGetType(keys []string) map[string]string {
 	return results
 }
 
+// PExpireAt sets an expiration time for a given key in the cache. The expiration time is specified
+// as a Unix timestamp in milliseconds. When the expiration time is reached, the key will be
+// automatically deleted from the cache.
+//
+// Parameters:
+//   - key: The key for which the expiration time is to be set.
+//   - timestampMs: The expiration time as a Unix timestamp in milliseconds.
+//
+// Returns:
+//   - error: An error if the operation fails, otherwise nil.
 func (c *MemoryCache) PExpireAt(key string, timestampMs int64) error {
 	// Convert millisecond timestamp to time.Time
 	expireTime := time.Unix(0, timestampMs*int64(time.Millisecond))
@@ -258,6 +268,24 @@ func (c *MemoryCache) PExpireAt(key string, timestampMs int64) error {
 	return nil
 }
 
+// SEExpire sets the expiration time for a given key in the memory cache based on a specified condition.
+//
+// Parameters:
+//   - key: The key for which the expiration time is to be set.
+//   - seconds: The number of seconds after which the key should expire.
+//   - condition: The condition under which the expiration time should be set.
+//     Possible values are:
+//   - "NX": Set the expiration time only if the key does not already have an expiration time.
+//   - "XX": Set the expiration time only if the key already has an expiration time.
+//   - "GT": Set the expiration time only if the new expiration time is greater than the current expiration time.
+//   - "LT": Set the expiration time only if the new expiration time is less than the current expiration time.
+//   - "": Always set the expiration time regardless of any existing expiration time.
+//
+// Returns:
+//   - bool: True if the expiration time was set, false otherwise.
+//   - error: An error if the condition is invalid or any other issue occurs.
+//
+// The function also starts a background goroutine to monitor the expiration time and delete the key when it expires.
 func (c *MemoryCache) SEExpire(key string, seconds int, condition string) (bool, error) {
 	// Check if key exists
 	if !c.Exists(key) {
