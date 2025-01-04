@@ -835,3 +835,59 @@ func (h *StringHandlers) HandlePExpireAt(args []models.Value) models.Value {
 		Num:  1,
 	}
 }
+
+func (h *StringHandlers) HandleSEExpire(args []models.Value) models.Value {
+	if len(args) < 2 || len(args) > 3 {
+		return models.Value{
+			Type: "error",
+			Str:  "ERR wrong number of arguments for 'seexpire' command",
+		}
+	}
+
+	key := args[0].Bulk
+	seconds, err := strconv.Atoi(args[1].Bulk)
+	if err != nil {
+		return models.Value{
+			Type: "error",
+			Str:  "ERR value is not an integer or out of range",
+		}
+	}
+
+	// Get condition if provided
+	condition := ""
+	if len(args) > 2 {
+		condition = strings.ToUpper(args[2].Bulk)
+		// Validate condition
+		validConditions := map[string]bool{
+			"NX": true,
+			"XX": true,
+			"GT": true,
+			"LT": true,
+		}
+		if !validConditions[condition] {
+			return models.Value{
+				Type: "error",
+				Str:  "ERR invalid condition",
+			}
+		}
+	}
+
+	success, err := h.cache.SEExpire(key, seconds, condition)
+	if err != nil {
+		return models.Value{
+			Type: "error",
+			Str:  err.Error(),
+		}
+	}
+
+	// Convert bool to int directly
+	result := 0
+	if success {
+		result = 1
+	}
+
+	return models.Value{
+		Type: "integer",
+		Num:  result,
+	}
+}

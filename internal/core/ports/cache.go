@@ -244,4 +244,5 @@ type Cache interface {
 	SMembersPattern(key string, pattern string) ([]string, error)
 	HScanMatch(hash string, cursor int, pattern string, count int) ([]string, int)
 	ZScanByScore(key string, min, max float64, count int, withScores bool) []models.ZSetMember
+	SEExpire(key string, seconds int, condition string) (bool, error)
 }

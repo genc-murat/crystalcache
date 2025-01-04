@@ -257,3 +257,73 @@ func (c *MemoryCache) PExpireAt(key string, timestampMs int64) error {
 
 	return nil
 }
+
+func (c *MemoryCache) SEExpire(key string, seconds int, condition string) (bool, error) {
+	// Check if key exists
+	if !c.Exists(key) {
+		return false, nil
+	}
+
+	// Calculate new expiration time
+	newExpireTime := time.Now().Add(time.Duration(seconds) * time.Second)
+
+	// Get current expiration time if exists
+	currentExpireTimeI, hasExpire := c.expires.Load(key)
+
+	switch condition {
+	case "NX":
+		// Set only if there's no existing expiration
+		if hasExpire {
+			return false, nil
+		}
+	case "XX":
+		// Set only if there's an existing expiration
+		if !hasExpire {
+			return false, nil
+		}
+	case "GT", "LT":
+		if !hasExpire {
+			return false, nil
+		}
+		currentExpireTime := currentExpireTimeI.(time.Time)
+		if condition == "GT" {
+			// Set only if new expiry is greater than current
+			if !newExpireTime.After(currentExpireTime) {
+				return false, nil
+			}
+		} else { // "LT"
+			// Set only if new expiry is less than current
+			if !newExpireTime.Before(currentExpireTime) {
+				return false, nil
+			}
+		}
+	case "":
+		// No condition, always set
+	default:
+		return false, fmt.Errorf("ERR invalid condition: %s", condition)
+	}
+
+	// Store expiration time
+	c.expires.Store(key, newExpireTime)
+
+	// Start background expiration monitoring
+	go func() {
+		timer := time.NewTimer(time.Until(newExpireTime))
+		defer timer.Stop()
+
+		<-timer.C
+
+		// Check if the key still exists with the same expiration time
+		if expTime, exists := c.expires.Load(key); exists {
+			if expTime.(time.Time).Equal(newExpireTime) {
+				c.Del(key)
+				// Increment expired keys counter
+				if c.stats != nil {
+					atomic.AddInt64(&c.stats.expiredKeys, 1)
+				}
+			}
+		}
+	}()
+
+	return true, nil
+}

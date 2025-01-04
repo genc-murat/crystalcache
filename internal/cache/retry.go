@@ -2718,6 +2718,23 @@ func (rd *RetryDecorator) PExpireAt(key string, timestampMs int64) error {
 	})
 }
 
+func (rd *RetryDecorator) SEExpire(key string, seconds int, condition string) (bool, error) {
+	var success bool
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		success, err = rd.cache.SEExpire(key, seconds, condition)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return false, err
+	}
+	return success, finalErr
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }
