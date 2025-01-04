@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/genc-murat/crystalcache/internal/core/models"
 )
@@ -253,46 +254,52 @@ func (b *BasicOps) getLexSortedMembers(key string) []models.ZSetMember {
 	return members
 }
 
-// ZRandMember returns random members from a sorted set
 func (b *BasicOps) ZRandMember(key string, count int, withScores bool) []models.ZSetMember {
 	members, err := b.getSortedMembers(key)
-
 	if err != nil || len(members) == 0 || count == 0 {
-		// Return empty slice if there are no members or count is zero
 		return []models.ZSetMember{}
 	}
 
-	// Ensure count is positive; handle negative count for duplicates
+	rand.Seed(time.Now().UnixNano()) // Seed the random number generator once
+
+	absCount := count
 	allowDuplicates := count < 0
 	if allowDuplicates {
-		count = -count
+		absCount = -count
 	}
 
-	// If duplicates are allowed, pick random members with repetition
+	numMembers := len(members)
+
 	if allowDuplicates {
-		result := make([]models.ZSetMember, count)
-		for i := 0; i < count; i++ {
-			idx := rand.Intn(len(members))
-			result[i] = members[idx]
+		result := make([]models.ZSetMember, absCount)
+		for i := 0; i < absCount; i++ {
+			result[i] = members[rand.Intn(numMembers)]
 		}
 		return result
 	}
 
-	// If count exceeds available members, limit to the size of members
-	if count > len(members) {
-		count = len(members)
+	// Optimization: If count is greater than or equal to the number of members,
+	// and we don't allow duplicates, we can just return all members in a random order.
+	if absCount >= numMembers {
+		rand.Shuffle(numMembers, func(i, j int) {
+			members[i], members[j] = members[j], members[i]
+		})
+		return members
 	}
 
-	// Create a shuffled copy of the members for non-duplicate selection
-	result := make([]models.ZSetMember, len(members))
-	copy(result, members)
+	// Select unique random members efficiently
+	result := make([]models.ZSetMember, absCount)
+	seenIndices := make(map[int]bool)
+	for i := 0; i < absCount; i++ {
+		randomIndex := rand.Intn(numMembers)
+		for seenIndices[randomIndex] {
+			randomIndex = rand.Intn(numMembers)
+		}
+		result[i] = members[randomIndex]
+		seenIndices[randomIndex] = true
+	}
 
-	rand.Shuffle(len(result), func(i, j int) {
-		result[i], result[j] = result[j], result[i]
-	})
-
-	// Return the first `count` members after shuffling
-	return result[:count]
+	return result
 }
 
 // ZRandMemberWithoutScores returns random members without their scores
