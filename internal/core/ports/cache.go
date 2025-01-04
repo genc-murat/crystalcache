@@ -239,4 +239,5 @@ type Cache interface {
 	HDelIf(key string, field string, value string) (bool, error)
 	HIncrByFloatIf(key string, field string, increment float64, expectedValue string) (float64, bool, error)
 	SDiffStoreDel(destination string, keys []string) (int, error)
+	MGetType(keys []string) map[string]string
 }

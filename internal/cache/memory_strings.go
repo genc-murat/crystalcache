@@ -155,3 +155,14 @@ func (c *MemoryCache) Del(key string) (bool, error) {
 
 	return deleted, nil
 }
+
+func (c *MemoryCache) MGetType(keys []string) map[string]string {
+	results := make(map[string]string, len(keys))
+
+	// Process each key
+	for _, key := range keys {
+		results[key] = c.Type(key)
+	}
+
+	return results
+}

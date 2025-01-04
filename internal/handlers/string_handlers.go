@@ -720,3 +720,40 @@ func (h *StringHandlers) HandleDelType(args []models.Value) models.Value {
 		Num:  int(deletedCount),
 	}
 }
+
+func (h *StringHandlers) HandleMGetType(args []models.Value) models.Value {
+	if len(args) < 1 {
+		return models.Value{
+			Type: "error",
+			Str:  "ERR wrong number of arguments for 'mgettype' command",
+		}
+	}
+
+	// Extract keys from arguments
+	keys := make([]string, len(args))
+	for i, arg := range args {
+		keys[i] = arg.Bulk
+	}
+
+	// Get types for all keys
+	types := h.cache.MGetType(keys)
+
+	// Create response array
+	response := make([]models.Value, len(keys))
+	for i, key := range keys {
+		keyType := types[key]
+		if keyType == "none" {
+			response[i] = models.Value{Type: "null"}
+		} else {
+			response[i] = models.Value{
+				Type: "bulk",
+				Bulk: keyType,
+			}
+		}
+	}
+
+	return models.Value{
+		Type:  "array",
+		Array: response,
+	}
+}

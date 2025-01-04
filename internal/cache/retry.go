@@ -2661,6 +2661,17 @@ func (rd *RetryDecorator) SDiffStoreDel(destination string, keys []string) (int,
 	return count, finalErr
 }
 
+func (rd *RetryDecorator) MGetType(keys []string) map[string]string {
+	var results map[string]string
+
+	rd.executeWithRetry(func() error {
+		results = rd.cache.MGetType(keys)
+		return nil
+	})
+
+	return results
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }
