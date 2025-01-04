@@ -242,4 +242,5 @@ type Cache interface {
 	MGetType(keys []string) map[string]string
 	SMembersPattern(key string, pattern string) ([]string, error)
 	HScanMatch(hash string, cursor int, pattern string, count int) ([]string, int)
+	ZScanByScore(key string, min, max float64, count int, withScores bool) []models.ZSetMember
 }

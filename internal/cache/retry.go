@@ -2701,6 +2701,17 @@ func (rd *RetryDecorator) HScanMatch(hash string, cursor int, pattern string, co
 	return results, nextCursor
 }
 
+func (rd *RetryDecorator) ZScanByScore(key string, min, max float64, count int, withScores bool) []models.ZSetMember {
+	var results []models.ZSetMember
+
+	rd.executeWithRetry(func() error {
+		results = rd.cache.ZScanByScore(key, min, max, count, withScores)
+		return nil
+	})
+
+	return results
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }

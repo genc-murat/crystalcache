@@ -215,3 +215,7 @@ func (m *Manager) ZPopMinMaxBy(key string, by string, isMax bool, count int) []m
 		return []models.ZSetMember{}
 	}
 }
+
+func (m *Manager) ZScanByScore(key string, min, max float64, count int, withScores bool) []models.ZSetMember {
+	return m.scanOps.ZScanByScore(key, min, max, count, withScores)
+}

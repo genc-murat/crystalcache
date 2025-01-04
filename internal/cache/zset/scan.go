@@ -100,3 +100,38 @@ func (s *ScanOps) validateScanParams(cursor, count int) error {
 	}
 	return nil
 }
+
+func (s *ScanOps) ZScanByScore(key string, min, max float64, count int, withScores bool) []models.ZSetMember {
+	if count <= 0 {
+		count = 10 // Default count
+	}
+
+	// Get all members
+	members, err := s.basicOps.getSortedMembers(key)
+	if err != nil || len(members) == 0 {
+		return []models.ZSetMember{}
+	}
+
+	// Filter members by score range and sort them
+	var matches []models.ZSetMember
+	for _, member := range members {
+		if member.Score >= min && member.Score <= max {
+			matches = append(matches, member)
+		}
+	}
+
+	// Sort by score, then lexicographically for equal scores
+	sort.Slice(matches, func(i, j int) bool {
+		if matches[i].Score == matches[j].Score {
+			return matches[i].Member < matches[j].Member
+		}
+		return matches[i].Score < matches[j].Score
+	})
+
+	// Apply count limit
+	if count > len(matches) {
+		count = len(matches)
+	}
+
+	return matches[:count]
+}

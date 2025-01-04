@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math/rand"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/genc-murat/crystalcache/internal/core/models"
@@ -1220,6 +1221,99 @@ func (h *ZSetHandlers) HandleZPopMinMaxBy(args []models.Value) models.Value {
 		response[i*2+1] = models.Value{
 			Type: "bulk",
 			Bulk: util.FormatFloat(member.Score),
+		}
+	}
+
+	return models.Value{
+		Type:  "array",
+		Array: response,
+	}
+}
+
+func (h *ZSetHandlers) HandleZScanByScore(args []models.Value) models.Value {
+	if len(args) < 3 {
+		return models.Value{
+			Type: "error",
+			Str:  "ERR wrong number of arguments for 'zscanbyscore' command",
+		}
+	}
+
+	key := args[0].Bulk
+
+	// Parse min score
+	min, err := strconv.ParseFloat(args[1].Bulk, 64)
+	if err != nil {
+		return models.Value{
+			Type: "error",
+			Str:  "ERR min value is not a valid float",
+		}
+	}
+
+	// Parse max score
+	max, err := strconv.ParseFloat(args[2].Bulk, 64)
+	if err != nil {
+		return models.Value{
+			Type: "error",
+			Str:  "ERR max value is not a valid float",
+		}
+	}
+
+	// Default values
+	withScores := false
+	count := 10
+
+	// Parse optional arguments
+	for i := 3; i < len(args); i++ {
+		switch strings.ToUpper(args[i].Bulk) {
+		case "WITHSCORES":
+			withScores = true
+		case "COUNT":
+			if i+1 >= len(args) {
+				return models.Value{
+					Type: "error",
+					Str:  "ERR COUNT option requires argument",
+				}
+			}
+			count, err = strconv.Atoi(args[i+1].Bulk)
+			if err != nil || count < 0 {
+				return models.Value{
+					Type: "error",
+					Str:  "ERR value is not an integer or out of range",
+				}
+			}
+			i++
+		default:
+			return models.Value{
+				Type: "error",
+				Str:  "ERR syntax error",
+			}
+		}
+	}
+
+	// Get matching members
+	members := h.cache.ZScanByScore(key, min, max, count, withScores)
+
+	// Format response based on WITHSCORES option
+	var response []models.Value
+	if withScores {
+		response = make([]models.Value, len(members)*2)
+		for i, member := range members {
+			response[i*2] = models.Value{
+				Type: "bulk",
+				Bulk: member.Member,
+			}
+			response[i*2+1] = models.Value{
+				Type: "bulk",
+				Bulk: strconv.FormatFloat(member.Score, 'f', -1, 64),
+			}
+		}
+	} else {
+		response = make([]models.Value, len(members))
+		for i, member := range members {
+			response[i] = models.Value{
+				Type: "bulk",
+				Bulk: member.Member,
+			}
 		}
 	}
 
