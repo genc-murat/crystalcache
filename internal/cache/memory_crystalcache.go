@@ -241,6 +241,17 @@ func (c *MemoryCache) MemoryUsage(key string) (*models.MemoryUsageInfo, error) {
 	return info, nil
 }
 
+// memoryUsageString returns the memory usage of the value associated with the given key as an int64.
+// If the key does not exist, it returns an error indicating that the string key was not found.
+//
+// Parameters:
+//
+//	key - The key whose associated value's memory usage is to be calculated.
+//
+// Returns:
+//
+//	int64 - The memory usage of the value associated with the given key.
+//	error - An error indicating that the string key was not found, if applicable.
 func (c *MemoryCache) memoryUsageString(key string) (int64, error) {
 	if val, exists := c.Get(key); exists {
 		return int64(len(val)), nil
@@ -248,6 +259,16 @@ func (c *MemoryCache) memoryUsageString(key string) (int64, error) {
 	return 0, fmt.Errorf("string key not found")
 }
 
+// memoryUsageHash calculates the memory usage of a hash stored in the cache.
+// It takes a key as input and returns the total size of the key-value pairs
+// in the hash in bytes. If the hash key is not found, it returns an error.
+//
+// Parameters:
+//   - key: The key of the hash in the cache.
+//
+// Returns:
+//   - int64: The total size of the key-value pairs in the hash in bytes.
+//   - error: An error if the hash key is not found.
 func (c *MemoryCache) memoryUsageHash(key string) (int64, error) {
 	var valueSize int64
 	if hashMap := c.HGetAll(key); hashMap != nil {
@@ -259,6 +280,15 @@ func (c *MemoryCache) memoryUsageHash(key string) (int64, error) {
 	return 0, fmt.Errorf("hash key not found")
 }
 
+// memoryUsageList calculates the total memory usage of all elements in a list stored at the given key.
+// It returns the total size in bytes and an error if the key is not found.
+//
+// Parameters:
+//   - key: The key of the list in the cache.
+//
+// Returns:
+//   - int64: The total size in bytes of all elements in the list.
+//   - error: An error if the key is not found or if there is an issue retrieving the list.
 func (c *MemoryCache) memoryUsageList(key string) (int64, error) {
 	var valueSize int64
 	if values, err := c.LRange(key, 0, -1); err == nil {
@@ -270,6 +300,15 @@ func (c *MemoryCache) memoryUsageList(key string) (int64, error) {
 	return 0, fmt.Errorf("list key not found")
 }
 
+// memoryUsageSet calculates the total memory usage of all members in a set stored at the given key.
+// It returns the total size in bytes and an error if the key is not found.
+//
+// Parameters:
+//   - key: The key of the set to calculate memory usage for.
+//
+// Returns:
+//   - int64: The total size in bytes of all members in the set.
+//   - error: An error if the key is not found or if there is an issue retrieving the set members.
 func (c *MemoryCache) memoryUsageSet(key string) (int64, error) {
 	var valueSize int64
 	if members, err := c.SMembers(key); err == nil {
@@ -281,6 +320,21 @@ func (c *MemoryCache) memoryUsageSet(key string) (int64, error) {
 	return 0, fmt.Errorf("set key not found")
 }
 
+// memoryUsageZSet calculates the memory usage of a sorted set (zset) stored in the cache.
+// It takes the key of the zset as an argument and returns the total memory usage in bytes
+// and an error if the key is not found.
+//
+// The memory usage is calculated by summing the lengths of all member strings in the zset
+// and adding 8 bytes for each member to account for the score (stored as a float64).
+//
+// Parameters:
+//
+//	key (string): The key of the zset.
+//
+// Returns:
+//
+//	int64: The total memory usage of the zset in bytes.
+//	error: An error if the zset key is not found.
 func (c *MemoryCache) memoryUsageZSet(key string) (int64, error) {
 	var valueSize int64
 	if members := c.ZRange(key, 0, -1); len(members) > 0 {
@@ -292,6 +346,17 @@ func (c *MemoryCache) memoryUsageZSet(key string) (int64, error) {
 	return 0, fmt.Errorf("zset key not found")
 }
 
+// memoryUsageJSON calculates the memory usage of a JSON value stored in the cache for a given key.
+// It returns the size in bytes of the JSON value if the key exists, otherwise it returns an error.
+//
+// Parameters:
+//
+//	key - The key for which the memory usage of the JSON value is to be calculated.
+//
+// Returns:
+//
+//	int64 - The size in bytes of the JSON value.
+//	error - An error if the key does not exist in the cache.
 func (c *MemoryCache) memoryUsageJSON(key string) (int64, error) {
 	if val, exists := c.GetJSON(key); exists {
 		return int64(len(fmt.Sprintf("%v", val))), nil
@@ -299,6 +364,17 @@ func (c *MemoryCache) memoryUsageJSON(key string) (int64, error) {
 	return 0, fmt.Errorf("json key not found")
 }
 
+// memoryUsageStream calculates the memory usage of a stream in the cache.
+// It takes a stream key as input and returns the estimated memory usage in bytes.
+// The estimation assumes an average entry size of 128 bytes.
+// If the stream key is not found, it returns an error.
+//
+// Parameters:
+//   - key: The key of the stream to calculate memory usage for.
+//
+// Returns:
+//   - int64: The estimated memory usage in bytes.
+//   - error: An error if the stream key is not found.
 func (c *MemoryCache) memoryUsageStream(key string) (int64, error) {
 	if length := c.XLEN(key); length > 0 {
 		return length * 128, nil // Assume average entry size of 128 bytes
@@ -306,6 +382,15 @@ func (c *MemoryCache) memoryUsageStream(key string) (int64, error) {
 	return 0, fmt.Errorf("stream key not found")
 }
 
+// memoryUsageBitmap calculates the memory usage of a bitmap stored in the cache.
+// It takes a key as input and returns the memory usage in bytes and an error if the key is not found.
+//
+// Parameters:
+//   - key: The key of the bitmap in the cache.
+//
+// Returns:
+//   - int64: The memory usage of the bitmap in bytes.
+//   - error: An error if the bitmap key is not found.
 func (c *MemoryCache) memoryUsageBitmap(key string) (int64, error) {
 	if val, err := c.BitCount(key, 0, -1); err == nil {
 		return (val + 7) / 8, nil
