@@ -60,23 +60,17 @@ func (m *ModifyOps) ZRemRangeByScore(key string, min, max float64) (int, error) 
 		return 0, nil
 	}
 
-	membersToRemove := []string{}
+	removedCount := 0
 	for _, member := range members {
 		if member.Score >= min && member.Score <= max {
-			membersToRemove = append(membersToRemove, member.Member)
+			if err := m.basicOps.ZRem(key, member.Member); err != nil {
+				return removedCount, err
+			}
+			removedCount++
 		}
 	}
 
-	removed := 0
-	for _, memberToRemove := range membersToRemove {
-		err := m.basicOps.ZRem(key, memberToRemove)
-		if err != nil {
-			return removed, err
-		}
-		removed++
-	}
-
-	return removed, nil
+	return removedCount, nil
 }
 
 // ZRemRangeByRankCount removes a specified number of elements from the sorted set at given ranks
