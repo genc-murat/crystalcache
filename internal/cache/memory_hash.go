@@ -225,9 +225,8 @@ func (c *MemoryCache) HIncrBy(key, field string, increment int64) (int64, error)
 	}
 }
 
-// HIncrByFloat increments the float64 value of a hash field by the given increment.
+// HIncrByFloat increments the float value of a hash field by the given increment.
 // If the field does not exist, it is set to 0 before performing the operation.
-// The function returns the new value of the field after the increment.
 //
 // Parameters:
 //   - key: The key of the hash.
@@ -235,90 +234,71 @@ func (c *MemoryCache) HIncrBy(key, field string, increment int64) (int64, error)
 //   - increment: The value to increment the field by.
 //
 // Returns:
-//   - float64: The new value of the field after the increment.
-//   - error: An error if the current value of the field is not a valid float64.
-//
-// Errors:
-//   - Returns an error if the current value of the field is not a valid float64.
+//   - float64: The new value of the field after incrementing.
+//   - error: An error if the current value of the field is not a valid float.
 func (c *MemoryCache) HIncrByFloat(key, field string, increment float64) (float64, error) {
-	var hashMap sync.Map
-	actual, _ := c.hsets.LoadOrStore(key, &hashMap)
-	actualMap := actual.(*sync.Map)
+	hashI, _ := c.hsets.LoadOrStore(key, &sync.Map{})
+	hash := hashI.(*sync.Map)
 
 	for {
-		// Get current value
-		currentI, _ := actualMap.LoadOrStore(field, "0")
-		current := currentI.(string)
+		currentI, _ := hash.LoadOrStore(field, "0")
+		currentStr := currentI.(string)
 
-		// Convert current value to float64
-		currentVal, err := strconv.ParseFloat(current, 64)
+		currentVal, err := strconv.ParseFloat(currentStr, 64)
 		if err != nil {
 			return 0, fmt.Errorf("ERR hash value is not a float")
 		}
 
-		// Calculate new value
 		newVal := currentVal + increment
-
-		// Format new value with maximum precision
 		newValStr := strconv.FormatFloat(newVal, 'f', -1, 64)
 
-		// Try to store new value
-		if actualMap.CompareAndSwap(field, current, newValStr) {
+		if hash.CompareAndSwap(field, currentStr, newValStr) {
 			c.incrementKeyVersion(key)
 			return newVal, nil
 		}
 	}
 }
 
-// HDelIf deletes a field from a hash stored at key only if the field's current value matches the expected value.
-// It returns true if the field was deleted, and false otherwise. If the hash becomes empty after the deletion,
-// the hash itself is removed from the cache.
+// HDelIf deletes the specified field from the hash stored at key if the current value of the field matches the expected value.
+// It returns a boolean indicating whether the field was deleted and an error if something went wrong.
 //
 // Parameters:
 //   - key: The key of the hash.
 //   - field: The field within the hash to delete.
-//   - expectedValue: The value that the field must have for the deletion to occur.
+//   - expectedValue: The value that the field must have for it to be deleted.
 //
 // Returns:
 //   - bool: True if the field was deleted, false otherwise.
-//   - error: An error if any occurred during the operation.
+//   - error: An error if something went wrong during the operation.
 func (c *MemoryCache) HDelIf(key string, field string, expectedValue string) (bool, error) {
-	// Get the hash map
 	hashI, exists := c.hsets.Load(key)
 	if !exists {
-		return false, nil
+		return false, nil // Hash doesn't exist
 	}
 
 	hash := hashI.(*sync.Map)
 
-	// Get current value and check condition
+	// Atomically check and delete if the value matches
+	deleted := false
 	actualValueI, exists := hash.Load(field)
-	if !exists {
-		return false, nil
+	if exists && actualValueI.(string) == expectedValue {
+		hash.Delete(field)
+		deleted = true
+
+		// Check if hash is now empty and delete the entire hash if so
+		isEmpty := true
+		hash.Range(func(_, _ interface{}) bool {
+			isEmpty = false
+			return false
+		})
+		if isEmpty {
+			c.hsets.Delete(key)
+		}
+
+		c.incrementKeyVersion(key)
 	}
 
-	actualValue := actualValueI.(string)
-	if actualValue != expectedValue {
-		return false, nil
-	}
-
-	// Delete the field only if condition is met
-	hash.Delete(field)
-
-	// Check if hash is now empty
-	empty := true
-	hash.Range(func(_, _ interface{}) bool {
-		empty = false
-		return false
-	})
-
-	// If hash is empty, remove it entirely
-	if empty {
-		c.hsets.Delete(key)
-	}
-
-	c.incrementKeyVersion(key)
-	return true, nil
+	return deleted, nil
 }
 
 // HIncrByFloatIf increments the float value of a hash field by the given increment
