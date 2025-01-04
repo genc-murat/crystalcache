@@ -1168,3 +1168,63 @@ func (h *ZSetHandlers) HandleZRemRangeByRankCount(args []models.Value) models.Va
 
 	return models.Value{Type: "integer", Num: removed}
 }
+
+func (h *ZSetHandlers) HandleZPopMinMaxBy(args []models.Value) models.Value {
+	if len(args) < 3 {
+		return models.Value{
+			Type: "error",
+			Str:  "ERR wrong number of arguments for 'zpopminmaxby' command",
+		}
+	}
+
+	key := args[0].String()
+	by := args[1].String()
+	isMax := args[2].String() == "max"
+
+	// Default count is 1 if not specified
+	count := 1
+	if len(args) >= 5 && args[3].String() == "COUNT" {
+		var err error
+		count, err = strconv.Atoi(args[4].String())
+		if err != nil || count <= 0 {
+			return models.Value{
+				Type: "error",
+				Str:  "ERR value is not an integer or out of range",
+			}
+		}
+	}
+
+	// Validate 'by' parameter
+	if by != "score" && by != "lex" {
+		return models.Value{
+			Type: "error",
+			Str:  "ERR syntax error",
+		}
+	}
+
+	result := h.cache.ZPopMinMaxBy(key, by, isMax, count)
+	if len(result) == 0 {
+		return models.Value{
+			Type:  "array",
+			Array: []models.Value{},
+		}
+	}
+
+	// Convert result to array response
+	response := make([]models.Value, len(result)*2)
+	for i, member := range result {
+		response[i*2] = models.Value{
+			Type: "bulk",
+			Bulk: member.Member,
+		}
+		response[i*2+1] = models.Value{
+			Type: "bulk",
+			Bulk: util.FormatFloat(member.Score),
+		}
+	}
+
+	return models.Value{
+		Type:  "array",
+		Array: response,
+	}
+}

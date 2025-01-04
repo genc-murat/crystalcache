@@ -234,4 +234,5 @@ type Cache interface {
 	LPushXGet(key string, value string) (int, error)
 	SMemRandomCount(key string, count int, allowDuplicates bool) ([]string, error)
 	ZRemRangeByRankCount(key string, start, stop, count int) (int, error)
+	ZPopMinMaxBy(key string, by string, isMax bool, count int) []models.ZSetMember
 }

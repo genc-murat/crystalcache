@@ -158,3 +158,7 @@ func (c *MemoryCache) ZRemRangeByRank(key string, start, stop int) (int, error) 
 func (c *MemoryCache) ZRemRangeByRankCount(key string, start, stop, count int) (int, error) {
 	return c.zsetManager.ZRemRangeByRankCount(key, start, stop, count)
 }
+
+func (c *MemoryCache) ZPopMinMaxBy(key string, by string, isMax bool, count int) []models.ZSetMember {
+	return c.zsetManager.ZPopMinMaxBy(key, by, isMax, count)
+}

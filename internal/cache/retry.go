@@ -2583,6 +2583,15 @@ func (rd *RetryDecorator) ZRemRangeByRankCount(key string, start, stop, count in
 	return removed, finalErr
 }
 
+func (rd *RetryDecorator) ZPopMinMaxBy(key string, by string, isMax bool, count int) []models.ZSetMember {
+	var result []models.ZSetMember
+	rd.executeWithRetry(func() error {
+		result = rd.cache.ZPopMinMaxBy(key, by, isMax, count)
+		return nil
+	})
+	return result
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }

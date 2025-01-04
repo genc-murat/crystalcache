@@ -198,3 +198,20 @@ func (m *Manager) ZRandMember(key string, count int, withScores bool) []models.Z
 func (m *Manager) ZRandMemberWithoutScores(key string, count int) []string {
 	return m.basicOps.ZRandMemberWithoutScores(key, count)
 }
+
+func (m *Manager) ZPopMinMaxBy(key string, by string, isMax bool, count int) []models.ZSetMember {
+	switch by {
+	case "score":
+		if isMax {
+			return m.rangeOps.ZPopMax(key, count)
+		}
+		return m.rangeOps.ZPopMin(key, count)
+	case "lex":
+		if isMax {
+			return m.lexOps.ZPopMaxByLex(key, count)
+		}
+		return m.lexOps.ZPopMinByLex(key, count)
+	default:
+		return []models.ZSetMember{}
+	}
+}

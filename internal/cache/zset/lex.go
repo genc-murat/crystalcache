@@ -3,6 +3,8 @@ package zset
 import (
 	"fmt"
 	"strings"
+
+	"github.com/genc-murat/crystalcache/internal/core/models"
 )
 
 type LexOps struct {
@@ -150,4 +152,51 @@ func (l *LexOps) isInLexRange(member, min, max string, minInc, maxInc, minInf, m
 	}
 
 	return true
+}
+
+func (l *LexOps) ZPopMaxByLex(key string, count int) []models.ZSetMember {
+	// Get members sorted lexicographically
+	members := l.basicOps.getLexSortedMembers(key)
+	if len(members) == 0 {
+		return []models.ZSetMember{}
+	}
+
+	// Adjust count if it exceeds available members
+	if count > len(members) {
+		count = len(members)
+	}
+
+	// Get last 'count' members (highest lexicographically)
+	start := len(members) - count
+	result := members[start:]
+
+	// Remove the members from the set
+	for _, member := range result {
+		l.basicOps.ZRem(key, member.Member)
+	}
+
+	return result
+}
+
+func (l *LexOps) ZPopMinByLex(key string, count int) []models.ZSetMember {
+	// Get members sorted lexicographically
+	members := l.basicOps.getLexSortedMembers(key)
+	if len(members) == 0 {
+		return []models.ZSetMember{}
+	}
+
+	// Adjust count if it exceeds available members
+	if count > len(members) {
+		count = len(members)
+	}
+
+	// Get first 'count' members (lowest lexicographically)
+	result := members[:count]
+
+	// Remove the members from the set
+	for _, member := range result {
+		l.basicOps.ZRem(key, member.Member)
+	}
+
+	return result
 }
