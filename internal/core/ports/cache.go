@@ -241,4 +241,5 @@ type Cache interface {
 	SDiffStoreDel(destination string, keys []string) (int, error)
 	MGetType(keys []string) map[string]string
 	SMembersPattern(key string, pattern string) ([]string, error)
+	HScanMatch(hash string, cursor int, pattern string, count int) ([]string, int)
 }

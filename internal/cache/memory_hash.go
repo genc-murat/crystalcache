@@ -259,3 +259,57 @@ func (c *MemoryCache) HIncrByFloatIf(key string, field string, increment float64
 
 	return newValue, true, nil
 }
+
+func (c *MemoryCache) HScanMatch(hash string, cursor int, matchPattern string, count int) ([]string, int) {
+	// Get the hash
+	hashI, exists := c.hsets.Load(hash)
+	if !exists {
+		return []string{}, 0
+	}
+
+	hashMap := hashI.(*sync.Map)
+	var keys []string
+
+	// Collect all keys first
+	hashMap.Range(func(key, _ interface{}) bool {
+		keys = append(keys, key.(string))
+		return true
+	})
+
+	// Sort keys for consistent ordering
+	sort.Strings(keys)
+
+	// If cursor is invalid, reset to 0
+	if cursor < 0 || cursor >= len(keys) {
+		cursor = 0
+	}
+
+	// If count is not specified or invalid, use default
+	if count <= 0 {
+		count = 10
+	}
+
+	var result []string
+	nextCursor := cursor
+	matcher := c.patternMatcher
+
+	// Scan through keys starting from cursor
+	for i := cursor; i < len(keys) && len(result) < count*2; i++ {
+		key := keys[i]
+		// Check if key matches pattern
+		if matcher.MatchCached(matchPattern, key) {
+			if value, ok := hashMap.Load(key); ok {
+				result = append(result, key)
+				result = append(result, value.(string))
+			}
+		}
+		nextCursor = i + 1
+	}
+
+	// Reset cursor if we've reached the end
+	if nextCursor >= len(keys) {
+		nextCursor = 0
+	}
+
+	return result, nextCursor
+}

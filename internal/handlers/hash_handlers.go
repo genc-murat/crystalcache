@@ -894,3 +894,87 @@ func (h *HashHandlers) HandleHIncrByFloatIf(args []models.Value) models.Value {
 		Bulk: strconv.FormatFloat(newValue, 'f', -1, 64),
 	}
 }
+
+func (h *HashHandlers) HandleHScanMatch(args []models.Value) models.Value {
+	if len(args) < 2 {
+		return models.Value{
+			Type: "error",
+			Str:  "ERR wrong number of arguments for 'hscanmatch' command",
+		}
+	}
+
+	key := args[0].Bulk
+	var cursor int
+	var pattern string
+	var count int = 10
+	pattern = args[1].Bulk
+
+	// Parse optional parameters
+	for i := 2; i < len(args); i++ {
+		switch strings.ToUpper(args[i].Bulk) {
+		case "CURSOR":
+			if i+1 >= len(args) {
+				return models.Value{
+					Type: "error",
+					Str:  "ERR cursor option requires argument",
+				}
+			}
+			var err error
+			cursor, err = strconv.Atoi(args[i+1].Bulk)
+			if err != nil {
+				return models.Value{
+					Type: "error",
+					Str:  "ERR invalid cursor",
+				}
+			}
+			i++
+		case "COUNT":
+			if i+1 >= len(args) {
+				return models.Value{
+					Type: "error",
+					Str:  "ERR count option requires argument",
+				}
+			}
+			var err error
+			count, err = strconv.Atoi(args[i+1].Bulk)
+			if err != nil || count < 0 {
+				return models.Value{
+					Type: "error",
+					Str:  "ERR invalid count",
+				}
+			}
+			i++
+		default:
+			return models.Value{
+				Type: "error",
+				Str:  "ERR syntax error",
+			}
+		}
+	}
+
+	results, nextCursor := h.cache.HScanMatch(key, cursor, pattern, count)
+
+	// Format response
+	response := make([]models.Value, 2)
+	response[0] = models.Value{
+		Type: "bulk",
+		Bulk: strconv.Itoa(nextCursor),
+	}
+
+	arrayElements := make([]models.Value, len(results))
+	for i, item := range results {
+		arrayElements[i] = models.Value{
+			Type: "bulk",
+			Bulk: item,
+		}
+	}
+	response[1] = models.Value{
+		Type:  "array",
+		Array: arrayElements,
+	}
+
+	return models.Value{
+		Type:  "array",
+		Array: response,
+	}
+}

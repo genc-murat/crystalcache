@@ -2689,6 +2689,18 @@ func (rd *RetryDecorator) SMembersPattern(key string, pattern string) ([]string,
 	return matches, finalErr
 }
 
+func (rd *RetryDecorator) HScanMatch(hash string, cursor int, pattern string, count int) ([]string, int) {
+	var results []string
+	var nextCursor int
+
+	rd.executeWithRetry(func() error {
+		results, nextCursor = rd.cache.HScanMatch(hash, cursor, pattern, count)
+		return nil
+	})
+
+	return results, nextCursor
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }

@@ -391,6 +391,7 @@ func (r *Registry) registerHandlers() {
 	r.handlers["SDIFFSTOREDEL"] = r.setHandlers.HandleSDiffStoreDel
 	r.handlers["MGETTYPE"] = r.stringHandlers.HandleMGetType
 	r.handlers["SMEMBERSPATTERN"] = r.setHandlers.HandleSMembersPattern
+	r.handlers["HSCANMATCH"] = r.hashHandlers.HandleHScanMatch
 }
 
 func (r *Registry) GetHandler(cmd string) (CommandHandler, bool) {
