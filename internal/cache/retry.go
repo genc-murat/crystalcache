@@ -535,13 +535,13 @@ func (rd *RetryDecorator) LPush(key string, value string) (int, error) {
 	return length, finalErr
 }
 
-func (rd *RetryDecorator) RPush(key string, value string) (int, error) {
+func (rd *RetryDecorator) RPush(key string, values ...string) (int, error) {
 	var length int
 	var finalErr error
 
 	err := rd.executeWithRetry(func() error {
 		var err error
-		length, err = rd.cache.RPush(key, value)
+		length, err = rd.cache.RPush(key, values...)
 		finalErr = err
 		return err
 	})

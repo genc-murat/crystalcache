@@ -252,10 +252,11 @@ func (c *MemoryCache) BatchTTL(keys []string) map[string]int {
 }
 
 type ListOp struct {
-	Op    string
-	Key   string
-	Value string
-	Index int
+	Op     string
+	Key    string
+	Value  string
+	Values []string
+	Index  int
 }
 
 type ListOpResult struct {
@@ -411,8 +412,8 @@ func (c *MemoryCache) LPush(key string, value string) (int, error) {
 	return result.(int), nil
 }
 
-func (c *MemoryCache) RPush(key string, value string) (int, error) {
-	result, err := c.execListOp(ListOp{Op: "RPUSH", Key: key, Value: value})
+func (c *MemoryCache) RPush(key string, values ...string) (int, error) {
+	result, err := c.execListOp(ListOp{Op: "RPUSH", Key: key, Values: values}) // Values alanını ekledik
 	if err != nil {
 		return 0, err
 	}
