@@ -2,8 +2,8 @@ package cache
 
 import (
 	"fmt"
-	"runtime"
 	"sync/atomic"
+	"unsafe"
 
 	"github.com/genc-murat/crystalcache/internal/core/models"
 )
@@ -195,10 +195,10 @@ func (c *MemoryCache) KeyCount(typeName string) (int64, error) {
 // allocator overhead and aligns the total memory usage to 8-byte boundaries.
 func (c *MemoryCache) MemoryUsage(key string) (*models.MemoryUsageInfo, error) {
 	info := &models.MemoryUsageInfo{
-		PointerSize: int64(runtime.GOARCH) / 8, // Correct way to get pointer size
+		PointerSize: int(unsafe.Sizeof(uintptr(0))),
 	}
 
-	info.OverheadBytes = int64(len(key)) // Only key string length
+	info.OverheadBytes = int64(len(key))
 
 	keyType := c.Type(key)
 	if keyType == "none" {
