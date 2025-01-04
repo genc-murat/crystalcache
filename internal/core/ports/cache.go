@@ -240,4 +240,5 @@ type Cache interface {
 	HIncrByFloatIf(key string, field string, increment float64, expectedValue string) (float64, bool, error)
 	SDiffStoreDel(destination string, keys []string) (int, error)
 	MGetType(keys []string) map[string]string
+	SMembersPattern(key string, pattern string) ([]string, error)
 }

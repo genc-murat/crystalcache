@@ -9,6 +9,7 @@ import (
 	"github.com/genc-murat/crystalcache/internal/core/models"
 	"github.com/genc-murat/crystalcache/internal/core/ports"
 	"github.com/genc-murat/crystalcache/internal/util"
+	"github.com/genc-murat/crystalcache/pkg/utils/pattern"
 )
 
 type SetHandlers struct {
@@ -584,5 +585,55 @@ func (h *SetHandlers) HandleSDiffStoreDel(args []models.Value) models.Value {
 	return models.Value{
 		Type: "integer",
 		Num:  count,
+	}
+}
+
+func (h *SetHandlers) HandleSMembersPattern(args []models.Value) models.Value {
+	if len(args) != 2 {
+		return models.Value{
+			Type: "error",
+			Str:  "ERR wrong number of arguments for 'smemberspattern' command",
+		}
+	}
+
+	key := args[0].Bulk
+	patternStr := args[1].Bulk
+
+	// Check if it's a valid pattern
+	if !pattern.IsPattern(patternStr) && patternStr != "*" {
+		// If it's not a pattern, treat it like SISMEMBER
+		if exists := h.cache.SIsMember(key, patternStr); exists {
+			return models.Value{
+				Type:  "array",
+				Array: []models.Value{{Type: "bulk", Bulk: patternStr}},
+			}
+		}
+		return models.Value{
+			Type:  "array",
+			Array: []models.Value{},
+		}
+	}
+
+	// Get matching members
+	members, err := h.cache.SMembersPattern(key, patternStr)
+	if err != nil {
+		return models.Value{
+			Type: "error",
+			Str:  err.Error(),
+		}
+	}
+
+	// Convert results to Value array
+	result := make([]models.Value, len(members))
+	for i, member := range members {
+		result[i] = models.Value{
+			Type: "bulk",
+			Bulk: member,
+		}
+	}
+
+	return models.Value{
+		Type:  "array",
+		Array: result,
 	}
 }

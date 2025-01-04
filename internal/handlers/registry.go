@@ -390,6 +390,7 @@ func (r *Registry) registerHandlers() {
 	r.handlers["HINCRBYFLOATIF"] = r.hashHandlers.HandleHIncrByFloatIf
 	r.handlers["SDIFFSTOREDEL"] = r.setHandlers.HandleSDiffStoreDel
 	r.handlers["MGETTYPE"] = r.stringHandlers.HandleMGetType
+	r.handlers["SMEMBERSPATTERN"] = r.setHandlers.HandleSMembersPattern
 }
 
 func (r *Registry) GetHandler(cmd string) (CommandHandler, bool) {

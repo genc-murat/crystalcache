@@ -337,3 +337,36 @@ func (c *MemoryCache) SDiffStoreDel(destination string, keys []string) (int, err
 
 	return len(result), nil
 }
+
+func (c *MemoryCache) SMembersPattern(key string, pattern string) ([]string, error) {
+	// Get the set
+	setI, exists := c.sets_.Load(key)
+	if !exists {
+		return []string{}, nil
+	}
+
+	set := setI.(*sync.Map)
+	matches := make([]string, 0)
+
+	// If pattern is "*", return all members
+	if pattern == "*" {
+		set.Range(func(memberI, _ interface{}) bool {
+			member := memberI.(string)
+			matches = append(matches, member)
+			return true
+		})
+	} else {
+		// Iterate through set members and check pattern
+		set.Range(func(memberI, _ interface{}) bool {
+			member := memberI.(string)
+			if c.patternMatcher.MatchCached(pattern, member) {
+				matches = append(matches, member)
+			}
+			return true
+		})
+	}
+
+	// Sort for consistent ordering
+	sort.Strings(matches)
+	return matches, nil
+}

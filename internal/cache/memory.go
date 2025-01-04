@@ -47,6 +47,8 @@ type MemoryCache struct {
 
 	zsetManager   *zset.Manager
 	bitmapManager *bitmap.Manager
+
+	patternMatcher *pattern.Matcher
 }
 
 func NewMemoryCache() *MemoryCache {
@@ -56,29 +58,30 @@ func NewMemoryCache() *MemoryCache {
 	}
 
 	mc := &MemoryCache{
-		sets:          &sync.Map{},
-		hsets:         &sync.Map{},
-		lists:         &sync.Map{},
-		sets_:         &sync.Map{},
-		expires:       &sync.Map{},
-		stats:         NewStats(),
-		transactions:  &sync.Map{},
-		keyVersions:   &sync.Map{},
-		zsets:         &sync.Map{},
-		jsonData:      &sync.Map{},
-		streams:       &sync.Map{},
-		streamGroups:  &sync.Map{},
-		bitmaps:       &sync.Map{},
-		geoData:       &sync.Map{},
-		suggestions:   &sync.Map{},
-		cms:           &sync.Map{},
-		cuckooFilters: &sync.Map{},
-		hlls:          &sync.Map{},
-		bloomFilter:   models.NewBloomFilter(config),
-		bfilters:      &sync.Map{},
-		tdigests:      &sync.Map{},
-		topks:         &sync.Map{},
-		timeSeries:    &sync.Map{},
+		sets:           &sync.Map{},
+		hsets:          &sync.Map{},
+		lists:          &sync.Map{},
+		sets_:          &sync.Map{},
+		expires:        &sync.Map{},
+		stats:          NewStats(),
+		transactions:   &sync.Map{},
+		keyVersions:    &sync.Map{},
+		zsets:          &sync.Map{},
+		jsonData:       &sync.Map{},
+		streams:        &sync.Map{},
+		streamGroups:   &sync.Map{},
+		bitmaps:        &sync.Map{},
+		geoData:        &sync.Map{},
+		suggestions:    &sync.Map{},
+		cms:            &sync.Map{},
+		cuckooFilters:  &sync.Map{},
+		hlls:           &sync.Map{},
+		bloomFilter:    models.NewBloomFilter(config),
+		bfilters:       &sync.Map{},
+		tdigests:       &sync.Map{},
+		topks:          &sync.Map{},
+		timeSeries:     &sync.Map{},
+		patternMatcher: pattern.NewMatcher(),
 	}
 
 	// Start background cleanup

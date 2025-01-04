@@ -2672,6 +2672,23 @@ func (rd *RetryDecorator) MGetType(keys []string) map[string]string {
 	return results
 }
 
+func (rd *RetryDecorator) SMembersPattern(key string, pattern string) ([]string, error) {
+	var matches []string
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		matches, err = rd.cache.SMembersPattern(key, pattern)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return matches, finalErr
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }
