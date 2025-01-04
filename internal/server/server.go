@@ -204,19 +204,26 @@ func isWriteCommand(cmd string) bool {
 	return writeCommands[cmd]
 }
 
-// Add propagation methods
 func (s *Server) propagateToReplicas(cmd models.Value) {
 	s.replMutex.RLock()
 	defer s.replMutex.RUnlock()
 
-	for addr, replica := range s.replicas {
-		err := replica.writer.Write(cmd)
-		if err != nil {
-			log.Printf("Error propagating to replica %s: %v", addr, err)
-			// Handle disconnected replica
-			s.removeReplica(addr)
-		}
+	var wg sync.WaitGroup
+
+	for addr, rep := range s.replicas {
+		wg.Add(1)
+		go func(addr string, rep *replica, cmd models.Value) {
+			defer wg.Done()
+			err := rep.writer.Write(cmd)
+			if err != nil {
+				log.Printf("Error propagating to replica %s: %v", addr, err)
+				// Handle disconnected replica (concurrency nedeniyle dikkatli olunmalı)
+				s.removeReplica(addr)
+			}
+		}(addr, rep, cmd)
 	}
+
+	wg.Wait() // Tüm gönderme işlemlerinin tamamlanmasını bekle
 }
 
 func (s *Server) addReplica(conn net.Conn) {
@@ -562,9 +569,9 @@ func (s *Server) GetReplicationInfo() map[string]string {
 		info["connected_slaves"] = fmt.Sprintf("%d", len(s.replicas))
 
 		// Add information about each connected replica
-		for i, replica := range s.replicas {
-			info[fmt.Sprintf("slave%s", i)] = fmt.Sprintf("ip=%s,state=online",
-				replica.conn.RemoteAddr().String())
+		for i, rep := range s.replicas {
+			info[fmt.Sprintf("slave%d", i)] = fmt.Sprintf("ip=%s,state=online",
+				rep.conn.RemoteAddr().String())
 		}
 	} else {
 		info["role"] = "slave"
@@ -610,9 +617,11 @@ func (s *Server) handleCommand(value models.Value) models.Value {
 	// If master and write command, persist to AOF and propagate
 	if s.isMaster && isWriteCommand(cmd) {
 		// Write to AOF
-		if err := s.storage.Write(value); err != nil {
-			log.Printf("Failed to write to AOF: %v", err)
-		}
+		go func() {
+			if err := s.storage.Write(value); err != nil {
+				log.Printf("Failed to write to AOF: %v", err)
+			}
+		}()
 
 		// Propagate to replicas
 		s.propagateToReplicas(value)
