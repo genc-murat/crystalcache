@@ -372,67 +372,66 @@ func (c *MemoryCache) HIncrByFloatIf(key string, field string, increment float64
 	return newValue, true, nil
 }
 
-// HScanMatch scans the hash map for keys matching the given pattern starting from the specified cursor position.
-// It returns a slice of matched keys and their corresponding values, along with the next cursor position.
+// HScanMatch scans the hash map for keys matching the given pattern, starting from the specified cursor position.
+// It returns a slice of matching key-value pairs and the next cursor position.
 //
 // Parameters:
 //   - hash: The key of the hash map to scan.
-//   - cursor: The position to start scanning from.
+//   - cursor: The position to start scanning from. If the cursor is out of range, it will start from the beginning.
 //   - matchPattern: The pattern to match keys against.
-//   - count: The maximum number of matched keys to return.
+//   - count: The maximum number of key-value pairs to return. If count is less than or equal to 0, a default value of 10 is used.
 //
 // Returns:
-//   - []string: A slice containing matched keys and their corresponding values.
+//   - []string: A slice containing the matching key-value pairs.
 //   - int: The next cursor position for subsequent scans.
 func (c *MemoryCache) HScanMatch(hash string, cursor int, matchPattern string, count int) ([]string, int) {
-	// Get the hash
 	hashI, exists := c.hsets.Load(hash)
 	if !exists {
 		return []string{}, 0
 	}
 
 	hashMap := hashI.(*sync.Map)
+	var result []string
 	var keys []string
+	matcher := c.patternMatcher
+	nextCursor := 0
 
-	// Collect all keys first
-	hashMap.Range(func(key, _ interface{}) bool {
-		keys = append(keys, key.(string))
+	// Collect and filter keys based on the pattern
+	hashMap.Range(func(key, value interface{}) bool {
+		keyStr := key.(string)
+		if matcher.MatchCached(matchPattern, keyStr) {
+			keys = append(keys, keyStr)
+		}
 		return true
 	})
 
-	// Sort keys for consistent ordering
 	sort.Strings(keys)
 
-	// If cursor is invalid, reset to 0
+	// Handle cursor and count
 	if cursor < 0 || cursor >= len(keys) {
 		cursor = 0
 	}
-
-	// If count is not specified or invalid, use default
 	if count <= 0 {
-		count = 10
+		count = 10 // Default count
 	}
 
-	var result []string
-	nextCursor := cursor
-	matcher := c.patternMatcher
+	// Calculate the end index for the current scan
+	end := cursor + count
+	if end > len(keys) {
+		end = len(keys)
+	}
 
-	// Scan through keys starting from cursor
-	for i := cursor; i < len(keys) && len(result) < count*2; i++ {
+	// Append matching key-value pairs to the result
+	for i := cursor; i < end; i++ {
 		key := keys[i]
-		// Check if key matches pattern
-		if matcher.MatchCached(matchPattern, key) {
-			if value, ok := hashMap.Load(key); ok {
-				result = append(result, key)
-				result = append(result, value.(string))
-			}
+		if value, ok := hashMap.Load(key); ok {
+			result = append(result, key, value.(string))
 		}
-		nextCursor = i + 1
 	}
 
-	// Reset cursor if we've reached the end
-	if nextCursor >= len(keys) {
-		nextCursor = 0
+	// Update the next cursor
+	if end < len(keys) {
+		nextCursor = end
 	}
 
 	return result, nextCursor
