@@ -15,20 +15,60 @@ import (
 //
 // Parameters:
 //
-//	hash - the name of the hash map
-//	key - the key within the hash map
-//	value - the value to be set for the key
+//	hash - The hash map identifier.
+//	key - The key within the hash map.
+//	value - The value to be stored.
 //
 // Returns:
 //
-//	error - an error if the operation fails, otherwise nil
+//	  error - An error if the operation fails, otherwise nil.
+//		string - The value associated with the specified key.
+//		bool   - True if the key was found in the hash map, otherwise false.
 func (c *MemoryCache) HSet(hash string, key string, value string) error {
-	var hashMap sync.Map
-	actual, _ := c.hsets.LoadOrStore(hash, &hashMap)
-	actualMap := actual.(*sync.Map)
-	actualMap.Store(key, value)
+	hashMapI, _ := c.hsets.LoadOrStore(hash, syncMapPool.Get().(*sync.Map))
+	hashMap := hashMapI.(*sync.Map)
+	hashMap.Store(key, value)
 	c.incrementKeyVersion(hash)
 	return nil
+}
+
+// HDel deletes a field from a hash in the memory cache.
+//
+// Parameters:
+// - hash: The key of the hash from which the field should be deleted.
+// - field: The field within the hash to delete.
+//
+// Returns:
+// - bool: True if the field was successfully deleted, false if the hash or field does not exist.
+// - error: An error if something goes wrong during the deletion process.
+//
+// If the hash becomes empty after the field is deleted, the hash itself is also removed from the cache.
+func (c *MemoryCache) HDel(hash string, field string) (bool, error) {
+	hashMapI, exists := c.hsets.Load(hash)
+	if !exists {
+		return false, nil // Hash doesn't exist
+	}
+
+	hashMap := hashMapI.(*sync.Map)
+	deleted := false
+	if _, exists := hashMap.LoadAndDelete(field); exists {
+		deleted = true
+
+		// Check if hash is now empty and delete if so
+		isEmpty := true
+		hashMap.Range(func(_, _ interface{}) bool {
+			isEmpty = false
+			return false // Stop on the first element
+		})
+		if isEmpty {
+			c.hsets.Delete(hash)
+			syncMapPool.Put(hashMap)
+		}
+
+		c.incrementKeyVersion(hash)
+	}
+
+	return deleted, nil
 }
 
 // HGet retrieves the value associated with the given key from the hash map
@@ -145,47 +185,6 @@ func (c *MemoryCache) HScan(hash string, cursor int, matchPattern string, count 
 	return finalResult, nextCursor
 }
 
-// HDel deletes a field from a hash in the memory cache.
-// It returns true if the field was successfully deleted, and false if the field did not exist.
-// If the hash becomes empty after the deletion, it is removed from the cache.
-// The method also increments the version of the key.
-//
-// Parameters:
-//   - hash: The key of the hash from which the field should be deleted.
-//   - field: The field to delete from the hash.
-//
-// Returns:
-//   - bool: True if the field was deleted, false if the field did not exist.
-//   - error: An error if something went wrong during the deletion.
-func (c *MemoryCache) HDel(hash string, field string) (bool, error) {
-	hashMapI, exists := c.hsets.Load(hash)
-	if !exists {
-		return false, nil
-	}
-
-	hashMap := hashMapI.(*sync.Map)
-	if _, exists := hashMap.LoadAndDelete(field); !exists {
-		return false, nil
-	}
-
-	// Check if hash is empty after deletion
-	empty := true
-	hashMap.Range(func(_, _ interface{}) bool {
-		empty = false
-		return false // Stop iteration at first key
-	})
-
-	// If hash is empty, remove it completely
-	if empty {
-		c.hsets.Delete(hash)
-		// Return the empty sync.Map to a pool if you maintain one
-		syncMapPool.Put(hashMap)
-	}
-
-	c.incrementKeyVersion(hash)
-	return true, nil
-}
-
 // HIncrBy increments the integer value of a hash field by the given increment.
 // If the field does not exist, it is set to 0 before performing the operation.
 // If the field contains a value that is not an integer, an error is returned.
@@ -199,26 +198,22 @@ func (c *MemoryCache) HDel(hash string, field string) (bool, error) {
 //   - int64: The new value of the field after the increment.
 //   - error: An error if the field value is not an integer.
 func (c *MemoryCache) HIncrBy(key, field string, increment int64) (int64, error) {
-	var hashMap sync.Map
-	actual, _ := c.hsets.LoadOrStore(key, &hashMap)
-	actualMap := actual.(*sync.Map)
+	hashI, _ := c.hsets.LoadOrStore(key, &sync.Map{})
+	hash := hashI.(*sync.Map)
 
 	for {
-		// Get current value
-		currentI, _ := actualMap.LoadOrStore(field, "0")
-		current := currentI.(string)
+		currentI, _ := hash.LoadOrStore(field, "0")
+		currentStr := currentI.(string)
 
-		// Convert current value to int64
-		currentVal, err := strconv.ParseInt(current, 10, 64)
+		currentVal, err := strconv.ParseInt(currentStr, 10, 64)
 		if err != nil {
 			return 0, fmt.Errorf("ERR hash value is not an integer")
 		}
 
-		// Calculate new value
 		newVal := currentVal + increment
+		newValStr := strconv.FormatInt(newVal, 10)
 
-		// Try to store new value
-		if actualMap.CompareAndSwap(field, current, strconv.FormatInt(newVal, 10)) {
+		if hash.CompareAndSwap(field, currentStr, newValStr) {
 			c.incrementKeyVersion(key)
 			return newVal, nil
 		}
