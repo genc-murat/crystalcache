@@ -944,3 +944,33 @@ func (h *StringHandlers) HandleSEExpire(args []models.Value) models.Value {
 		Num:  result,
 	}
 }
+
+func (h *StringHandlers) HandleSetEx(args []models.Value) models.Value {
+	if len(args) != 3 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'setex' command"}
+	}
+
+	key := args[0].Bulk
+	seconds, err := strconv.Atoi(args[1].Bulk)
+	if err != nil {
+		return models.Value{Type: "error", Str: "ERR value is not an integer or out of range"}
+	}
+
+	if seconds <= 0 {
+		return models.Value{Type: "error", Str: "ERR invalid expire time in setex"}
+	}
+
+	value := args[2].Bulk
+
+	// Set the value
+	if err := h.cache.Set(key, value); err != nil {
+		return models.Value{Type: "error", Str: err.Error()}
+	}
+
+	// Set expiration
+	if err := h.cache.Expire(key, seconds); err != nil {
+		return models.Value{Type: "error", Str: err.Error()}
+	}
+
+	return models.Value{Type: "string", Str: "OK"}
+}

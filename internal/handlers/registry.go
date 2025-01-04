@@ -72,6 +72,7 @@ func NewRegistry(cache ports.Cache, clientManager *client.Manager) *Registry {
 func (r *Registry) registerHandlers() {
 	// String Commands
 	r.handlers["SET"] = r.stringHandlers.HandleSet
+	r.handlers["SETEX"] = r.stringHandlers.HandleSetEx
 	r.handlers["GET"] = r.stringHandlers.HandleGet
 	r.handlers["INCR"] = r.stringHandlers.HandleIncr
 	r.handlers["DEL"] = r.stringHandlers.HandleDel
