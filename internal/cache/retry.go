@@ -14,6 +14,19 @@ type RetryDecorator struct {
 	strategy models.RetryStrategy
 }
 
+// executeWithRetry attempts to execute the provided operation function with a retry mechanism
+// based on the retry strategy defined in the RetryDecorator.
+//
+// The function will keep retrying the operation until it either succeeds, the maximum number of
+// attempts is reached, or the context times out.
+//
+// Parameters:
+//   - operation: A function that returns an error. This is the operation to be executed with retries.
+//
+// Returns:
+//   - error: Returns nil if the operation succeeds. Returns models.ErrOperationTimeout if the context
+//     times out before the operation succeeds. Returns models.ErrMaxRetriesExceeded if the maximum
+//     number of attempts is reached without success.
 func (rd *RetryDecorator) executeWithRetry(operation func() error) error {
 	ctx, cancel := context.WithTimeout(context.Background(), rd.strategy.Timeout)
 	defer cancel()
@@ -54,6 +67,17 @@ func (rd *RetryDecorator) executeWithRetry(operation func() error) error {
 	}
 }
 
+// NewRetryDecorator creates a new RetryDecorator instance with the provided
+// MemoryCache and RetryStrategy. The RetryDecorator is used to add retry
+// logic to the cache operations based on the specified strategy.
+//
+// Parameters:
+//   - cache: A pointer to the MemoryCache instance that the decorator will wrap.
+//   - strategy: The retry strategy to be used for retrying cache operations.
+//
+// Returns:
+//
+//	A pointer to the newly created RetryDecorator instance.
 func NewRetryDecorator(cache *MemoryCache, strategy models.RetryStrategy) *RetryDecorator {
 	return &RetryDecorator{
 		cache:    cache,
