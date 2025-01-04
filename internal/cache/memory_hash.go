@@ -322,54 +322,45 @@ func (c *MemoryCache) HDelIf(key string, field string, expectedValue string) (bo
 }
 
 // HIncrByFloatIf increments the float value of a hash field by the given increment
-// if the current value matches the expected value.
+// if the current value of the field matches the expected value. The operation is
+// atomic.
 //
 // Parameters:
-//   - key: The key of the hash.
-//   - field: The field within the hash to increment.
-//   - increment: The amount to increment the field's value by.
-//   - expectedValue: The expected current value of the field.
+// - key: The key of the hash.
+// - field: The field within the hash to increment.
+// - increment: The amount to increment the field by.
+// - expectedValue: The expected current value of the field.
 //
 // Returns:
-//   - float64: The new value of the field after incrementing.
-//   - bool: A boolean indicating whether the increment was performed.
-//   - error: An error if the current value is not a valid float or any other issue occurs.
-//
-// If the field does not exist or the current value does not match the expected value,
-// the function returns 0, false, nil.
+// - newValue: The new value of the field after the increment.
+// - updated: A boolean indicating whether the field was updated.
+// - error: An error if the current value of the field is not a valid float or any other issue occurs.
 func (c *MemoryCache) HIncrByFloatIf(key string, field string, increment float64, expectedValue string) (float64, bool, error) {
-	// Get or create hash
 	hashI, _ := c.hsets.LoadOrStore(key, &sync.Map{})
 	hash := hashI.(*sync.Map)
 
-	// Get current value and check condition
-	currentValueI, exists := hash.Load(field)
-	if !exists {
-		return 0, false, nil
+	var newValue float64
+	var updated bool
+
+	// Atomically update the value if the condition matches
+	_, loaded := hash.LoadOrStore(field, expectedValue) // Attempt to initialize if not exists
+
+	if loaded { // Key exists, check and update
+		currentValueI, _ := hash.Load(field)
+		currentStr := currentValueI.(string)
+		if currentStr == expectedValue {
+			currentValue, err := strconv.ParseFloat(currentStr, 64)
+			if err != nil {
+				return 0, false, fmt.Errorf("ERR hash value is not a valid float")
+			}
+			newValue = currentValue + increment
+			newStr := strconv.FormatFloat(newValue, 'f', -1, 64)
+			hash.Store(field, newStr)
+			updated = true
+			c.incrementKeyVersion(key)
+		}
 	}
-
-	currentStr := currentValueI.(string)
-	if currentStr != expectedValue {
-		return 0, false, nil
-	}
-
-	// Parse current value as float
-	currentValue, err := strconv.ParseFloat(currentStr, 64)
-	if err != nil {
-		return 0, false, fmt.Errorf("ERR hash value is not a valid float")
-	}
-
-	// Calculate new value
-	newValue := currentValue + increment
-
-	// Convert new value to string with high precision
-	newStr := strconv.FormatFloat(newValue, 'f', -1, 64)
-
-	// Store new value
-	hash.Store(field, newStr)
-	c.incrementKeyVersion(key)
-
-	return newValue, true, nil
+	return newValue, updated, nil
 }
 
 // HScanMatch scans the hash map for keys matching the given pattern, starting from the specified cursor position.
