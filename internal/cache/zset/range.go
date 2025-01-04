@@ -1,6 +1,8 @@
 package zset
 
 import (
+	"reflect"
+
 	"github.com/genc-murat/crystalcache/internal/core/models"
 )
 
@@ -192,16 +194,15 @@ func (r *RangeOps) ZPopMinOne(key string) (models.ZSetMember, bool) {
 // Helper method for atomic updates
 func (r *RangeOps) compareAndSwapMembers(key string, oldMembers, newMembers []models.ZSetMember) bool {
 	currentMembers, err := r.basicOps.getSortedMembers(key)
-	if err != nil || len(currentMembers) != len(oldMembers) {
+	if err != nil {
 		return false
 	}
 
-	for i := range currentMembers {
-		if currentMembers[i] != oldMembers[i] {
-			return false
-		}
+	if !reflect.DeepEqual(currentMembers, oldMembers) {
+		return false
 	}
-	return true
+
+	return r.basicOps.setSortedMembersIf(key, newMembers, oldMembers)
 }
 
 // ZRangeByScore returns members within the specified score range.

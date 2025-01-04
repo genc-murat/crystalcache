@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"reflect"
 	"sort"
 	"sync"
 
@@ -14,6 +15,8 @@ import (
 type BasicOps struct {
 	cache       *sync.Map // Main cache map for zsets
 	keyVersions *sync.Map
+	data        map[string][]models.ZSetMember
+	mu          sync.Mutex
 }
 
 // NewBasicOps creates a new BasicOps instance
@@ -306,4 +309,14 @@ func (b *BasicOps) ZRandMemberWithoutScores(key string, count int) []string {
 	}
 
 	return result
+}
+func (b *BasicOps) setSortedMembersIf(key string, newMembers, oldMembers []models.ZSetMember) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	if !reflect.DeepEqual(b.data[key], oldMembers) {
+		return false
+	}
+	b.data[key] = newMembers
+	return true
 }
