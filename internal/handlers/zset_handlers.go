@@ -21,21 +21,25 @@ func NewZSetHandlers(cache ports.Cache) *ZSetHandlers {
 }
 
 func (h *ZSetHandlers) HandleZAdd(args []models.Value) models.Value {
-	if err := util.ValidateArgs(args, 3); err != nil {
-		return util.ToValue(err)
+	if len(args) < 3 || (len(args)-1)%2 != 0 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments"}
 	}
 
-	score, err := util.ParseFloat(args[1])
-	if err != nil {
-		return models.Value{Type: "error", Str: "ERR value is not a valid float"}
+	key := args[0].Bulk
+
+	for i := 1; i < len(args); i += 2 {
+		score, err := util.ParseFloat(args[i])
+		if err != nil {
+			return models.Value{Type: "error", Str: "ERR value is not a valid float"}
+		}
+
+		err = h.cache.ZAdd(key, score, args[i+1].Bulk)
+		if err != nil {
+			return util.ToValue(err)
+		}
 	}
 
-	err = h.cache.ZAdd(args[0].Bulk, score, args[2].Bulk)
-	if err != nil {
-		return util.ToValue(err)
-	}
-
-	return models.Value{Type: "integer", Num: 1}
+	return models.Value{Type: "integer", Num: int((len(args) - 1) / 2)}
 }
 
 func (h *ZSetHandlers) HandleZCard(args []models.Value) models.Value {
