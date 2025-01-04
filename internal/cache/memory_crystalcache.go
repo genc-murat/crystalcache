@@ -2,7 +2,7 @@ package cache
 
 import (
 	"fmt"
-	"strconv"
+	"runtime"
 	"sync/atomic"
 
 	"github.com/genc-murat/crystalcache/internal/core/models"
@@ -195,11 +195,10 @@ func (c *MemoryCache) KeyCount(typeName string) (int64, error) {
 // allocator overhead and aligns the total memory usage to 8-byte boundaries.
 func (c *MemoryCache) MemoryUsage(key string) (*models.MemoryUsageInfo, error) {
 	info := &models.MemoryUsageInfo{
-		PointerSize: strconv.IntSize / 8,
+		PointerSize: int64(runtime.GOARCH) / 8, // Correct way to get pointer size
 	}
 
-	// Base overhead for key storage
-	info.OverheadBytes = int64(len(key) + info.PointerSize) // Key string + pointer overhead
+	info.OverheadBytes = int64(len(key)) // Only key string length
 
 	keyType := c.Type(key)
 	if keyType == "none" {
@@ -213,21 +212,21 @@ func (c *MemoryCache) MemoryUsage(key string) (*models.MemoryUsageInfo, error) {
 	case "string":
 		valueSize, err = c.memoryUsageString(key)
 	case "hash":
-		valueSize, err = c.memoryUsageHash(key, info.PointerSize)
+		valueSize, err = c.memoryUsageHash(key)
 	case "list":
-		valueSize, err = c.memoryUsageList(key, info.PointerSize)
+		valueSize, err = c.memoryUsageList(key)
 	case "set":
-		valueSize, err = c.memoryUsageSet(key, info.PointerSize)
+		valueSize, err = c.memoryUsageSet(key)
 	case "zset":
-		valueSize, err = c.memoryUsageZSet(key, info.PointerSize)
+		valueSize, err = c.memoryUsageZSet(key)
 	case "json":
 		valueSize, err = c.memoryUsageJSON(key)
 	case "stream":
-		valueSize, err = c.memoryUsageStream(key, info.PointerSize)
+		valueSize, err = c.memoryUsageStream(key)
 	case "bitmap":
 		valueSize, err = c.memoryUsageBitmap(key)
 	default:
-		return nil, fmt.Errorf("unexpected type: %s", keyType) // Should not happen
+		return nil, fmt.Errorf("unexpected type: %s", keyType)
 	}
 
 	if err != nil {
@@ -249,49 +248,45 @@ func (c *MemoryCache) memoryUsageString(key string) (int64, error) {
 	return 0, fmt.Errorf("string key not found")
 }
 
-func (c *MemoryCache) memoryUsageHash(key string, pointerSize int) (int64, error) {
+func (c *MemoryCache) memoryUsageHash(key string) (int64, error) {
 	var valueSize int64
 	if hashMap := c.HGetAll(key); hashMap != nil {
 		for k, v := range hashMap {
 			valueSize += int64(len(k) + len(v))
 		}
-		valueSize += int64(len(hashMap) * pointerSize) // Overhead for hash entries (pointers to key/value)
 		return valueSize, nil
 	}
 	return 0, fmt.Errorf("hash key not found")
 }
 
-func (c *MemoryCache) memoryUsageList(key string, pointerSize int) (int64, error) {
+func (c *MemoryCache) memoryUsageList(key string) (int64, error) {
 	var valueSize int64
 	if values, err := c.LRange(key, 0, -1); err == nil {
 		for _, v := range values {
 			valueSize += int64(len(v))
 		}
-		valueSize += int64(len(values) * pointerSize) // Overhead for list nodes (pointers to values)
 		return valueSize, nil
 	}
 	return 0, fmt.Errorf("list key not found")
 }
 
-func (c *MemoryCache) memoryUsageSet(key string, pointerSize int) (int64, error) {
+func (c *MemoryCache) memoryUsageSet(key string) (int64, error) {
 	var valueSize int64
 	if members, err := c.SMembers(key); err == nil {
 		for _, m := range members {
 			valueSize += int64(len(m))
 		}
-		valueSize += int64(len(members) * pointerSize) // Overhead for set entries (pointers to members)
 		return valueSize, nil
 	}
 	return 0, fmt.Errorf("set key not found")
 }
 
-func (c *MemoryCache) memoryUsageZSet(key string, pointerSize int) (int64, error) {
+func (c *MemoryCache) memoryUsageZSet(key string) (int64, error) {
 	var valueSize int64
 	if members := c.ZRange(key, 0, -1); len(members) > 0 {
 		for _, m := range members {
 			valueSize += int64(len(m)) + 8 // 8 bytes for score (float64)
 		}
-		valueSize += int64(len(members) * (pointerSize + 8)) // Overhead for sorted set entries (pointer + score)
 		return valueSize, nil
 	}
 	return 0, fmt.Errorf("zset key not found")
@@ -299,15 +294,13 @@ func (c *MemoryCache) memoryUsageZSet(key string, pointerSize int) (int64, error
 
 func (c *MemoryCache) memoryUsageJSON(key string) (int64, error) {
 	if val, exists := c.GetJSON(key); exists {
-		// Estimate JSON size using string representation
 		return int64(len(fmt.Sprintf("%v", val))), nil
 	}
 	return 0, fmt.Errorf("json key not found")
 }
 
-func (c *MemoryCache) memoryUsageStream(key string, pointerSize int) (int64, error) {
+func (c *MemoryCache) memoryUsageStream(key string) (int64, error) {
 	if length := c.XLEN(key); length > 0 {
-		// Estimate based on average entry size and overhead
 		return length * 128, nil // Assume average entry size of 128 bytes
 	}
 	return 0, fmt.Errorf("stream key not found")
@@ -315,7 +308,7 @@ func (c *MemoryCache) memoryUsageStream(key string, pointerSize int) (int64, err
 
 func (c *MemoryCache) memoryUsageBitmap(key string) (int64, error) {
 	if val, err := c.BitCount(key, 0, -1); err == nil {
-		return (val + 7) / 8, nil // Convert bits to bytes, rounding up
+		return (val + 7) / 8, nil
 	}
 	return 0, fmt.Errorf("bitmap key not found")
 }
