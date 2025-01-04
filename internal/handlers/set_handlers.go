@@ -637,3 +637,126 @@ func (h *SetHandlers) HandleSMembersPattern(args []models.Value) models.Value {
 		Array: result,
 	}
 }
+
+func (h *SetHandlers) HandleSPopCount(args []models.Value) models.Value {
+	if len(args) != 2 {
+		return models.Value{
+			Type: "error",
+			Str:  "ERR wrong number of arguments for 'spopcount' command",
+		}
+	}
+
+	key := args[0].Bulk
+	count, err := strconv.Atoi(args[1].Bulk)
+	if err != nil || count < 0 {
+		return models.Value{
+			Type: "error",
+			Str:  "ERR value is not an integer or out of range",
+		}
+	}
+
+	members, err := h.cache.SPopCount(key, count)
+	if err != nil {
+		return models.Value{
+			Type: "error",
+			Str:  err.Error(),
+		}
+	}
+
+	result := make([]models.Value, len(members))
+	for i, member := range members {
+		result[i] = models.Value{
+			Type: "bulk",
+			Bulk: member,
+		}
+	}
+
+	return models.Value{
+		Type:  "array",
+		Array: result,
+	}
+}
+
+func (h *SetHandlers) HandleSDiffMulti(args []models.Value) models.Value {
+	if len(args) < 1 {
+		return models.Value{
+			Type: "error",
+			Str:  "ERR wrong number of arguments for 'sdiffmulti' command",
+		}
+	}
+
+	keys := make([]string, len(args))
+	for i, arg := range args {
+		keys[i] = arg.Bulk
+	}
+
+	members := h.cache.SDiffMulti(keys...)
+	result := make([]models.Value, len(members))
+	for i, member := range members {
+		result[i] = models.Value{
+			Type: "bulk",
+			Bulk: member,
+		}
+	}
+
+	return models.Value{
+		Type:  "array",
+		Array: result,
+	}
+}
+
+func (h *SetHandlers) HandleSInterMulti(args []models.Value) models.Value {
+	if len(args) < 1 {
+		return models.Value{
+			Type: "error",
+			Str:  "ERR wrong number of arguments for 'sintermulti' command",
+		}
+	}
+
+	keys := make([]string, len(args))
+	for i, arg := range args {
+		keys[i] = arg.Bulk
+	}
+
+	members := h.cache.SInterMulti(keys...)
+	result := make([]models.Value, len(members))
+	for i, member := range members {
+		result[i] = models.Value{
+			Type: "bulk",
+			Bulk: member,
+		}
+	}
+
+	return models.Value{
+		Type:  "array",
+		Array: result,
+	}
+}
+
+func (h *SetHandlers) HandleSUnionMulti(args []models.Value) models.Value {
+	if len(args) < 1 {
+		return models.Value{
+			Type: "error",
+			Str:  "ERR wrong number of arguments for 'sunionmulti' command",
+		}
+	}
+
+	keys := make([]string, len(args))
+	for i, arg := range args {
+		keys[i] = arg.Bulk
+	}
+
+	members := h.cache.SUnionMulti(keys...)
+	result := make([]models.Value, len(members))
+	for i, member := range members {
+		result[i] = models.Value{
+			Type: "bulk",
+			Bulk: member,
+		}
+	}
+
+	return models.Value{
+		Type:  "array",
+		Array: result,
+	}
+}

@@ -489,3 +489,166 @@ func (c *MemoryCache) SMembersPattern(key string, pattern string) ([]string, err
 	sort.Strings(matches)
 	return matches, nil
 }
+
+func (c *MemoryCache) SPopCount(key string, count int) ([]string, error) {
+	// Get the set
+	setI, exists := c.sets_.Load(key)
+	if !exists {
+		return []string{}, nil
+	}
+	set := setI.(*sync.Map)
+
+	// Collect all members
+	var members []string
+	set.Range(func(key, _ interface{}) bool {
+		members = append(members, key.(string))
+		return true
+	})
+
+	if len(members) == 0 {
+		return []string{}, nil
+	}
+
+	// If count is larger than set size, adjust it
+	if count > len(members) {
+		count = len(members)
+	}
+
+	// Randomly select members
+	result := make([]string, 0, count)
+	for i := 0; i < count; i++ {
+		// Get random index
+		idx := rand.Intn(len(members))
+		// Add member to result
+		result = append(result, members[idx])
+		// Remove member from set
+		set.Delete(members[idx])
+		// Remove from members slice
+		members[idx] = members[len(members)-1]
+		members = members[:len(members)-1]
+	}
+
+	// Check if set is now empty
+	empty := true
+	set.Range(func(_, _ interface{}) bool {
+		empty = false
+		return false
+	})
+	if empty {
+		c.sets_.Delete(key)
+	}
+
+	c.incrementKeyVersion(key)
+	return result, nil
+}
+
+func (c *MemoryCache) SDiffMulti(keys ...string) []string {
+	if len(keys) == 0 {
+		return []string{}
+	}
+
+	// Get first set
+	firstSetI, exists := c.sets_.Load(keys[0])
+	if !exists {
+		return []string{}
+	}
+
+	// Create result set
+	result := make(map[string]bool)
+	firstSet := firstSetI.(*sync.Map)
+	firstSet.Range(func(key, _ interface{}) bool {
+		result[key.(string)] = true
+		return true
+	})
+
+	// Remove elements that exist in other sets
+	for _, key := range keys[1:] {
+		if setI, exists := c.sets_.Load(key); exists {
+			set := setI.(*sync.Map)
+			set.Range(func(key, _ interface{}) bool {
+				delete(result, key.(string))
+				return true
+			})
+		}
+	}
+
+	// Convert map to sorted slice
+	finalResult := make([]string, 0, len(result))
+	for member := range result {
+		finalResult = append(finalResult, member)
+	}
+	sort.Strings(finalResult)
+
+	return finalResult
+}
+
+func (c *MemoryCache) SInterMulti(keys ...string) []string {
+	if len(keys) == 0 {
+		return []string{}
+	}
+
+	// Get first set
+	firstSetI, exists := c.sets_.Load(keys[0])
+	if !exists {
+		return []string{}
+	}
+
+	// Create result set with first set's members
+	result := make(map[string]bool)
+	firstSet := firstSetI.(*sync.Map)
+	firstSet.Range(func(key, _ interface{}) bool {
+		result[key.(string)] = true
+		return true
+	})
+
+	// Intersect with each subsequent set
+	for _, key := range keys[1:] {
+		if setI, exists := c.sets_.Load(key); exists {
+			set := setI.(*sync.Map)
+			newResult := make(map[string]bool)
+			set.Range(func(key, _ interface{}) bool {
+				if result[key.(string)] {
+					newResult[key.(string)] = true
+				}
+				return true
+			})
+			result = newResult
+		} else {
+			// If any set doesn't exist, result is empty
+			return []string{}
+		}
+	}
+
+	// Convert map to sorted slice
+	finalResult := make([]string, 0, len(result))
+	for member := range result {
+		finalResult = append(finalResult, member)
+	}
+	sort.Strings(finalResult)
+
+	return finalResult
+}
+
+func (c *MemoryCache) SUnionMulti(keys ...string) []string {
+	result := make(map[string]bool)
+
+	// Union all sets
+	for _, key := range keys {
+		if setI, exists := c.sets_.Load(key); exists {
+			set := setI.(*sync.Map)
+			set.Range(func(key, _ interface{}) bool {
+				result[key.(string)] = true
+				return true
+			})
+		}
+	}
+
+	// Convert map to sorted slice
+	finalResult := make([]string, 0, len(result))
+	for member := range result {
+		finalResult = append(finalResult, member)
+	}
+	sort.Strings(finalResult)
+
+	return finalResult
+}

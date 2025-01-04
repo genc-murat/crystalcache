@@ -398,6 +398,10 @@ func (r *Registry) registerHandlers() {
 	r.handlers["SEEXPIRE"] = r.stringHandlers.HandleSEExpire
 	r.handlers["HINCRBYMULTI"] = r.hashHandlers.HandleHIncrByMulti
 	r.handlers["LROTATE"] = r.listHandlers.HandleLRotate
+	r.handlers["SPOPCOUNT"] = r.setHandlers.HandleSPopCount
+	r.handlers["SDIFFMULTI"] = r.setHandlers.HandleSDiffMulti
+	r.handlers["SINTERMULTI"] = r.setHandlers.HandleSInterMulti
+	r.handlers["SUNIONMULTI"] = r.setHandlers.HandleSUnionMulti
 }
 
 func (r *Registry) GetHandler(cmd string) (CommandHandler, bool) {

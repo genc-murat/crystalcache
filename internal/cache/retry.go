@@ -2793,6 +2793,50 @@ func (rd *RetryDecorator) LRotate(key string) (bool, error) {
 	return rotated, finalErr
 }
 
+func (rd *RetryDecorator) SPopCount(key string, count int) ([]string, error) {
+	var result []string
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		result, err = rd.cache.SPopCount(key, count)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return result, finalErr
+}
+
+func (rd *RetryDecorator) SDiffMulti(keys ...string) []string {
+	var result []string
+	rd.executeWithRetry(func() error {
+		result = rd.cache.SDiffMulti(keys...)
+		return nil
+	})
+	return result
+}
+
+func (rd *RetryDecorator) SInterMulti(keys ...string) []string {
+	var result []string
+	rd.executeWithRetry(func() error {
+		result = rd.cache.SInterMulti(keys...)
+		return nil
+	})
+	return result
+}
+
+func (rd *RetryDecorator) SUnionMulti(keys ...string) []string {
+	var result []string
+	rd.executeWithRetry(func() error {
+		result = rd.cache.SUnionMulti(keys...)
+		return nil
+	})
+	return result
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }
