@@ -2486,6 +2486,36 @@ func (c *MemoryCache) XGroupSetID(key, group, id string) error {
 	return nil
 }
 
+func (c *MemoryCache) LRotate(key string) (bool, error) {
+	for {
+		// Get the list
+		listI, exists := c.lists.Load(key)
+		if !exists {
+			return false, nil
+		}
+
+		list := listI.(*[]string)
+		if len(*list) <= 1 {
+			return false, nil // No rotation needed for empty or single-element lists
+		}
+
+		// Create new list with rotated elements
+		newList := make([]string, len(*list))
+		// Move last element to front
+		newList[0] = (*list)[len(*list)-1]
+		// Copy rest of elements
+		copy(newList[1:], (*list)[:len(*list)-1])
+
+		// Try to update the list atomically
+		if c.lists.CompareAndSwap(key, listI, &newList) {
+			// Increment key version
+			c.incrementKeyVersion(key)
+			return true, nil
+		}
+		// If update fails, retry
+	}
+}
+
 func (c *MemoryCache) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(c, strategy)
 }

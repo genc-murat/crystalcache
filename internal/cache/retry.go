@@ -2776,6 +2776,23 @@ func (rd *RetryDecorator) HIncrByMulti(key string, fieldsAndIncrements map[strin
 	return results, finalErr
 }
 
+func (rd *RetryDecorator) LRotate(key string) (bool, error) {
+	var rotated bool
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		rotated, err = rd.cache.LRotate(key)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return false, err
+	}
+	return rotated, finalErr
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }

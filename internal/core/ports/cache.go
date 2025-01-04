@@ -246,4 +246,5 @@ type Cache interface {
 	ZScanByScore(key string, min, max float64, count int, withScores bool) []models.ZSetMember
 	SEExpire(key string, seconds int, condition string) (bool, error)
 	HIncrByMulti(key string, fieldsAndIncrements map[string]int64) (map[string]int64, error)
+	LRotate(key string) (bool, error)
 }

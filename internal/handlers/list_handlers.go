@@ -912,3 +912,34 @@ func (h *ListHandlers) HandleLInsertBeforeAfter(args []models.Value) models.Valu
 		Num:  newLength,
 	}
 }
+
+func (h *ListHandlers) HandleLRotate(args []models.Value) models.Value {
+	if len(args) != 1 {
+		return models.Value{
+			Type: "error",
+			Str:  "ERR wrong number of arguments for 'lrotate' command",
+		}
+	}
+
+	key := args[0].Bulk
+
+	rotated, err := h.cache.LRotate(key)
+	if err != nil {
+		return models.Value{
+			Type: "error",
+			Str:  err.Error(),
+		}
+	}
+
+	if !rotated {
+		return models.Value{
+			Type: "integer",
+			Num:  0,
+		}
+	}
+
+	return models.Value{
+		Type: "integer",
+		Num:  1,
+	}
+}
