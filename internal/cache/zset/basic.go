@@ -84,32 +84,24 @@ func (b *BasicOps) ZCard(key string) int {
 
 // ZScore returns the score of a member in a sorted set
 func (b *BasicOps) ZScore(key string, member string) (float64, bool) {
-	// Attempt to load the key from the cache
 	value, exists := b.cache.Load(key)
 	if !exists {
-		// Key does not exist
-		return 0, false
+		return 0, false // Key not found
 	}
 
-	// Assert the value is of type *sync.Map
 	set, ok := value.(*sync.Map)
 	if !ok {
-		// Handle unexpected type gracefully
-		return 0, false
+		return 0, false // Invalid cache value type
 	}
 
-	// Attempt to load the member's score from the set
 	memberValue, exists := set.Load(member)
 	if !exists {
-		// Member does not exist in the set
-		return 0, false
+		return 0, false // Member not found
 	}
 
-	// Assert the member's value is of type float64
 	score, ok := memberValue.(float64)
 	if !ok {
-		// Handle unexpected type gracefully
-		return 0, false
+		return 0, false // Invalid member value type
 	}
 
 	return score, true
