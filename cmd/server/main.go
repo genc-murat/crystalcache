@@ -10,21 +10,22 @@ import (
 	"syscall"
 	"time"
 
+	_ "net/http/pprof"
+
 	"github.com/genc-murat/crystalcache/internal/cache"
 	"github.com/genc-murat/crystalcache/internal/pool"
 	"github.com/genc-murat/crystalcache/internal/server"
 	"github.com/genc-murat/crystalcache/internal/storage"
-	// _ "net/http/pprof"
 )
 
 func main() {
 
-	// go func() {
-	// 	log.Println("Pprof server starting on :6060")
-	// 	if err := http.ListenAndServe(":6060", nil); err != nil {
-	// 		log.Printf("Pprof server error: %v", err)
-	// 	}
-	// }()
+	go func() {
+		log.Println("Pprof server starting on :6060")
+		if err := http.ListenAndServe(":6060", nil); err != nil {
+			log.Printf("Pprof server error: %v", err)
+		}
+	}()
 
 	// _, err := config.LoadConfig("development")
 	// if err != nil {

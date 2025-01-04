@@ -25,28 +25,20 @@ func NewListHandlers(cache ports.Cache) *ListHandlers {
 	return &ListHandlers{cache: cache}
 }
 
-// HandleLPush handles the LPUSH command which inserts elements at the head of the list
-// Parameters:
-//   - args: Array of Values containing the key followed by one or more values to push
-//
-// Returns:
-//   - models.Value: The length of the list after the push operation
-//     Returns error if wrong number of arguments or operation fails
 func (h *ListHandlers) HandleLPush(args []models.Value) models.Value {
 	if len(args) < 2 {
 		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'lpush' command"}
 	}
 
 	key := args[0].Bulk
-	totalLen := 0
-	var err error
-
-	// Handle multiple values
+	values := make([]string, len(args)-1)
 	for i := 1; i < len(args); i++ {
-		totalLen, err = h.cache.LPush(key, args[i].Bulk)
-		if err != nil {
-			return util.ToValue(err)
-		}
+		values[i-1] = args[i].Bulk
+	}
+
+	totalLen, err := h.cache.LPush(key, values...)
+	if err != nil {
+		return util.ToValue(err)
 	}
 
 	return models.Value{Type: "integer", Num: totalLen}
@@ -63,7 +55,7 @@ func (h *ListHandlers) HandleRPush(args []models.Value) models.Value {
 		values[i-1] = args[i].Bulk
 	}
 
-	totalLen, err := h.cache.RPush(key, values...) // Birden fazla değeri gönderiyoruz
+	totalLen, err := h.cache.RPush(key, values...)
 	if err != nil {
 		return util.ToValue(err)
 	}

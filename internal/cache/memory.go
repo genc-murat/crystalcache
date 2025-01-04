@@ -282,12 +282,18 @@ func (c *MemoryCache) execListOp(op ListOp) (interface{}, error) {
 		if !loaded {
 			list = make([]string, 0, 16)
 		} else {
-			// Create new list with appropriate capacity
 			initialCap := cap(*oldList)
-			if initialCap < len(*oldList)+1 {
-				initialCap *= 2
+			neededCap := len(*oldList)
+			if len(op.Values) > 0 {
+				neededCap += len(op.Values)
+			} else if op.Value != "" {
+				neededCap += 1
 			}
-			list = make([]string, 0, initialCap)
+			if initialCap < neededCap {
+				initialCap = neededCap * 2
+			}
+			list = make([]string, len(*oldList), initialCap)
+			copy(list, *oldList)
 		}
 
 		result, newList, err := c.processListOp(op, oldList, &list)
@@ -331,14 +337,26 @@ func (c *MemoryCache) execListOp(op ListOp) (interface{}, error) {
 func (c *MemoryCache) processListOp(op ListOp, oldList *[]string, newList *[]string) (interface{}, *[]string, error) {
 	switch op.Op {
 	case "LPUSH":
-		*newList = append(*newList, op.Value)
-		*newList = append(*newList, *oldList...)
-		return len(*newList), newList, nil
-
+		if len(op.Values) > 0 {
+			// Değerleri ters sırada eklememiz gerekiyor çünkü LPUSH listenin başına ekler
+			for i := len(op.Values) - 1; i >= 0; i-- {
+				*newList = append([]string{op.Values[i]}, *newList...)
+			}
+			return len(*newList), newList, nil
+		} else if op.Value != "" {
+			*newList = append([]string{op.Value}, *newList...)
+			return len(*newList), newList, nil
+		}
+		return 0, newList, fmt.Errorf("LPUSH called without values")
 	case "RPUSH":
-		*newList = append(*newList, *oldList...)
-		*newList = append(*newList, op.Value)
-		return len(*newList), newList, nil
+		if len(op.Values) > 0 {
+			*newList = append(*newList, op.Values...)
+			return len(*newList), newList, nil
+		} else if op.Value != "" {
+			*newList = append(*newList, op.Value)
+			return len(*newList), newList, nil
+		}
+		return 0, newList, fmt.Errorf("RPUSH called without values")
 
 	case "LPOP":
 		if len(*oldList) == 0 {
@@ -404,8 +422,8 @@ func (c *MemoryCache) execBatchListOps(ops []ListOp) []ListOpResult {
 	return results
 }
 
-func (c *MemoryCache) LPush(key string, value string) (int, error) {
-	result, err := c.execListOp(ListOp{Op: "LPUSH", Key: key, Value: value})
+func (c *MemoryCache) LPush(key string, values ...string) (int, error) {
+	result, err := c.execListOp(ListOp{Op: "LPUSH", Key: key, Values: values})
 	if err != nil {
 		return 0, err
 	}
