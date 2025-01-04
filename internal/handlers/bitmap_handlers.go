@@ -13,10 +13,21 @@ type BitMapHandlers struct {
 	cache ports.Cache
 }
 
+// NewBitMapHandlers creates a new instance of BitMapHandlers with the provided cache.
+// It takes a ports.Cache interface as an argument and returns a pointer to BitMapHandlers.
 func NewBitMapHandlers(cache ports.Cache) *BitMapHandlers {
 	return &BitMapHandlers{cache: cache}
 }
 
+// HandleGetBit handles the 'getbit' command which retrieves the bit value at the specified offset
+// in the string value stored at the given key.
+//
+// Arguments:
+// - args: A slice of models.Value containing the key and the offset.
+//
+// Returns:
+//   - models.Value: An integer value representing the bit value at the specified offset, or an error
+//     if the arguments are invalid or if there is an issue retrieving the bit value.
 func (h *BitMapHandlers) HandleGetBit(args []models.Value) models.Value {
 	if len(args) != 2 {
 		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'getbit' command"}
@@ -39,6 +50,18 @@ func (h *BitMapHandlers) HandleGetBit(args []models.Value) models.Value {
 	return models.Value{Type: "integer", Num: bit}
 }
 
+// HandleSetBit sets or clears the bit at a specified offset in the string value stored at key.
+// It expects three arguments: the key, the offset, and the value (0 or 1).
+// If the number of arguments is incorrect, or if the offset or value are invalid, it returns an error.
+// Otherwise, it sets the bit and returns the old bit value.
+//
+// Arguments:
+// - args[0]: The key (string).
+// - args[1]: The offset (integer).
+// - args[2]: The value (0 or 1).
+//
+// Returns:
+// - models.Value: The old bit value (integer) or an error message (string).
 func (h *BitMapHandlers) HandleSetBit(args []models.Value) models.Value {
 	if len(args) != 3 {
 		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'setbit' command"}
@@ -66,6 +89,12 @@ func (h *BitMapHandlers) HandleSetBit(args []models.Value) models.Value {
 	return models.Value{Type: "integer", Num: oldBit}
 }
 
+// HandleBitCount processes the 'bitcount' command, which counts the number of set bits (1s) in a string.
+// It accepts a variable number of arguments:
+// - The first argument is the key of the string to count bits in.
+// - The second and third arguments (optional) specify the start and end positions (inclusive) for the bit count.
+// If the start and end positions are not provided, the entire string is considered.
+// Returns a models.Value containing the count of set bits or an error message if the arguments are invalid.
 func (h *BitMapHandlers) HandleBitCount(args []models.Value) models.Value {
 	if len(args) < 1 {
 		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'bitcount' command"}
@@ -93,6 +122,20 @@ func (h *BitMapHandlers) HandleBitCount(args []models.Value) models.Value {
 	return models.Value{Type: "integer", Num: int(count)}
 }
 
+// HandleBitOp processes the 'bitop' command which performs bitwise operations
+// between multiple keys and stores the result in the destination key.
+//
+// Args:
+//
+//	args ([]models.Value): A slice of Value objects where the first element is the
+//	  bitwise operation (AND, OR, XOR, NOT), the second element is the destination key,
+//	  and the remaining elements are the source keys.
+//
+// Returns:
+//
+//	models.Value: A Value object containing the result of the operation. If the operation
+//	  is successful, it returns the length of the string stored in the destination key as
+//	  an integer type. If there is an error, it returns an error type with the error message.
 func (h *BitMapHandlers) HandleBitOp(args []models.Value) models.Value {
 	if len(args) < 3 {
 		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'bitop' command"}
@@ -114,6 +157,16 @@ func (h *BitMapHandlers) HandleBitOp(args []models.Value) models.Value {
 	return models.Value{Type: "integer", Num: int(length)}
 }
 
+// HandleBitPos handles the 'bitpos' command which finds the first bit set to the specified value (0 or 1)
+// in a string. The command accepts the following arguments:
+// - args[0]: The key of the bitmap.
+// - args[1]: The bit value to search for (0 or 1).
+// - args[2] (optional): The start position to begin the search.
+// - args[3] (optional): The end position to end the search.
+// - args[4] (optional): The keyword "REV" to search in reverse order.
+//
+// It returns a models.Value containing the position of the first bit set to the specified value,
+// or an error if the arguments are invalid or if there is an issue with the cache.
 func (h *BitMapHandlers) HandleBitPos(args []models.Value) models.Value {
 	if len(args) < 2 {
 		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'bitpos' command"}
@@ -147,6 +200,27 @@ func (h *BitMapHandlers) HandleBitPos(args []models.Value) models.Value {
 	return models.Value{Type: "integer", Num: int(pos)}
 }
 
+// HandleBitField processes the 'bitfield' command with the given arguments.
+// It expects at least two arguments, where the first argument is the key and
+// the remaining arguments are the bitfield commands to be executed.
+//
+// If the number of arguments is less than two, it returns an error value indicating
+// the wrong number of arguments.
+//
+// It parses the bitfield commands and executes them on the cache. If there is an
+// error during parsing or execution, it returns an error value with the error message.
+//
+// On successful execution, it returns an array of integer values representing the
+// results of the bitfield commands.
+//
+// Args:
+//
+//	args ([]models.Value): The arguments for the 'bitfield' command.
+//
+// Returns:
+//
+//	models.Value: The result of the 'bitfield' command execution, which is either
+//	an error value or an array of integer values.
 func (h *BitMapHandlers) HandleBitField(args []models.Value) models.Value {
 	if len(args) < 2 {
 		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'bitfield' command"}
@@ -170,6 +244,23 @@ func (h *BitMapHandlers) HandleBitField(args []models.Value) models.Value {
 	return models.Value{Type: "array", Array: response}
 }
 
+// HandleBitFieldRO processes the 'bitfield_ro' command with the given arguments.
+// It expects at least two arguments: the key and the bitfield commands.
+// If the number of arguments is insufficient, it returns an error.
+//
+// The function parses the bitfield commands and executes them in read-only mode
+// on the specified key in the cache. The results of the bitfield operations are
+// returned as an array of integers.
+//
+// Args:
+//
+//	args ([]models.Value): The arguments for the 'bitfield_ro' command.
+//
+// Returns:
+//
+//	models.Value: The result of the 'bitfield_ro' command execution. It can be
+//	an error message if the command fails or an array of integers representing
+//	the results of the bitfield operations.
 func (h *BitMapHandlers) HandleBitFieldRO(args []models.Value) models.Value {
 	if len(args) < 2 {
 		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'bitfield_ro' command"}
@@ -193,6 +284,22 @@ func (h *BitMapHandlers) HandleBitFieldRO(args []models.Value) models.Value {
 	return models.Value{Type: "array", Array: response}
 }
 
+// parseBitFieldCommands parses a list of bitfield commands from the provided arguments.
+// It supports the following commands: GET, SET, and INCRBY.
+//
+// Each command must be followed by the appropriate number of arguments:
+// - GET: type, offset
+// - SET: type, offset, value
+// - INCRBY: type, offset, increment
+//
+// If the arguments are invalid or the command is unknown, an error is returned.
+//
+// Parameters:
+// - args: A slice of models.Value representing the command arguments.
+//
+// Returns:
+// - A slice of models.BitFieldCommand containing the parsed commands.
+// - An error if the arguments are invalid or the command is unknown.
 func (h *BitMapHandlers) parseBitFieldCommands(args []models.Value) ([]models.BitFieldCommand, error) {
 	var commands []models.BitFieldCommand
 	i := 0
