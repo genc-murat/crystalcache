@@ -9,6 +9,19 @@ import (
 	"github.com/genc-murat/crystalcache/pkg/utils/pattern"
 )
 
+// HSet sets the value for a given key in a hash map stored in memory cache.
+// If the hash map does not exist, it creates a new one.
+// It also increments the version of the key.
+//
+// Parameters:
+//
+//	hash - the name of the hash map
+//	key - the key within the hash map
+//	value - the value to be set for the key
+//
+// Returns:
+//
+//	error - an error if the operation fails, otherwise nil
 func (c *MemoryCache) HSet(hash string, key string, value string) error {
 	var hashMap sync.Map
 	actual, _ := c.hsets.LoadOrStore(hash, &hashMap)
@@ -18,6 +31,19 @@ func (c *MemoryCache) HSet(hash string, key string, value string) error {
 	return nil
 }
 
+// HGet retrieves the value associated with the given key from the hash map
+// identified by the specified hash. It returns the value and a boolean
+// indicating whether the key was found in the hash map.
+//
+// Parameters:
+//
+//	hash - The identifier for the hash map.
+//	key  - The key whose associated value is to be returned.
+//
+// Returns:
+//
+//	string - The value associated with the specified key.
+//	bool   - True if the key was found in the hash map, otherwise false.
 func (c *MemoryCache) HGet(hash string, key string) (string, bool) {
 	if hashMapI, ok := c.hsets.Load(hash); ok {
 		hashMap := hashMapI.(*sync.Map)
@@ -28,6 +54,14 @@ func (c *MemoryCache) HGet(hash string, key string) (string, bool) {
 	return "", false
 }
 
+// HGetAll retrieves all key-value pairs from the hash map stored in the memory cache
+// under the specified hash key. It returns a map where the keys and values are strings.
+//
+// Parameters:
+//   - hash: The key of the hash map to retrieve.
+//
+// Returns:
+//   - A map containing all key-value pairs from the specified hash map.
 func (c *MemoryCache) HGetAll(hash string) map[string]string {
 	result := make(map[string]string)
 	if hashMapI, ok := c.hsets.Load(hash); ok {
@@ -40,7 +74,20 @@ func (c *MemoryCache) HGetAll(hash string) map[string]string {
 	return result
 }
 
-// HScan implements Redis HSCAN command with optimized pattern matching
+// HScan iterates over the fields of a hash stored in memory, returning a slice of
+// field-value pairs that match the given pattern. The iteration starts from the
+// specified cursor position and returns up to the specified count of field-value pairs.
+// It returns the resulting slice and the next cursor position to continue the iteration.
+//
+// Parameters:
+//   - hash: The key of the hash to scan.
+//   - cursor: The position to start scanning from.
+//   - matchPattern: The pattern to match fields against.
+//   - count: The maximum number of field-value pairs to return.
+//
+// Returns:
+//   - []string: A slice of field-value pairs that match the pattern.
+//   - int: The next cursor position to continue the iteration.
 func (c *MemoryCache) HScan(hash string, cursor int, matchPattern string, count int) ([]string, int) {
 	hashMapI, exists := c.hsets.Load(hash)
 	if !exists {
@@ -98,6 +145,18 @@ func (c *MemoryCache) HScan(hash string, cursor int, matchPattern string, count 
 	return finalResult, nextCursor
 }
 
+// HDel deletes a field from a hash in the memory cache.
+// It returns true if the field was successfully deleted, and false if the field did not exist.
+// If the hash becomes empty after the deletion, it is removed from the cache.
+// The method also increments the version of the key.
+//
+// Parameters:
+//   - hash: The key of the hash from which the field should be deleted.
+//   - field: The field to delete from the hash.
+//
+// Returns:
+//   - bool: True if the field was deleted, false if the field did not exist.
+//   - error: An error if something went wrong during the deletion.
 func (c *MemoryCache) HDel(hash string, field string) (bool, error) {
 	hashMapI, exists := c.hsets.Load(hash)
 	if !exists {
@@ -127,7 +186,18 @@ func (c *MemoryCache) HDel(hash string, field string) (bool, error) {
 	return true, nil
 }
 
-// HIncrBy increments the integer value of a hash field by the given increment
+// HIncrBy increments the integer value of a hash field by the given increment.
+// If the field does not exist, it is set to 0 before performing the operation.
+// If the field contains a value that is not an integer, an error is returned.
+//
+// Parameters:
+//   - key: The key of the hash.
+//   - field: The field within the hash to increment.
+//   - increment: The value to increment the field by.
+//
+// Returns:
+//   - int64: The new value of the field after the increment.
+//   - error: An error if the field value is not an integer.
 func (c *MemoryCache) HIncrBy(key, field string, increment int64) (int64, error) {
 	var hashMap sync.Map
 	actual, _ := c.hsets.LoadOrStore(key, &hashMap)
@@ -155,7 +225,21 @@ func (c *MemoryCache) HIncrBy(key, field string, increment int64) (int64, error)
 	}
 }
 
-// HIncrByFloat increments the float value of a hash field by the given increment
+// HIncrByFloat increments the float64 value of a hash field by the given increment.
+// If the field does not exist, it is set to 0 before performing the operation.
+// The function returns the new value of the field after the increment.
+//
+// Parameters:
+//   - key: The key of the hash.
+//   - field: The field within the hash to increment.
+//   - increment: The value to increment the field by.
+//
+// Returns:
+//   - float64: The new value of the field after the increment.
+//   - error: An error if the current value of the field is not a valid float64.
+//
+// Errors:
+//   - Returns an error if the current value of the field is not a valid float64.
 func (c *MemoryCache) HIncrByFloat(key, field string, increment float64) (float64, error) {
 	var hashMap sync.Map
 	actual, _ := c.hsets.LoadOrStore(key, &hashMap)
@@ -186,6 +270,18 @@ func (c *MemoryCache) HIncrByFloat(key, field string, increment float64) (float6
 	}
 }
 
+// HDelIf deletes a field from a hash stored at key only if the field's current value matches the expected value.
+// It returns true if the field was deleted, and false otherwise. If the hash becomes empty after the deletion,
+// the hash itself is removed from the cache.
+//
+// Parameters:
+//   - key: The key of the hash.
+//   - field: The field within the hash to delete.
+//   - expectedValue: The value that the field must have for the deletion to occur.
+//
+// Returns:
+//   - bool: True if the field was deleted, false otherwise.
+//   - error: An error if any occurred during the operation.
 func (c *MemoryCache) HDelIf(key string, field string, expectedValue string) (bool, error) {
 	// Get the hash map
 	hashI, exists := c.hsets.Load(key)
@@ -225,6 +321,22 @@ func (c *MemoryCache) HDelIf(key string, field string, expectedValue string) (bo
 	return true, nil
 }
 
+// HIncrByFloatIf increments the float value of a hash field by the given increment
+// if the current value matches the expected value.
+//
+// Parameters:
+//   - key: The key of the hash.
+//   - field: The field within the hash to increment.
+//   - increment: The amount to increment the field's value by.
+//   - expectedValue: The expected current value of the field.
+//
+// Returns:
+//   - float64: The new value of the field after incrementing.
+//   - bool: A boolean indicating whether the increment was performed.
+//   - error: An error if the current value is not a valid float or any other issue occurs.
+//
+// If the field does not exist or the current value does not match the expected value,
+// the function returns 0, false, nil.
 func (c *MemoryCache) HIncrByFloatIf(key string, field string, increment float64, expectedValue string) (float64, bool, error) {
 	// Get or create hash
 	hashI, _ := c.hsets.LoadOrStore(key, &sync.Map{})
@@ -260,6 +372,18 @@ func (c *MemoryCache) HIncrByFloatIf(key string, field string, increment float64
 	return newValue, true, nil
 }
 
+// HScanMatch scans the hash map for keys matching the given pattern starting from the specified cursor position.
+// It returns a slice of matched keys and their corresponding values, along with the next cursor position.
+//
+// Parameters:
+//   - hash: The key of the hash map to scan.
+//   - cursor: The position to start scanning from.
+//   - matchPattern: The pattern to match keys against.
+//   - count: The maximum number of matched keys to return.
+//
+// Returns:
+//   - []string: A slice containing matched keys and their corresponding values.
+//   - int: The next cursor position for subsequent scans.
 func (c *MemoryCache) HScanMatch(hash string, cursor int, matchPattern string, count int) ([]string, int) {
 	// Get the hash
 	hashI, exists := c.hsets.Load(hash)

@@ -9,7 +9,16 @@ import (
 	"github.com/genc-murat/crystalcache/internal/core/models"
 )
 
-// BFAdd adds an item to a Bloom Filter
+// BFAdd adds an item to the Bloom filter associated with the given key.
+// If the item is not already in the filter, it adds the item and increments the key version.
+//
+// Parameters:
+//   - key: The key associated with the Bloom filter.
+//   - item: The item to be added to the Bloom filter.
+//
+// Returns:
+//   - bool: True if the item was not already in the filter, false otherwise.
+//   - error: An error if any occurred during the operation.
 func (c *MemoryCache) BFAdd(key string, item string) (bool, error) {
 	filterI, _ := c.bfilters.LoadOrStore(key, models.NewBloomFilter(models.BloomFilterConfig{
 		ExpectedItems:     1000000, // Default capacity
@@ -26,7 +35,17 @@ func (c *MemoryCache) BFAdd(key string, item string) (bool, error) {
 	return !exists, nil
 }
 
-// BFExists checks whether an item exists in a Bloom Filter
+// BFExists checks if the given item exists in the Bloom filter associated with the specified key.
+// It returns true if the item exists, false otherwise. If the key does not exist in the cache,
+// it returns false and no error.
+//
+// Parameters:
+//   - key: The key associated with the Bloom filter.
+//   - item: The item to check for existence in the Bloom filter.
+//
+// Returns:
+//   - bool: True if the item exists in the Bloom filter, false otherwise.
+//   - error: An error if there is an issue with the operation.
 func (c *MemoryCache) BFExists(key string, item string) (bool, error) {
 	filterI, exists := c.bfilters.Load(key)
 	if !exists {
@@ -37,7 +56,16 @@ func (c *MemoryCache) BFExists(key string, item string) (bool, error) {
 	return filter.Contains([]byte(item)), nil
 }
 
-// BFReserve creates a new Bloom Filter with custom parameters
+// BFReserve reserves a Bloom filter for the given key with the specified error rate and capacity.
+// It returns an error if the error rate is not between 0 and 1, or if the capacity is zero.
+//
+// Parameters:
+//   - key: The key for which the Bloom filter is reserved.
+//   - errorRate: The desired false positive rate for the Bloom filter. Must be between 0 and 1.
+//   - capacity: The expected number of items to be stored in the Bloom filter. Must be positive.
+//
+// Returns:
+//   - error: An error if the error rate is out of bounds or if the capacity is zero, otherwise nil.
 func (c *MemoryCache) BFReserve(key string, errorRate float64, capacity uint) error {
 	if errorRate <= 0 || errorRate >= 1 {
 		return fmt.Errorf("ERR error rate should be between 0 and 1")
@@ -57,7 +85,17 @@ func (c *MemoryCache) BFReserve(key string, errorRate float64, capacity uint) er
 	return nil
 }
 
-// BFMAdd adds multiple items to a Bloom Filter
+// BFMAdd adds a list of items to the Bloom filter associated with the given key in the memory cache.
+// It returns a slice of booleans indicating whether each item was newly added (true) or already existed (false).
+// If any item is newly added, the key version is incremented.
+//
+// Parameters:
+//   - key: The key associated with the Bloom filter in the memory cache.
+//   - items: A slice of strings representing the items to be added to the Bloom filter.
+//
+// Returns:
+//   - []bool: A slice of booleans indicating the result for each item (true if newly added, false if already existed).
+//   - error: An error if any occurs during the operation.
 func (c *MemoryCache) BFMAdd(key string, items []string) ([]bool, error) {
 	filterI, _ := c.bfilters.LoadOrStore(key, models.NewBloomFilter(models.BloomFilterConfig{
 		ExpectedItems:     1000000,
@@ -84,7 +122,16 @@ func (c *MemoryCache) BFMAdd(key string, items []string) ([]bool, error) {
 	return results, nil
 }
 
-// BFMExists checks for multiple items in a Bloom Filter
+// BFMExists checks if the given items exist in the Bloom filter associated with the specified key.
+// It returns a slice of booleans indicating the existence of each item and an error if any occurs.
+//
+// Parameters:
+//   - key: The key associated with the Bloom filter.
+//   - items: A slice of strings representing the items to check for existence in the Bloom filter.
+//
+// Returns:
+//   - A slice of booleans where each boolean corresponds to the existence of the respective item in the Bloom filter.
+//   - An error if any occurs during the operation.
 func (c *MemoryCache) BFMExists(key string, items []string) ([]bool, error) {
 	filterI, exists := c.bfilters.Load(key)
 	if !exists {
@@ -102,7 +149,17 @@ func (c *MemoryCache) BFMExists(key string, items []string) ([]bool, error) {
 	return results, nil
 }
 
-// BFInfo returns information about a Bloom Filter
+// BFInfo retrieves information about a Bloom filter associated with the given key.
+// It returns a map containing various statistics about the Bloom filter, such as
+// its size, hash count, element count, bitset size, number of set bits, false positive
+// rate, and memory usage.
+//
+// Parameters:
+//   - key: The key associated with the Bloom filter.
+//
+// Returns:
+//   - map[string]interface{}: A map containing the Bloom filter statistics.
+//   - error: An error if the key does not exist or any other issue occurs.
 func (c *MemoryCache) BFInfo(key string) (map[string]interface{}, error) {
 	filterI, exists := c.bfilters.Load(key)
 	if !exists {
@@ -123,7 +180,15 @@ func (c *MemoryCache) BFInfo(key string) (map[string]interface{}, error) {
 	}, nil
 }
 
-// BFCard returns the cardinality of a Bloom Filter
+// BFCard returns the approximate count of items in the Bloom filter associated with the given key.
+// If the Bloom filter does not exist, it returns 0 and no error.
+//
+// Parameters:
+//   - key: The key associated with the Bloom filter.
+//
+// Returns:
+//   - uint: The approximate count of items in the Bloom filter.
+//   - error: An error if there is an issue retrieving the Bloom filter.
 func (c *MemoryCache) BFCard(key string) (uint, error) {
 	filterI, exists := c.bfilters.Load(key)
 	if !exists {
@@ -134,9 +199,22 @@ func (c *MemoryCache) BFCard(key string) (uint, error) {
 	return filter.ApproximateCount(), nil
 }
 
-// BFScanDump begins an incremental save of the bloom filter's state.
-// For Bloom Filters, a full dump is typically more practical than incremental.
-// This implementation returns the entire filter's data on the first call (iterator 0).
+// BFScanDump serializes and returns the configuration and bitset of a Bloom Filter
+// associated with the given key in the memory cache. The function returns an iterator
+// for further chunks (always 1 if successful, 0 otherwise), the serialized data, and
+// an error if any.
+//
+// The serialized data format is as follows:
+// [ExpectedItems(8 bytes)][FalsePositiveRate(8 bytes)][BitSetDataLength(8 bytes)][BitSetData]
+//
+// Parameters:
+//   - key: The key associated with the Bloom Filter in the memory cache.
+//   - iterator: The iterator for scanning (should be 0 for the initial call).
+//
+// Returns:
+//   - int: The next iterator value (1 if successful, 0 otherwise).
+//   - []byte: The serialized Bloom Filter data.
+//   - error: An error if the key does not exist or if serialization fails.
 func (c *MemoryCache) BFScanDump(key string, iterator int) (int, []byte, error) {
 	filterI, exists := c.bfilters.Load(key)
 	if !exists {
@@ -166,8 +244,24 @@ func (c *MemoryCache) BFScanDump(key string, iterator int) (int, []byte, error) 
 	return 1, data, nil
 }
 
-// BFLoadChunk restores a filter previously saved using SCANDUMP.
-// This implementation expects a single chunk containing the entire filter data.
+// BFLoadChunk loads a chunk of data into a Bloom Filter in the memory cache.
+//
+// Parameters:
+//   - key: The key associated with the Bloom Filter.
+//   - iterator: The iterator value, which must be 1 for this function to proceed.
+//   - data: The byte slice containing the Bloom Filter data.
+//
+// Returns:
+//   - error: An error if the iterator is not 1, if the data format is invalid,
+//     if the data is incomplete, or if deserialization of the bitset fails.
+//
+// The data byte slice is expected to have the following format:
+//   - The first 8 bytes represent the expected number of items (uint64, big-endian).
+//   - The next 8 bytes represent the false positive rate (float64, little-endian).
+//   - The next 8 bytes represent the length of the bitset data (uint64, big-endian).
+//   - The remaining bytes are the bitset data.
+//
+// The function deserializes the bitset data and stores the Bloom Filter in the memory cache.
 func (c *MemoryCache) BFLoadChunk(key string, iterator int, data []byte) error {
 	if iterator != 1 {
 		return fmt.Errorf("ERR invalid iterator value for BFLoadChunk, expected 1, got %d", iterator)
@@ -203,7 +297,19 @@ func (c *MemoryCache) BFLoadChunk(key string, iterator int, data []byte) error {
 	return nil
 }
 
-// BFInsert creates a new Bloom Filter and adds items in one operation
+// BFInsert inserts a list of items into a Bloom filter associated with the given key.
+// It returns a slice of booleans indicating whether each item was already present in the filter,
+// and an error if the error rate is not between 0 and 1 or if the capacity is zero.
+//
+// Parameters:
+//   - key: A string representing the key associated with the Bloom filter.
+//   - errorRate: A float64 representing the desired false positive rate of the Bloom filter.
+//   - capacity: An unsigned integer representing the expected number of items to be inserted into the filter.
+//   - items: A slice of strings representing the items to be inserted into the Bloom filter.
+//
+// Returns:
+//   - A slice of booleans where each boolean indicates whether the corresponding item was already present in the filter.
+//   - An error if the error rate is not between 0 and 1 or if the capacity is zero.
 func (c *MemoryCache) BFInsert(key string, errorRate float64, capacity uint, items []string) ([]bool, error) {
 	if errorRate <= 0 || errorRate >= 1 {
 		return nil, fmt.Errorf("ERR error rate should be between 0 and 1")
@@ -230,6 +336,9 @@ func (c *MemoryCache) BFInsert(key string, errorRate float64, capacity uint, ite
 	return results, nil
 }
 
+// defragBloomFilters defragments the bloom filters in the memory cache.
+// It calls the defragSyncMap method to perform the defragmentation and
+// updates the bloom filters map with the defragmented version.
 func (c *MemoryCache) defragBloomFilters() {
 	c.bfilters = c.defragSyncMap(c.bfilters)
 }

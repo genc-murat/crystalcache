@@ -7,7 +7,16 @@ import (
 	"github.com/genc-murat/crystalcache/internal/core/models"
 )
 
-// PFAdd adds elements to a HyperLogLog
+// PFAdd adds the specified elements to the HyperLogLog data structure associated with the given key.
+// It returns a boolean indicating whether the HyperLogLog was modified and an error if any occurred.
+//
+// Parameters:
+//   - key: The key associated with the HyperLogLog data structure.
+//   - elements: The elements to be added to the HyperLogLog.
+//
+// Returns:
+//   - bool: True if the HyperLogLog was modified, false otherwise.
+//   - error: An error if any occurred during the operation.
 func (c *MemoryCache) PFAdd(key string, elements ...string) (bool, error) {
 	hllI, _ := c.hlls.LoadOrStore(key, models.NewHyperLogLog())
 	hll := hllI.(*models.HyperLogLog)
@@ -31,7 +40,19 @@ func (c *MemoryCache) PFAdd(key string, elements ...string) (bool, error) {
 	return modified, nil
 }
 
-// PFCount returns the estimated cardinality
+// PFCount returns the approximate cardinality of the set(s) stored at the given key(s).
+// If a single key is provided, it returns the cardinality of the set stored at that key.
+// If multiple keys are provided, it merges the sets stored at those keys and returns the cardinality of the merged set.
+// If no keys are provided, it returns an error indicating that at least one key is required.
+//
+// Parameters:
+//
+//	keys - One or more keys identifying the sets to be counted.
+//
+// Returns:
+//
+//	int64 - The approximate cardinality of the set(s).
+//	error - An error if no keys are provided or if any other error occurs.
 func (c *MemoryCache) PFCount(keys ...string) (int64, error) {
 	if len(keys) == 0 {
 		return 0, fmt.Errorf("at least one key is required")
@@ -58,7 +79,18 @@ func (c *MemoryCache) PFCount(keys ...string) (int64, error) {
 	return int64(merged.Count()), nil
 }
 
-// PFMerge merges multiple HyperLogLogs into a destination key
+// PFMerge merges multiple HyperLogLog structures into a destination HyperLogLog.
+// It takes a destination key and one or more source keys. If no source keys are provided,
+// it returns an error. The function creates or retrieves the destination HyperLogLog,
+// then merges all source HyperLogLogs into the destination. Finally, it increments the
+// version of the destination key.
+//
+// Parameters:
+//   - destKey: The key for the destination HyperLogLog.
+//   - sourceKeys: One or more keys for the source HyperLogLogs.
+//
+// Returns:
+//   - error: An error if no source keys are provided, otherwise nil.
 func (c *MemoryCache) PFMerge(destKey string, sourceKeys ...string) error {
 	if len(sourceKeys) == 0 {
 		return fmt.Errorf("at least one source key is required")
@@ -80,7 +112,15 @@ func (c *MemoryCache) PFMerge(destKey string, sourceKeys ...string) error {
 	return nil
 }
 
-// PFDebug returns debug information about a HyperLogLog
+// PFDebug retrieves the debug information of a HyperLogLog associated with the given key.
+// It returns a map containing the debug information and an error if the key does not exist.
+//
+// Parameters:
+//   - key: The key associated with the HyperLogLog.
+//
+// Returns:
+//   - map[string]interface{}: A map containing the debug information of the HyperLogLog.
+//   - error: An error if the key does not exist.
 func (c *MemoryCache) PFDebug(key string) (map[string]interface{}, error) {
 	hllI, exists := c.hlls.Load(key)
 	if !exists {
@@ -91,7 +131,12 @@ func (c *MemoryCache) PFDebug(key string) (map[string]interface{}, error) {
 	return hll.Debug(), nil
 }
 
-// PFSelfTest runs internal consistency checks
+// PFSelfTest performs a self-test on the HyperLogLog (HLL) implementation.
+// It creates a test HLL, adds a set of test data to it, and verifies that
+// the estimated count is within an expected range.
+//
+// Returns an error if the self-test fails, indicating that the estimated
+// count is outside the expected range.
 func (c *MemoryCache) PFSelfTest() error {
 	// Create a test HLL
 	hll := models.NewHyperLogLog()
@@ -116,6 +161,8 @@ func (c *MemoryCache) PFSelfTest() error {
 	return nil
 }
 
+// defragHLL defragments the HyperLogLog (HLL) data structures stored in the memory cache.
+// It optimizes the memory usage by consolidating fragmented HLL data structures.
 func (c *MemoryCache) defragHLL() {
 	c.hlls = c.defragSyncMap(c.hlls)
 }

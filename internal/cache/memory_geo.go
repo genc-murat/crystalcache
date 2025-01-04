@@ -10,6 +10,23 @@ import (
 	"github.com/genc-murat/crystalcache/internal/core/models"
 )
 
+// GeoAdd adds one or more GeoPoint items to the in-memory cache under the specified key.
+// It returns the number of items successfully added and an error if any occurred.
+//
+// Parameters:
+//   - key: A string representing the key under which the GeoPoint items will be stored.
+//   - items: A variadic parameter of GeoPoint items to be added to the cache.
+//
+// Returns:
+//   - int: The number of GeoPoint items successfully added to the cache.
+//   - error: An error if any occurred during the operation.
+//
+// The function performs the following steps:
+//  1. Loads or stores a new sync.Map for the given key in the geoData map.
+//  2. Iterates over the provided GeoPoint items.
+//  3. Validates the coordinates of each item.
+//  4. Encodes the longitude and latitude into a GeoHash and stores the item in the sync.Map.
+//  5. Increments the key version if any items were added.
 func (c *MemoryCache) GeoAdd(key string, items ...models.GeoPoint) (int, error) {
 	geoSetI, _ := c.geoData.LoadOrStore(key, &sync.Map{})
 	geoSet := geoSetI.(*sync.Map)
@@ -31,6 +48,17 @@ func (c *MemoryCache) GeoAdd(key string, items ...models.GeoPoint) (int, error) 
 
 	return added, nil
 }
+
+// encodeGeoHash encodes the given longitude and latitude into a GeoHash string.
+// The GeoHash is a string representation of the geographic location, using base32 encoding.
+// The function returns an 11-character GeoHash string.
+//
+// Parameters:
+//   - lon: The longitude of the location to encode.
+//   - lat: The latitude of the location to encode.
+//
+// Returns:
+//   - A string representing the GeoHash of the given longitude and latitude.
 func encodeGeoHash(lon, lat float64) string {
 	const base32 = "0123456789bcdefghjkmnpqrstuvwxyz"
 	var hash strings.Builder
@@ -74,6 +102,18 @@ func encodeGeoHash(lon, lat float64) string {
 	return hash.String()
 }
 
+// GeoDist calculates the distance between two members of a geospatial index represented by the given key.
+// The distance is calculated using the Haversine formula and returned in the specified unit.
+//
+// Parameters:
+//   - key: The key of the geospatial index.
+//   - member1: The first member whose coordinates are used for distance calculation.
+//   - member2: The second member whose coordinates are used for distance calculation.
+//   - unit: The unit of measurement for the distance (e.g., "m" for meters, "km" for kilometers).
+//
+// Returns:
+//   - float64: The calculated distance between the two members in the specified unit.
+//   - error: An error if the key or members are not found, or if any other issue occurs during calculation.
 func (c *MemoryCache) GeoDist(key, member1, member2, unit string) (float64, error) {
 	geoSetI, exists := c.geoData.Load(key)
 	if !exists {
@@ -95,6 +135,17 @@ func (c *MemoryCache) GeoDist(key, member1, member2, unit string) (float64, erro
 	return convertDistance(dist, unit), nil
 }
 
+// GeoPos retrieves the geographical positions of the specified members from the cache.
+//
+// Parameters:
+//   - key: The key identifying the geo set in the cache.
+//   - members: A variadic list of member names whose geographical positions are to be retrieved.
+//
+// Returns:
+//   - A slice of pointers to GeoPoint objects corresponding to the specified members. If a member
+//     does not exist in the geo set, its position in the slice will be nil.
+//   - An error if any issue occurs during the retrieval process. If the key does not exist in the
+//     cache, both the slice and error will be nil.
 func (c *MemoryCache) GeoPos(key string, members ...string) ([]*models.GeoPoint, error) {
 	geoSetI, exists := c.geoData.Load(key)
 	if !exists {
@@ -113,12 +164,34 @@ func (c *MemoryCache) GeoPos(key string, members ...string) ([]*models.GeoPoint,
 	return results, nil
 }
 
-// Helper functions
-
+// isValidCoordinate checks if the given longitude and latitude values
+// are within the valid ranges for geographic coordinates.
+// Longitude must be between -180 and 180 degrees.
+// Latitude must be between -85.05112878 and 85.05112878 degrees.
+//
+// Parameters:
+//
+//	lon - Longitude value to be checked.
+//	lat - Latitude value to be checked.
+//
+// Returns:
+//
+//	bool - true if both longitude and latitude are within valid ranges, false otherwise.
 func isValidCoordinate(lon, lat float64) bool {
 	return lon >= -180 && lon <= 180 && lat >= -85.05112878 && lat <= 85.05112878
 }
 
+// calculateDistance calculates the distance between two points on the Earth's surface
+// specified by their longitude and latitude in decimal degrees using the Haversine formula.
+//
+// Parameters:
+//   - lon1: Longitude of the first point in decimal degrees.
+//   - lat1: Latitude of the first point in decimal degrees.
+//   - lon2: Longitude of the second point in decimal degrees.
+//   - lat2: Latitude of the second point in decimal degrees.
+//
+// Returns:
+//   - The distance between the two points in meters.
 func calculateDistance(lon1, lat1, lon2, lat2 float64) float64 {
 	const earthRadius = 6371000 // Earth's radius in meters
 
@@ -135,6 +208,17 @@ func calculateDistance(lon1, lat1, lon2, lat2 float64) float64 {
 	return earthRadius * c
 }
 
+// convertToMeters converts a given distance to meters based on the specified unit.
+// Supported units are kilometers ("km"), miles ("mi"), feet ("ft"), and meters ("m").
+// If the unit is not recognized, the function assumes the distance is already in meters.
+//
+// Parameters:
+//   - distance: The distance to be converted.
+//   - unit: The unit of the distance (e.g., "km", "mi", "ft", "m").
+//
+// Returns:
+//
+//	The distance converted to meters.
 func convertToMeters(distance float64, unit string) float64 {
 	switch strings.ToLower(unit) {
 	case "km":
@@ -148,6 +232,19 @@ func convertToMeters(distance float64, unit string) float64 {
 	}
 }
 
+// convertDistance converts a distance from meters to the specified unit.
+// Supported units are:
+// - "km" for kilometers
+// - "mi" for miles
+// - "ft" for feet
+// If the unit is not recognized, the function returns the distance in meters.
+//
+// Parameters:
+// - meters: the distance in meters to be converted.
+// - unit: the unit to convert the distance to.
+//
+// Returns:
+// - The converted distance in the specified unit.
 func convertDistance(meters float64, unit string) float64 {
 	switch strings.ToLower(unit) {
 	case "km":
@@ -161,6 +258,13 @@ func convertDistance(meters float64, unit string) float64 {
 	}
 }
 
+// sortGeoResults sorts a slice of GeoPoint results based on the specified sortOrder.
+// If sortOrder is "ASC", the results are sorted in ascending order of Distance.
+// If sortOrder is "DESC", the results are sorted in descending order of Distance.
+//
+// Parameters:
+//   - results: A slice of GeoPoint objects to be sorted.
+//   - sortOrder: A string indicating the sort order, either "ASC" for ascending or "DESC" for descending.
 func sortGeoResults(results []models.GeoPoint, sortOrder string) {
 	if sortOrder == "ASC" {
 		sort.SliceStable(results, func(i, j int) bool {
@@ -173,6 +277,24 @@ func sortGeoResults(results []models.GeoPoint, sortOrder string) {
 	}
 }
 
+// GeoRadius retrieves geo points within a specified radius from a given location.
+// It searches for geo points stored under the provided key and returns those within the specified radius.
+//
+// Parameters:
+//   - key: The key under which the geo points are stored.
+//   - longitude: The longitude of the center point.
+//   - latitude: The latitude of the center point.
+//   - radius: The radius within which to search for geo points.
+//   - unit: The unit of the radius (e.g., "m" for meters, "km" for kilometers).
+//   - withDist: If true, includes the distance of each point from the center.
+//   - withCoord: If true, includes the coordinates of each point.
+//   - withHash: If true, includes the hash of each point.
+//   - count: The maximum number of results to return. If 0, returns all results.
+//   - sortOption: The sorting option for the results ("ASC" for ascending, "DESC" for descending).
+//
+// Returns:
+//   - A slice of GeoPoint objects that are within the specified radius.
+//   - An error if any issues occur during the retrieval process.
 func (c *MemoryCache) GeoRadius(key string, longitude, latitude, radius float64, unit string, withDist, withCoord, withHash bool, count int, sortOption string) ([]models.GeoPoint, error) {
 	geoSetI, exists := c.geoData.Load(key)
 	if !exists {
@@ -207,6 +329,32 @@ func (c *MemoryCache) GeoRadius(key string, longitude, latitude, radius float64,
 	return results, nil
 }
 
+// GeoSearch searches for geographical points stored in the memory cache based on the provided options.
+// It supports searching by radius or bounding box, and can sort and limit the results.
+//
+// Parameters:
+//   - key: The key identifying the set of geographical points.
+//   - options: A pointer to GeoSearchOptions containing search parameters.
+//
+// Returns:
+//   - A slice of GeoPoint containing the search results.
+//   - An error if the search fails.
+//
+// The search options can include:
+//   - FromMember: The member name to start the search from. If provided, its coordinates will be used as the center.
+//   - FromLon, FromLat: The longitude and latitude to start the search from. These are set if FromMember is provided.
+//   - ByRadius: A boolean indicating if the search should be within a radius.
+//   - Radius: The radius distance for the search.
+//   - Unit: The unit of the radius (e.g., meters, kilometers).
+//   - ByBox: A boolean indicating if the search should be within a bounding box.
+//   - BoxWidth, BoxHeight: The width and height of the bounding box.
+//   - Sort: The sorting order of the results ("ASC" or "DESC").
+//   - Count: The maximum number of results to return.
+//
+// If FromMember is provided but not found, an error is returned.
+// If ByRadius is true, the search will include points within the specified radius from the center.
+// If ByBox is true, the search will include points within the specified bounding box.
+// The results can be sorted and limited based on the options provided.
 func (c *MemoryCache) GeoSearch(key string, options *models.GeoSearchOptions) ([]models.GeoPoint, error) {
 	geoSetI, exists := c.geoData.Load(key)
 	if !exists {
@@ -270,6 +418,17 @@ func (c *MemoryCache) GeoSearch(key string, options *models.GeoSearchOptions) ([
 	return results, nil
 }
 
+// GeoSearchStore searches for geographical points based on the given options
+// from the source key and stores the results in the destination key.
+//
+// Parameters:
+// - destKey: The key where the search results will be stored.
+// - srcKey: The key from which the geographical search will be performed.
+// - options: The options to use for the geographical search.
+//
+// Returns:
+// - int: The number of points stored in the destination key.
+// - error: An error if the search or store operation fails.
 func (c *MemoryCache) GeoSearchStore(destKey, srcKey string, options *models.GeoSearchOptions) (int, error) {
 	results, err := c.GeoSearch(srcKey, options)
 	if err != nil {

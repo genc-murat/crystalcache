@@ -8,6 +8,24 @@ import (
 	"github.com/genc-murat/crystalcache/internal/core/models"
 )
 
+// DelType deletes all entries of the specified type from the memory cache.
+// It supports the following types: string, hash, list, set, zset, json, stream, and bitmap.
+// For each deleted entry, it increments the key version and updates the deletion count.
+//
+// Parameters:
+//   - typeName: The type of entries to delete. Must be one of: string, hash, list, set, zset, json, stream, bitmap.
+//
+// Returns:
+//   - int64: The number of deleted entries.
+//   - error: An error if the typeName is unknown.
+//
+// Example usage:
+//
+//	deletedCount, err := cache.DelType("string")
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
+//	fmt.Printf("Deleted %d entries of type 'string'\n", deletedCount)
 func (c *MemoryCache) DelType(typeName string) (int64, error) {
 	var deletedCount int64
 
@@ -89,6 +107,17 @@ func (c *MemoryCache) DelType(typeName string) (int64, error) {
 	return deletedCount, nil
 }
 
+// KeyCount returns the number of keys of a specified type in the memory cache.
+// The typeName parameter specifies the type of keys to count and must be one of:
+// "string", "hash", "list", "set", "zset", "json", "stream", or "bitmap".
+// If an unknown type is provided, an error is returned.
+//
+// Parameters:
+//   - typeName: A string representing the type of keys to count.
+//
+// Returns:
+//   - int64: The number of keys of the specified type.
+//   - error: An error if the typeName is unknown.
 func (c *MemoryCache) KeyCount(typeName string) (int64, error) {
 	var count int64
 
@@ -148,6 +177,33 @@ func (c *MemoryCache) KeyCount(typeName string) (int64, error) {
 	return count, nil
 }
 
+// MemoryUsage calculates the memory usage of a given key in the memory cache.
+// It returns a MemoryUsageInfo struct containing detailed memory usage information
+// and an error if the key is not found or any other issue occurs.
+//
+// The memory usage is calculated based on the type of the value associated with the key:
+// - "string": The size of the string value.
+// - "hash": The combined size of all keys and values in the hash map.
+// - "list": The combined size of all elements in the list.
+// - "set": The combined size of all members in the set.
+// - "zset": The combined size of all members in the sorted set, including the score.
+// - "json": The estimated size of the JSON value as a string representation.
+// - "stream": The estimated size based on the average entry size.
+// - "bitmap": The size of the bitmap in bytes.
+// - "none": Returns an error indicating the key is not found.
+//
+// The function also calculates additional overheads:
+// - Pointer overhead for key storage.
+// - Overhead for hash entries, list nodes, set entries, and sorted set entries.
+// - Allocator overhead (approximately 16 bytes per allocation).
+// - Aligned size (rounded up to the nearest 8 bytes).
+//
+// Parameters:
+// - key: The key for which memory usage is to be calculated.
+//
+// Returns:
+// - *models.MemoryUsageInfo: A struct containing detailed memory usage information.
+// - error: An error if the key is not found or any other issue occurs.
 func (c *MemoryCache) MemoryUsage(key string) (*models.MemoryUsageInfo, error) {
 	info := &models.MemoryUsageInfo{
 		PointerSize: strconv.IntSize / 8,

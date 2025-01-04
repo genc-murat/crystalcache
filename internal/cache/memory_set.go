@@ -8,6 +8,21 @@ import (
 	"sync/atomic"
 )
 
+// SAdd adds a member to the set stored at the given key. If the member is
+// added successfully (i.e., it was not already present in the set), it
+// increments the version of the key and returns true. If the member was
+// already present in the set, it returns false.
+//
+// Parameters:
+//
+//	key: The key under which the set is stored.
+//	member: The member to add to the set.
+//
+// Returns:
+//
+//	bool: True if the member was added successfully, false if the member
+//	      was already present in the set.
+//	error: An error if there was an issue adding the member to the set.
 func (c *MemoryCache) SAdd(key string, member string) (bool, error) {
 	setI, _ := c.sets_.LoadOrStore(key, &sync.Map{})
 	actualSet := setI.(*sync.Map)
@@ -20,6 +35,16 @@ func (c *MemoryCache) SAdd(key string, member string) (bool, error) {
 	return false, nil
 }
 
+// SMembers retrieves all the members of the set stored at the given key.
+// It returns a sorted slice of strings containing the members of the set,
+// or an error if the operation fails.
+//
+// Parameters:
+//   - key: The key of the set to retrieve members from.
+//
+// Returns:
+//   - []string: A sorted slice of strings containing the members of the set.
+//   - error: An error if the operation fails, or nil if successful.
 func (c *MemoryCache) SMembers(key string) ([]string, error) {
 	var members []string
 	if setI, ok := c.sets_.Load(key); ok {
@@ -39,6 +64,14 @@ func (c *MemoryCache) SMembers(key string) ([]string, error) {
 	return members, nil
 }
 
+// SCard returns the number of elements in the set stored at the given key.
+// If the set does not exist, it returns 0.
+//
+// Parameters:
+//   - key: The key of the set.
+//
+// Returns:
+//   - int: The number of elements in the set.
 func (c *MemoryCache) SCard(key string) int {
 	if setI, ok := c.sets_.Load(key); ok {
 		count := 0
@@ -51,6 +84,19 @@ func (c *MemoryCache) SCard(key string) int {
 	return 0
 }
 
+// SRem removes a member from the set stored at the given key.
+// If the member was present in the set and removed successfully, it returns true.
+// If the member was not present in the set, it returns false.
+// If the set becomes empty after removing the member, the set is deleted from the cache.
+// It returns an error if any issue occurs during the operation.
+//
+// Parameters:
+//   - key: The key of the set from which the member should be removed.
+//   - member: The member to be removed from the set.
+//
+// Returns:
+//   - bool: True if the member was successfully removed, false otherwise.
+//   - error: An error if any issue occurs during the operation.
 func (c *MemoryCache) SRem(key string, member string) (bool, error) {
 	if setI, ok := c.sets_.Load(key); ok {
 		if _, exists := setI.(*sync.Map).LoadAndDelete(member); exists {
@@ -69,6 +115,15 @@ func (c *MemoryCache) SRem(key string, member string) (bool, error) {
 	return false, nil
 }
 
+// SIsMember checks if a given member exists in the set associated with the specified key.
+// It returns true if the member exists in the set, otherwise it returns false.
+//
+// Parameters:
+//   - key: The key associated with the set.
+//   - member: The member to check for existence in the set.
+//
+// Returns:
+//   - bool: True if the member exists in the set, false otherwise.
 func (c *MemoryCache) SIsMember(key string, member string) bool {
 	if setI, ok := c.sets_.Load(key); ok {
 		_, exists := setI.(*sync.Map).Load(member)
@@ -77,6 +132,22 @@ func (c *MemoryCache) SIsMember(key string, member string) bool {
 	return false
 }
 
+// SInter returns the intersection of multiple sets stored in the MemoryCache.
+// The sets are identified by the provided keys. If no keys are provided, an
+// empty slice is returned. The function sorts the keys based on the size of
+// the sets they reference, then iterates through the sets to find common
+// elements. The result is a sorted slice of strings containing the members
+// present in all sets.
+//
+// Parameters:
+//
+//	keys - A variadic parameter representing the keys of the sets to intersect.
+//
+// Returns:
+//
+//	A sorted slice of strings containing the members present in all sets
+//	identified by the provided keys. If any set does not exist or if there
+//	are no common members, an empty slice is returned.
 func (c *MemoryCache) SInter(keys ...string) []string {
 	if len(keys) == 0 {
 		return []string{}
@@ -166,6 +237,16 @@ func (c *MemoryCache) SUnion(keys ...string) []string {
 	return union
 }
 
+// SDiff returns the members of the set resulting from the difference between the first set
+// and all the successive sets specified by the given keys. If no keys are provided, it returns
+// an empty slice. If only one key is provided, it returns all members of the set associated
+// with that key. The result is sorted in lexicographical order.
+//
+// Parameters:
+// - keys: A variadic list of string keys representing the sets to be compared.
+//
+// Returns:
+// - A sorted slice of strings containing the members of the resulting set difference.
 func (c *MemoryCache) SDiff(keys ...string) []string {
 	if len(keys) == 0 {
 		return []string{}
@@ -217,7 +298,22 @@ func (c *MemoryCache) SDiff(keys ...string) []string {
 	return diff
 }
 
-// SMemRandomCount returns the specified number of random members from a set
+// SMemRandomCount retrieves a specified number of random members from a set stored in memory.
+// The set is identified by the provided key. The function allows for the option to include
+// duplicate members in the result.
+//
+// Parameters:
+//   - key: The key identifying the set in the memory cache.
+//   - count: The number of random members to retrieve from the set.
+//   - allowDuplicates: A boolean flag indicating whether duplicate members are allowed in the result.
+//
+// Returns:
+//   - A slice of strings containing the random members from the set.
+//   - An error if any issues occur during the operation.
+//
+// If the set does not exist or is empty, an empty slice is returned without an error.
+// If the count is greater than the number of members in the set and duplicates are not allowed,
+// all members are returned in random order.
 func (c *MemoryCache) SMemRandomCount(key string, count int, allowDuplicates bool) ([]string, error) {
 	// Get the set from sync.Map
 	setI, exists := c.sets_.Load(key)
@@ -268,6 +364,18 @@ func (c *MemoryCache) SMemRandomCount(key string, count int, allowDuplicates boo
 	return result, nil
 }
 
+// SDiffStoreDel computes the difference between the first set and all subsequent sets,
+// stores the result in the destination set, and deletes the elements from the source sets
+// that were used in the difference. If the first set becomes empty after the operation,
+// it is removed from the cache.
+//
+// Parameters:
+// - destination: The key for the destination set where the result will be stored.
+// - keys: A slice of keys representing the sets to compute the difference from.
+//
+// Returns:
+// - int: The number of elements in the resulting set.
+// - error: An error if the number of keys is zero or any other issue occurs during the operation.
 func (c *MemoryCache) SDiffStoreDel(destination string, keys []string) (int, error) {
 	if len(keys) == 0 {
 		return 0, fmt.Errorf("ERR wrong number of arguments")
@@ -338,6 +446,17 @@ func (c *MemoryCache) SDiffStoreDel(destination string, keys []string) (int, err
 	return len(result), nil
 }
 
+// SMembersPattern retrieves all members of a set stored at the given key that match the specified pattern.
+// If the pattern is "*", all members of the set are returned.
+// The members are returned in a sorted order for consistent ordering.
+//
+// Parameters:
+//   - key: The key of the set to retrieve members from.
+//   - pattern: The pattern to match members against.
+//
+// Returns:
+//   - A slice of strings containing the matching members.
+//   - An error if any issues occur during retrieval.
 func (c *MemoryCache) SMembersPattern(key string, pattern string) ([]string, error) {
 	// Get the set
 	setI, exists := c.sets_.Load(key)

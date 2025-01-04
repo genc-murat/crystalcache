@@ -8,7 +8,18 @@ import (
 	"github.com/genc-murat/crystalcache/internal/core/models"
 )
 
-// FTSugAdd implements suggestion addition
+// FTSugAdd adds a suggestion to the in-memory cache with a given key, string, and score.
+// Additional options can be provided as key-value pairs, such as "PAYLOAD" to specify a payload for the suggestion.
+//
+// Parameters:
+//   - key: The key under which the suggestion is stored.
+//   - str: The suggestion string.
+//   - score: The score associated with the suggestion.
+//   - opts: Optional key-value pairs for additional suggestion properties.
+//
+// Returns:
+//   - bool: Always returns true.
+//   - error: Always returns nil.
 func (c *MemoryCache) FTSugAdd(key, str string, score float64, opts ...string) (bool, error) {
 	dictI, _ := c.suggestions.LoadOrStore(key, models.NewSuggestionDict())
 	dict := dictI.(*models.SuggestionDict)
@@ -33,7 +44,17 @@ func (c *MemoryCache) FTSugAdd(key, str string, score float64, opts ...string) (
 	return true, nil
 }
 
-// FTSugDel implements suggestion deletion
+// FTSugDel removes a suggestion string from the suggestion dictionary associated with the given key.
+// It returns true if the suggestion was successfully removed, and false if the suggestion did not exist.
+// If the key does not exist in the cache, it returns false with no error.
+//
+// Parameters:
+//   - key: The key associated with the suggestion dictionary.
+//   - str: The suggestion string to be removed.
+//
+// Returns:
+//   - bool: True if the suggestion was successfully removed, false otherwise.
+//   - error: An error if there was an issue during the operation.
 func (c *MemoryCache) FTSugDel(key, str string) (bool, error) {
 	dictI, exists := c.suggestions.Load(key)
 	if !exists {
@@ -50,7 +71,21 @@ func (c *MemoryCache) FTSugDel(key, str string) (bool, error) {
 	return false, nil
 }
 
-// FTSugGet implements suggestion retrieval
+// FTSugGet retrieves suggestions from the memory cache based on the provided key and prefix.
+// It supports both fuzzy and non-fuzzy matching and returns a sorted list of suggestions
+// limited by the specified maximum number of results.
+//
+// Parameters:
+//   - key: The key to identify the suggestion dictionary in the cache.
+//   - prefix: The prefix string to match suggestions against.
+//   - fuzzy: A boolean indicating whether to use fuzzy matching (true) or exact prefix matching (false).
+//   - max: The maximum number of suggestions to return. If max is 0 or negative, all matches are returned.
+//
+// Returns:
+//   - A slice of models.Suggestion containing the matching suggestions, sorted by score in descending order.
+//   - An error if any issues occur during retrieval.
+//
+// If the key does not exist in the cache, it returns nil for the suggestions and no error.
 func (c *MemoryCache) FTSugGet(key, prefix string, fuzzy bool, max int) ([]models.Suggestion, error) {
 	dictI, exists := c.suggestions.Load(key)
 	if !exists {
@@ -88,7 +123,15 @@ func (c *MemoryCache) FTSugGet(key, prefix string, fuzzy bool, max int) ([]model
 	return matches, nil
 }
 
-// FTSugLen implements suggestion dictionary size retrieval
+// FTSugLen returns the length of the suggestion dictionary for the given key.
+// If the key does not exist in the cache, it returns 0 and no error.
+//
+// Parameters:
+//   - key: The key for which to retrieve the suggestion dictionary length.
+//
+// Returns:
+//   - int64: The length of the suggestion dictionary.
+//   - error: An error if one occurred, otherwise nil.
 func (c *MemoryCache) FTSugLen(key string) (int64, error) {
 	dictI, exists := c.suggestions.Load(key)
 	if !exists {
@@ -99,9 +142,17 @@ func (c *MemoryCache) FTSugLen(key string) (int64, error) {
 	return int64(len(dict.Entries)), nil
 }
 
-// Helper functions
-
-// levenshteinDistance calculates the edit distance between two strings
+// levenshteinDistance calculates the Levenshtein distance between two strings.
+// The Levenshtein distance is a measure of the difference between two sequences,
+// defined as the minimum number of single-character edits (insertions, deletions, or substitutions)
+// required to change one string into the other.
+//
+// Parameters:
+//   - s1: The first string.
+//   - s2: The second string.
+//
+// Returns:
+//   - An integer representing the Levenshtein distance between the two strings.
 func levenshteinDistance(s1, s2 string) int {
 	if len(s1) == 0 {
 		return len(s2)
@@ -142,6 +193,8 @@ func levenshteinDistance(s1, s2 string) int {
 	return matrix[len(s1)][len(s2)]
 }
 
+// minTwo returns the smaller of two integers a and b.
+// If a is less than b, it returns a; otherwise, it returns b.
 func minTwo(a, b int) int {
 	if a < b {
 		return a
@@ -149,6 +202,17 @@ func minTwo(a, b int) int {
 	return b
 }
 
+// min returns the smallest of three integers a, b, and c.
+// It compares the integers and returns the minimum value.
+//
+// Parameters:
+//   - a: The first integer to compare.
+//   - b: The second integer to compare.
+//   - c: The third integer to compare.
+//
+// Returns:
+//
+//	The smallest integer among a, b, and c.
 func min(a, b, c int) int {
 	if a < b && a < c {
 		return a
@@ -158,6 +222,10 @@ func min(a, b, c int) int {
 	return c
 }
 
+// defragSuggestions defragments the suggestions stored in the MemoryCache.
+// It creates a new sync.Map and copies all entries from the current suggestions map
+// to the new map, ensuring that the new map has the correct capacity for each
+// SuggestionDict. This helps in optimizing memory usage and improving performance.
 func (c *MemoryCache) defragSuggestions() {
 	newSuggestions := &sync.Map{}
 	c.suggestions.Range(func(key, valueI interface{}) bool {
