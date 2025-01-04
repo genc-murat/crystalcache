@@ -304,19 +304,17 @@ func (b *BasicOps) ZRandMember(key string, count int, withScores bool) []models.
 
 // ZRandMemberWithoutScores returns random members without their scores
 func (b *BasicOps) ZRandMemberWithoutScores(key string, count int) []string {
-	// Get the members without scores
-	members := b.ZRandMember(key, count, false)
+	membersWithScores := b.ZRandMember(key, count, false)
 
-	// Preallocate the result slice with the same size as `members`
-	result := make([]string, len(members))
+	result := make([]string, len(membersWithScores))
 
-	// Extract only the `Member` field from each ZSetMember
-	for i, member := range members {
+	for i, member := range membersWithScores {
 		result[i] = member.Member
 	}
 
 	return result
 }
+
 func (b *BasicOps) setSortedMembersIf(key string, newMembers, oldMembers []models.ZSetMember) bool {
 	b.mu.Lock()
 	defer b.mu.Unlock()
