@@ -854,3 +854,43 @@ func (h *HashHandlers) HandleHDelIf(args []models.Value) models.Value {
 		Num:  0,
 	}
 }
+
+func (h *HashHandlers) HandleHIncrByFloatIf(args []models.Value) models.Value {
+	if len(args) != 4 {
+		return models.Value{
+			Type: "error",
+			Str:  "ERR wrong number of arguments for 'hincrbyfloatif' command",
+		}
+	}
+
+	key := args[0].Bulk
+	field := args[1].Bulk
+	increment, err := strconv.ParseFloat(args[2].Bulk, 64)
+	if err != nil {
+		return models.Value{
+			Type: "error",
+			Str:  "ERR increment is not a valid float",
+		}
+	}
+
+	expectedValue := args[3].Bulk
+
+	newValue, success, err := h.cache.HIncrByFloatIf(key, field, increment, expectedValue)
+	if err != nil {
+		return models.Value{
+			Type: "error",
+			Str:  err.Error(),
+		}
+	}
+
+	if !success {
+		return models.Value{
+			Type: "null",
+		}
+	}
+
+	return models.Value{
+		Type: "bulk",
+		Bulk: strconv.FormatFloat(newValue, 'f', -1, 64),
+	}
+}

@@ -558,3 +558,31 @@ func (h *SetHandlers) HandleSMemRandomCount(args []models.Value) models.Value {
 
 	return models.Value{Type: "array", Array: result}
 }
+
+func (h *SetHandlers) HandleSDiffStoreDel(args []models.Value) models.Value {
+	if len(args) < 2 {
+		return models.Value{
+			Type: "error",
+			Str:  "ERR wrong number of arguments for 'sdiffstoredel' command",
+		}
+	}
+
+	destination := args[0].Bulk
+	keys := make([]string, len(args)-1)
+	for i := 1; i < len(args); i++ {
+		keys[i-1] = args[i].Bulk
+	}
+
+	count, err := h.cache.SDiffStoreDel(destination, keys)
+	if err != nil {
+		return models.Value{
+			Type: "error",
+			Str:  err.Error(),
+		}
+	}
+
+	return models.Value{
+		Type: "integer",
+		Num:  count,
+	}
+}

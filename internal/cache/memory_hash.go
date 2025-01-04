@@ -224,3 +224,38 @@ func (c *MemoryCache) HDelIf(key string, field string, expectedValue string) (bo
 	c.incrementKeyVersion(key)
 	return true, nil
 }
+
+func (c *MemoryCache) HIncrByFloatIf(key string, field string, increment float64, expectedValue string) (float64, bool, error) {
+	// Get or create hash
+	hashI, _ := c.hsets.LoadOrStore(key, &sync.Map{})
+	hash := hashI.(*sync.Map)
+
+	// Get current value and check condition
+	currentValueI, exists := hash.Load(field)
+	if !exists {
+		return 0, false, nil
+	}
+
+	currentStr := currentValueI.(string)
+	if currentStr != expectedValue {
+		return 0, false, nil
+	}
+
+	// Parse current value as float
+	currentValue, err := strconv.ParseFloat(currentStr, 64)
+	if err != nil {
+		return 0, false, fmt.Errorf("ERR hash value is not a valid float")
+	}
+
+	// Calculate new value
+	newValue := currentValue + increment
+
+	// Convert new value to string with high precision
+	newStr := strconv.FormatFloat(newValue, 'f', -1, 64)
+
+	// Store new value
+	hash.Store(field, newStr)
+	c.incrementKeyVersion(key)
+
+	return newValue, true, nil
+}

@@ -237,4 +237,6 @@ type Cache interface {
 	ZPopMinMaxBy(key string, by string, isMax bool, count int) []models.ZSetMember
 	LInsertBeforeAfter(key string, before bool, pivot string, values []string, count int) (int, error)
 	HDelIf(key string, field string, value string) (bool, error)
+	HIncrByFloatIf(key string, field string, increment float64, expectedValue string) (float64, bool, error)
+	SDiffStoreDel(destination string, keys []string) (int, error)
 }

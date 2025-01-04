@@ -2626,6 +2626,41 @@ func (rd *RetryDecorator) HDelIf(key string, field string, value string) (bool, 
 	return deleted, finalErr
 }
 
+func (rd *RetryDecorator) HIncrByFloatIf(key string, field string, increment float64, expectedValue string) (float64, bool, error) {
+	var result float64
+	var success bool
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		result, success, err = rd.cache.HIncrByFloatIf(key, field, increment, expectedValue)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return 0, false, err
+	}
+	return result, success, finalErr
+}
+
+func (rd *RetryDecorator) SDiffStoreDel(destination string, keys []string) (int, error) {
+	var count int
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		count, err = rd.cache.SDiffStoreDel(destination, keys)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return 0, err
+	}
+	return count, finalErr
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }

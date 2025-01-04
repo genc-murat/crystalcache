@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"fmt"
 	"math/rand"
 	"sort"
 	"sync"
@@ -265,4 +266,74 @@ func (c *MemoryCache) SMemRandomCount(key string, count int, allowDuplicates boo
 	}
 
 	return result, nil
+}
+
+func (c *MemoryCache) SDiffStoreDel(destination string, keys []string) (int, error) {
+	if len(keys) == 0 {
+		return 0, fmt.Errorf("ERR wrong number of arguments")
+	}
+
+	// Lock all sets to ensure atomicity
+	c.defragMu.Lock()
+	defer c.defragMu.Unlock()
+
+	// First, compute the difference
+	result := make(map[string]bool)
+
+	// Get the first set
+	firstSetI, exists := c.sets_.Load(keys[0])
+	if !exists {
+		return 0, nil
+	}
+	firstSet := firstSetI.(*sync.Map)
+
+	// Add all elements from first set to result
+	firstSet.Range(func(key, _ interface{}) bool {
+		result[key.(string)] = true
+		return true
+	})
+
+	// Remove elements that exist in other sets
+	for _, key := range keys[1:] {
+		if setI, exists := c.sets_.Load(key); exists {
+			set := setI.(*sync.Map)
+			set.Range(func(key, _ interface{}) bool {
+				delete(result, key.(string))
+				return true
+			})
+		}
+	}
+
+	// Create new set for destination
+	destSet := &sync.Map{}
+
+	// Store result in destination
+	for member := range result {
+		destSet.Store(member, struct{}{})
+	}
+
+	c.sets_.Store(destination, destSet)
+
+	// Delete elements from source sets that were used in difference
+	for member := range result {
+		firstSet.Delete(member)
+	}
+
+	// Check if first set is now empty and delete if so
+	empty := true
+	firstSet.Range(func(_, _ interface{}) bool {
+		empty = false
+		return false
+	})
+	if empty {
+		c.sets_.Delete(keys[0])
+	}
+
+	// Increment key versions
+	c.incrementKeyVersion(destination)
+	for _, key := range keys {
+		c.incrementKeyVersion(key)
+	}
+
+	return len(result), nil
 }
