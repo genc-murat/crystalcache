@@ -133,8 +133,15 @@ func (w *Writer) writeBulk(s string) error {
 }
 
 func (w *Writer) writeNull() error {
-	_, err := w.wr.Write([]byte("$-1\r\n"))
-	return err
+	n, err := w.wr.Write([]byte("$-1\r\n"))
+	if err != nil {
+		return err
+	}
+	expected := len("$-1\r\n")
+	if n < expected {
+		return fmt.Errorf("short write in writeNull: wrote %d bytes, expected %d", n, expected)
+	}
+	return nil
 }
 
 func (w *Writer) writeArray(array []models.Value) error {
@@ -215,6 +222,13 @@ func (w *Writer) writeAttribute(attr map[string]models.Value, actualValue models
 }
 
 func (w *Writer) writeFormat(format string, a ...interface{}) error {
-	_, err := fmt.Fprintf(w.wr, format, a...)
-	return err
+	n, err := fmt.Fprintf(w.wr, format, a...)
+	if err != nil {
+		return err
+	}
+	expected := len(fmt.Sprintf(format, a...))
+	if n < expected {
+		return fmt.Errorf("short write: wrote %d bytes, expected %d", n, expected)
+	}
+	return nil
 }
