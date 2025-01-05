@@ -11,82 +11,138 @@ type Writer struct {
 	wr io.Writer
 }
 
+type writerFunc func(w *Writer, v models.Value) error
+
 func NewWriter(wr io.Writer) *Writer {
 	return &Writer{wr: wr}
 }
 
 func (w *Writer) Write(v models.Value) error {
-	var err error
-	switch v.Type {
-	case "string":
-		err = w.writeString(v.Str)
-	case "error":
-		err = w.writeError(v.Str)
-	case "integer":
-		err = w.writeInteger(v.Num)
-	case "bulk":
-		err = w.writeBulk(v.Bulk)
-	case "null":
-		err = w.writeNull()
-	case "array":
-		err = w.writeArray(v.Array)
-	case "bool":
-		err = w.writeBoolean(v.Bool)
-	case "double":
-		err = w.writeDouble(v.Double)
-	case "bignum":
-		err = w.writeBigNumber(v.BigNum)
-	case "map":
-		err = w.writeMap(v.Map)
-	case "set":
-		err = w.writeSet(v.Set)
-	case "blob":
-		err = w.writeBlob(v.Blob)
-	case "verbatim":
-		err = w.writeVerbatimString(v.Str)
-	case "attribute":
-		// Write attributes as metadata, then the actual value
-		err = w.writeAttribute(v.Attribute, v)
-	default:
-		err = fmt.Errorf("unknown type: %s", v.Type)
+	writerFn, ok := w.getWriterFunc(v.Type)
+	if !ok {
+		return fmt.Errorf("unknown type: %s", v.Type)
 	}
-	return err
+	return writerFn(w, v)
+}
+
+func (w *Writer) getWriterFunc(valueType string) (writerFunc, bool) {
+	switch valueType {
+	case "string":
+		return w.writeStringValue, true
+	case "error":
+		return w.writeErrorValue, true
+	case "integer":
+		return w.writeIntegerValue, true
+	case "bulk":
+		return w.writeBulkValue, true
+	case "null":
+		return w.writeNullValue, true
+	case "array":
+		return w.writeArrayValue, true
+	case "bool":
+		return w.writeBooleanValue, true
+	case "double":
+		return w.writeDoubleValue, true
+	case "bignum":
+		return w.writeBigNumberValue, true
+	case "map":
+		return w.writeMapValue, true
+	case "set":
+		return w.writeSetValue, true
+	case "blob":
+		return w.writeBlobValue, true
+	case "verbatim":
+		return w.writeVerbatimStringValue, true
+	case "attribute":
+		return w.writeAttributeValue, true
+	default:
+		return nil, false
+	}
+}
+
+func (w *Writer) writeStringValue(wr *Writer, v models.Value) error {
+	return wr.writeString(v.Str)
+}
+
+func (w *Writer) writeErrorValue(wr *Writer, v models.Value) error {
+	return wr.writeError(v.Str)
+}
+
+func (w *Writer) writeIntegerValue(wr *Writer, v models.Value) error {
+	return wr.writeInteger(v.Num)
+}
+
+func (w *Writer) writeBulkValue(wr *Writer, v models.Value) error {
+	return wr.writeBulk(v.Bulk)
+}
+
+func (w *Writer) writeNullValue(wr *Writer, v models.Value) error {
+	return wr.writeNull()
+}
+
+func (w *Writer) writeArrayValue(wr *Writer, v models.Value) error {
+	return wr.writeArray(v.Array)
+}
+
+func (w *Writer) writeBooleanValue(wr *Writer, v models.Value) error {
+	return wr.writeBoolean(v.Bool)
+}
+
+func (w *Writer) writeDoubleValue(wr *Writer, v models.Value) error {
+	return wr.writeDouble(v.Double)
+}
+
+func (w *Writer) writeBigNumberValue(wr *Writer, v models.Value) error {
+	return wr.writeBigNumber(v.BigNum)
+}
+
+func (w *Writer) writeMapValue(wr *Writer, v models.Value) error {
+	return wr.writeMap(v.Map)
+}
+
+func (w *Writer) writeSetValue(wr *Writer, v models.Value) error {
+	return wr.writeSet(v.Set)
+}
+
+func (w *Writer) writeBlobValue(wr *Writer, v models.Value) error {
+	return wr.writeBlob(v.Blob)
+}
+
+func (w *Writer) writeVerbatimStringValue(wr *Writer, v models.Value) error {
+	return wr.writeVerbatimString(v.Str)
+}
+
+func (w *Writer) writeAttributeValue(wr *Writer, v models.Value) error {
+	return wr.writeAttribute(v.Attribute, v)
 }
 
 func (w *Writer) writeString(s string) error {
-	_, err := fmt.Fprintf(w.wr, "+%s\r\n", s)
-	return err
+	return w.writeFormat("+%s\r\n", s)
 }
 
 func (w *Writer) writeError(s string) error {
-	_, err := fmt.Fprintf(w.wr, "-%s\r\n", s)
-	return err
+	return w.writeFormat("-%s\r\n", s)
 }
 
 func (w *Writer) writeInteger(i int) error {
-	_, err := fmt.Fprintf(w.wr, ":%d\r\n", i)
-	return err
+	return w.writeFormat(":%d\r\n", i)
 }
 
 func (w *Writer) writeBulk(s string) error {
-	_, err := fmt.Fprintf(w.wr, "$%d\r\n%s\r\n", len(s), s)
-	return err
+	return w.writeFormat("$%d\r\n%s\r\n", len(s), s)
 }
 
 func (w *Writer) writeNull() error {
-	_, err := fmt.Fprintf(w.wr, "$-1\r\n")
+	_, err := w.wr.Write([]byte("$-1\r\n"))
 	return err
 }
 
 func (w *Writer) writeArray(array []models.Value) error {
-	_, err := fmt.Fprintf(w.wr, "*%d\r\n", len(array))
-	if err != nil {
+	if err := w.writeFormat("*%d\r\n", len(array)); err != nil {
 		return err
 	}
-
 	for _, value := range array {
-		err := w.Write(value)
-		if err != nil {
+		if err := w.Write(value); err != nil {
 			return err
 		}
 	}
@@ -95,45 +151,36 @@ func (w *Writer) writeArray(array []models.Value) error {
 
 func (w *Writer) writeBoolean(b bool) error {
 	if b {
-		_, err := fmt.Fprintf(w.wr, "#t\r\n")
-		return err
+		return w.writeFormat("#t\r\n")
 	}
-	_, err := fmt.Fprintf(w.wr, "#f\r\n")
-	return err
+	return w.writeFormat("#f\r\n")
 }
 
 func (w *Writer) writeDouble(f float64) error {
-	_, err := fmt.Fprintf(w.wr, ",%f\r\n", f)
-	return err
+	return w.writeFormat(",%f\r\n", f)
 }
 
 func (w *Writer) writeBigNumber(bn string) error {
-	_, err := fmt.Fprintf(w.wr, "(%s\r\n", bn)
-	return err
+	return w.writeFormat("(%s\r\n", bn)
 }
 
 func (w *Writer) writeVerbatimString(s string) error {
-	_, err := fmt.Fprintf(w.wr, "=%d\r\ntxt:%s\r\n", len(s), s) // Assuming txt encoding
-	return err
+	return w.writeFormat("=%d\r\ntxt:%s\r\n", len(s), s)
 }
 
 func (w *Writer) writeBlob(b []byte) error {
-	_, err := fmt.Fprintf(w.wr, "_%d\r\n%s\r\n", len(b), string(b))
-	return err
+	return w.writeFormat("_%d\r\n%s\r\n", len(b), string(b))
 }
 
 func (w *Writer) writeMap(m map[string]models.Value) error {
-	_, err := fmt.Fprintf(w.wr, "%%%d\r\n", len(m))
-	if err != nil {
+	if err := w.writeFormat("%%%d\r\n", len(m)); err != nil {
 		return err
 	}
 	for key, value := range m {
-		err := w.writeString(key) // Maps keys are typically strings
-		if err != nil {
+		if err := w.writeString(key); err != nil {
 			return err
 		}
-		err = w.Write(value)
-		if err != nil {
+		if err := w.Write(value); err != nil {
 			return err
 		}
 	}
@@ -141,13 +188,11 @@ func (w *Writer) writeMap(m map[string]models.Value) error {
 }
 
 func (w *Writer) writeSet(s []models.Value) error {
-	_, err := fmt.Fprintf(w.wr, "~%d\r\n", len(s))
-	if err != nil {
+	if err := w.writeFormat("~%d\r\n", len(s)); err != nil {
 		return err
 	}
 	for _, value := range s {
-		err := w.Write(value)
-		if err != nil {
+		if err := w.Write(value); err != nil {
 			return err
 		}
 	}
@@ -155,19 +200,21 @@ func (w *Writer) writeSet(s []models.Value) error {
 }
 
 func (w *Writer) writeAttribute(attr map[string]models.Value, actualValue models.Value) error {
-	_, err := fmt.Fprintf(w.wr, "|%d\r\n", len(attr))
-	if err != nil {
+	if err := w.writeFormat("|%d\r\n", len(attr)); err != nil {
 		return err
 	}
 	for key, value := range attr {
-		err := w.writeString(key)
-		if err != nil {
+		if err := w.writeString(key); err != nil {
 			return err
 		}
-		err = w.Write(value)
-		if err != nil {
+		if err := w.Write(value); err != nil {
 			return err
 		}
 	}
 	return w.Write(actualValue)
+}
+
+func (w *Writer) writeFormat(format string, a ...interface{}) error {
+	_, err := fmt.Fprintf(w.wr, format, a...)
+	return err
 }
