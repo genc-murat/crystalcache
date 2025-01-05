@@ -729,12 +729,12 @@ func (rd *RetryDecorator) Defragment() {
 	})
 }
 
-func (rd *RetryDecorator) Scan(cursor int, pattern string, count int) ([]string, int) {
+func (rd *RetryDecorator) Scan(cursor int, pattern string, count int, keyType string) ([]string, int) {
 	var keys []string
 	var nextCursor int
 
 	rd.executeWithRetry(func() error {
-		keys, nextCursor = rd.cache.Scan(cursor, pattern, count)
+		keys, nextCursor = rd.cache.Scan(cursor, pattern, count, keyType)
 		return nil
 	})
 

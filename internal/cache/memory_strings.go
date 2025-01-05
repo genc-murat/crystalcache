@@ -20,7 +20,7 @@ import (
 //	error: Returns nil if the operation is successful.
 func (c *MemoryCache) Set(key string, value string) error {
 	c.bloomFilter.Add([]byte(key))
-	c.sets.Store(key, value)
+	c.strings.Store(key, value)
 	c.incrementKeyVersion(key)
 	return nil
 }
@@ -45,13 +45,13 @@ func (c *MemoryCache) Get(key string) (string, bool) {
 
 	if expireTime, ok := c.expires.Load(key); ok {
 		if expTime, ok := expireTime.(time.Time); ok && time.Now().After(expTime) {
-			c.sets.Delete(key)
+			c.strings.Delete(key)
 			c.expires.Delete(key)
 			return "", false
 		}
 	}
 
-	if value, ok := c.sets.Load(key); ok {
+	if value, ok := c.strings.Load(key); ok {
 		return value.(string), true
 	}
 	return "", false
@@ -63,7 +63,7 @@ func (c *MemoryCache) Get(key string) (string, bool) {
 // If the key has expired, it returns -2 and schedules the key for deletion.
 func (c *MemoryCache) PTTL(key string) int64 {
 	// Check if key exists
-	if _, exists := c.sets.Load(key); !exists {
+	if _, exists := c.strings.Load(key); !exists {
 		return -2
 	}
 
@@ -78,7 +78,7 @@ func (c *MemoryCache) PTTL(key string) int64 {
 	if ttlMs < 0 {
 		// Key has expired, clean it up
 		go func() {
-			c.sets.Delete(key)
+			c.strings.Delete(key)
 			c.expires.Delete(key)
 			if c.stats != nil {
 				atomic.AddInt64(&c.stats.expiredKeys, 1)
@@ -96,9 +96,9 @@ func (c *MemoryCache) PTTL(key string) int64 {
 // It returns the new value and any error encountered.
 func (c *MemoryCache) Incr(key string) (int, error) {
 	for {
-		val, exists := c.sets.Load(key)
+		val, exists := c.strings.Load(key)
 		if !exists {
-			if c.sets.CompareAndSwap(key, nil, "1") {
+			if c.strings.CompareAndSwap(key, nil, "1") {
 				return 1, nil
 			}
 			continue
@@ -110,7 +110,7 @@ func (c *MemoryCache) Incr(key string) (int, error) {
 		}
 
 		num++
-		if c.sets.CompareAndSwap(key, val, strconv.Itoa(num)) {
+		if c.strings.CompareAndSwap(key, val, strconv.Itoa(num)) {
 			return num, nil
 		}
 	}
@@ -140,7 +140,7 @@ func (c *MemoryCache) Incr(key string) (int, error) {
 func (c *MemoryCache) Del(key string) (bool, error) {
 	deleted := false
 
-	if _, ok := c.sets.LoadAndDelete(key); ok {
+	if _, ok := c.strings.LoadAndDelete(key); ok {
 		c.expires.Delete(key)
 		deleted = true
 	}

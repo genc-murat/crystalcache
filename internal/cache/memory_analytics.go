@@ -107,7 +107,7 @@ func (c *MemoryCache) calculateStructureMemory(analytics *MemoryAnalytics) {
 	})
 
 	// String memory
-	c.sets.Range(func(key, value interface{}) bool {
+	c.strings.Range(func(key, value interface{}) bool {
 		k := key.(string)
 		v := value.(string)
 		size := int64(len(k) + len(v))
@@ -314,7 +314,7 @@ func (c *MemoryCache) getKeyCount() int64 {
 	var count int64
 
 	// Count keys in sets
-	c.sets.Range(func(_, _ interface{}) bool {
+	c.strings.Range(func(_, _ interface{}) bool {
 		atomic.AddInt64(&count, 1)
 		return true
 	})
@@ -472,7 +472,7 @@ func (c *MemoryCache) evictKeys(targetBytes int64) {
 		}
 
 		maps := [...]*sync.Map{
-			c.sets,
+			c.strings,
 			c.jsonData,
 			c.streams,
 			c.bitmaps,

@@ -31,8 +31,8 @@ func (c *MemoryCache) DelType(typeName string) (int64, error) {
 
 	switch typeName {
 	case "string":
-		c.sets.Range(func(key, _ interface{}) bool {
-			c.sets.Delete(key)
+		c.strings.Range(func(key, _ interface{}) bool {
+			c.strings.Delete(key)
 			c.expires.Delete(key)
 			atomic.AddInt64(&deletedCount, 1)
 			c.incrementKeyVersion(key.(string))
@@ -123,7 +123,7 @@ func (c *MemoryCache) KeyCount(typeName string) (int64, error) {
 
 	switch typeName {
 	case "string":
-		c.sets.Range(func(key, _ interface{}) bool {
+		c.strings.Range(func(key, _ interface{}) bool {
 			count++
 			return true
 		})

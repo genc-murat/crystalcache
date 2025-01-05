@@ -28,6 +28,7 @@ func (h *ScanHandlers) HandleScan(args []models.Value) models.Value {
 
 	pattern := "*"
 	count := 10
+	var keyType string
 
 	for i := 1; i < len(args); i += 2 {
 		if i+1 >= len(args) {
@@ -42,12 +43,28 @@ func (h *ScanHandlers) HandleScan(args []models.Value) models.Value {
 			if err != nil {
 				return models.Value{Type: "error", Str: "ERR invalid COUNT value"}
 			}
+		case "TYPE":
+			keyType = strings.ToLower(args[i+1].Bulk)
+			// Validate key type
+			validTypes := map[string]bool{
+				"string": true,
+				"list":   true,
+				"set":    true,
+				"zset":   true,
+				"hash":   true,
+				"stream": true,
+				"json":   true,
+				"bitmap": true,
+			}
+			if !validTypes[keyType] {
+				return models.Value{Type: "error", Str: "ERR invalid type"}
+			}
 		default:
 			return models.Value{Type: "error", Str: "ERR syntax error"}
 		}
 	}
 
-	keys, nextCursor := h.cache.Scan(cursor, pattern, count)
+	keys, nextCursor := h.cache.Scan(cursor, pattern, count, keyType)
 
 	keyValues := make([]models.Value, len(keys))
 	for i, key := range keys {

@@ -19,7 +19,7 @@ import (
 )
 
 type MemoryCache struct {
-	sets          *sync.Map // string key-value pairs
+	strings       *sync.Map // string key-value pairs
 	hsets         *sync.Map // hash maps
 	lists         *sync.Map // lists
 	sets_         *sync.Map // sets
@@ -58,7 +58,7 @@ func NewMemoryCache() *MemoryCache {
 	}
 
 	mc := &MemoryCache{
-		sets:           &sync.Map{},
+		strings:        &sync.Map{},
 		hsets:          &sync.Map{},
 		lists:          &sync.Map{},
 		sets_:          &sync.Map{},
@@ -102,7 +102,7 @@ func (c *MemoryCache) cleanExpired() {
 	now := time.Now()
 	c.expires.Range(func(key, expireTime interface{}) bool {
 		if expTime, ok := expireTime.(time.Time); ok && now.After(expTime) {
-			c.sets.Delete(key)
+			c.strings.Delete(key)
 			c.expires.Delete(key)
 		}
 		return true
@@ -166,7 +166,7 @@ func (c *MemoryCache) Expire(key string, seconds int) error {
 // TTL implementation with sync.Map
 func (c *MemoryCache) TTL(key string) int {
 	// Check if key exists
-	if _, exists := c.sets.Load(key); !exists {
+	if _, exists := c.strings.Load(key); !exists {
 		return -2
 	}
 
@@ -181,7 +181,7 @@ func (c *MemoryCache) TTL(key string) int {
 	if ttl < 0 {
 		// Key has expired, clean it up
 		go func() {
-			c.sets.Delete(key)
+			c.strings.Delete(key)
 			c.expires.Delete(key)
 			if c.stats != nil {
 				atomic.AddInt64(&c.stats.expiredKeys, 1)
@@ -601,7 +601,7 @@ func (c *MemoryCache) Type(key string) string {
 	if _, exists := c.jsonData.Load(key); exists {
 		return "json"
 	}
-	if _, exists := c.sets.Load(key); exists {
+	if _, exists := c.strings.Load(key); exists {
 		return "string"
 	}
 	if _, exists := c.hsets.Load(key); exists {
@@ -780,14 +780,14 @@ func (c *MemoryCache) FlushAll() {
 	newExpires := syncMapPool.Get().(*sync.Map)
 
 	// Get old maps to return to pool
-	oldSets := c.sets
+	oldSets := c.strings
 	oldHsets := c.hsets
 	oldLists := c.lists
 	oldSets_ := c.sets_
 	oldExpires := c.expires
 
 	// Atomic swap to new maps
-	c.sets = newSets
+	c.strings = newSets
 	c.hsets = newHsets
 	c.lists = newLists
 	c.sets_ = newSets_
@@ -853,7 +853,7 @@ func (c *MemoryCache) DBSize() int {
 		})
 	}
 
-	countMap(c.sets)
+	countMap(c.strings)
 	countMap(c.hsets)
 	countMap(c.lists)
 	countMap(c.sets_)
@@ -976,9 +976,9 @@ func (c *MemoryCache) LRem(key string, count int, value string) (int, error) {
 }
 
 func (c *MemoryCache) Rename(oldKey, newKey string) error {
-	val, exists := c.sets.LoadAndDelete(oldKey)
+	val, exists := c.strings.LoadAndDelete(oldKey)
 	if exists {
-		c.sets.Store(newKey, val)
+		c.strings.Store(newKey, val)
 		if expTime, hasExp := c.expires.LoadAndDelete(oldKey); hasExp {
 			c.expires.Store(newKey, expTime)
 		}
@@ -1042,7 +1042,7 @@ func (c *MemoryCache) Info() map[string]string {
 		geoKeys, cmsKeys, cuckooKeys, tdigestKeys, bloomFilterKeys,
 		timeseriesKeys int
 
-	c.sets.Range(func(_, _ interface{}) bool {
+	c.strings.Range(func(_, _ interface{}) bool {
 		stringKeys++
 		return true
 	})
@@ -1551,7 +1551,7 @@ func (c *MemoryCache) defragBitmaps() {
 }
 
 func (c *MemoryCache) defragStrings() {
-	c.sets = c.defragSyncMap(c.sets)
+	c.strings = c.defragSyncMap(c.strings)
 }
 
 func (c *MemoryCache) defragHashes() {
@@ -1650,7 +1650,7 @@ func (c *MemoryCache) Keys(matchPattern string) []string {
 	keys = keys[:0]
 
 	// Collect matching keys
-	c.sets.Range(func(key, _ interface{}) bool {
+	c.strings.Range(func(key, _ interface{}) bool {
 		k := key.(string)
 		if pattern.Match(matchPattern, k) {
 			keys = append(keys, k)
@@ -1671,12 +1671,12 @@ func (c *MemoryCache) Keys(matchPattern string) []string {
 }
 
 // Scan implements Redis SCAN command with optimized iteration over all key types
-func (c *MemoryCache) Scan(cursor int, matchPattern string, count int) ([]string, int) {
+func (c *MemoryCache) Scan(cursor int, matchPattern string, count int, keyType string) ([]string, int) {
 	// Get keys slice from pool
 	allKeys := stringSlicePool.Get().([]string)
 	allKeys = allKeys[:0]
 
-	// Collect keys from all data structures
+	// Collect keys based on type
 	collectKeys := func(m *sync.Map) {
 		m.Range(func(key, _ interface{}) bool {
 			allKeys = append(allKeys, key.(string))
@@ -1684,15 +1684,31 @@ func (c *MemoryCache) Scan(cursor int, matchPattern string, count int) ([]string
 		})
 	}
 
-	// Collect keys from all data structures
-	collectKeys(c.sets)
-	collectKeys(c.hsets)
-	collectKeys(c.lists)
-	collectKeys(c.sets_)
-	collectKeys(c.zsets) // zsets eklendi
-	collectKeys(c.streams)
-	collectKeys(c.bitmaps)
-	collectKeys(c.jsonData)
+	// Collect keys only from specified type or all if type is empty
+	if keyType == "" || keyType == "string" {
+		collectKeys(c.strings)
+	}
+	if keyType == "" || keyType == "hash" {
+		collectKeys(c.hsets)
+	}
+	if keyType == "" || keyType == "list" {
+		collectKeys(c.lists)
+	}
+	if keyType == "" || keyType == "set" {
+		collectKeys(c.strings)
+	}
+	if keyType == "" || keyType == "zset" {
+		collectKeys(c.zsets)
+	}
+	if keyType == "" || keyType == "stream" {
+		collectKeys(c.streams)
+	}
+	if keyType == "" || keyType == "json" {
+		collectKeys(c.jsonData)
+	}
+	if keyType == "" || keyType == "bitmap" {
+		collectKeys(c.bitmaps)
+	}
 
 	// Sort for consistent iteration
 	sort.Strings(allKeys)
