@@ -15,10 +15,45 @@ type StringHandlers struct {
 	cache ports.Cache
 }
 
+// NewStringHandlers creates a new instance of StringHandlers with the provided cache.
+// It takes a ports.Cache interface as an argument and returns a pointer to StringHandlers.
 func NewStringHandlers(cache ports.Cache) *StringHandlers {
 	return &StringHandlers{cache: cache}
 }
 
+// HandleSet processes the 'SET' command to store a key-value pair in the cache.
+// It supports optional arguments for conditional setting and expiration time.
+//
+// Arguments:
+// - args: A slice of models.Value containing the command arguments.
+//
+// Returns:
+//   - models.Value: The result of the command execution. It returns an error message
+//     if the arguments are invalid or if there is an issue with setting the value.
+//     Otherwise, it returns "OK" if the value is successfully set.
+//
+// The command supports the following optional arguments:
+// - NX: Only set the key if it does not already exist.
+// - XX: Only set the key if it already exists.
+// - EX <seconds>: Set the specified expire time, in seconds, for the key.
+//
+// Example usage:
+//   - SET key value NX EX 10
+//     This sets the key to the value only if the key does not exist and sets an expiration time of 10 seconds.
+//
+// Returns:
+//   - models.Value: An object containing the result of the operation. If the
+//     operation is successful, it returns an integer type with value 1. If the
+//     operation fails, it returns an integer type with value 0. In case of an error,
+//     it returns an error type with an appropriate error message.
+//
+// The function performs the following steps:
+//  1. Validates the number of arguments.
+//  2. Parses the expiration time from the arguments.
+//  3. Optionally processes and validates the condition argument.
+//  4. Calls the SEExpire method on the cache with the provided key, expiration time,
+//     and condition.
+//  5. Returns the result of the operation as a models.Value object.
 func (h *StringHandlers) HandleSet(args []models.Value) models.Value {
 	if len(args) < 2 {
 		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'set' command"}
