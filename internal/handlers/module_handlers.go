@@ -8,39 +8,16 @@ import (
 	"github.com/genc-murat/crystalcache/internal/core/ports"
 )
 
-// ModuleHandlers implements handlers for module-related operations in the cache
-// Currently supports listing built-in modules and handles (with error) loading/unloading attempts
 type ModuleHandlers struct {
 	cache ports.Cache
 }
 
-// NewModuleHandlers creates a new instance of ModuleHandlers
-// Parameters:
-//   - cache: The cache implementation to be used for module operations
-//
-// Returns:
-//   - *ModuleHandlers: A pointer to the newly created ModuleHandlers instance
 func NewModuleHandlers(cache ports.Cache) *ModuleHandlers {
 	return &ModuleHandlers{
 		cache: cache,
 	}
 }
 
-// HandleModule handles various module-related commands
-// Supports subcommands:
-//   - LIST: Returns information about built-in modules (currently only ReJSON)
-//   - LOAD: Returns error as module loading is not supported
-//   - UNLOAD: Returns error as module unloading is not supported
-//
-// Parameters:
-//   - args: Array of Values containing the subcommand and its arguments
-//
-// Returns:
-//   - models.Value: Response depends on subcommand:
-//     LIST: Array containing module information in format:
-//     [name, ReJSON, ver, 20000, path, built-in]
-//     LOAD/UNLOAD: Returns error as these operations are not supported
-//     Returns error for unknown subcommands or invalid arguments
 func (h *ModuleHandlers) HandleModule(args []models.Value) models.Value {
 	if len(args) == 0 {
 		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'module' command"}
@@ -49,19 +26,24 @@ func (h *ModuleHandlers) HandleModule(args []models.Value) models.Value {
 	subCmd := strings.ToUpper(args[0].Bulk)
 	switch subCmd {
 	case "LIST":
-		// Return JSON module info
-		jsonModule := []models.Value{
-			{Type: "array", Array: []models.Value{
-				{Type: "string", Str: "name"},
-				{Type: "string", Str: "ReJSON"},
-				{Type: "string", Str: "ver"},
-				{Type: "integer", Num: 20000}, // Version 2.0.0
-				{Type: "string", Str: "path"},
-				{Type: "string", Str: "built-in"},
-			}},
+		// Return information about all available modules
+		modules := []models.Value{
+			createModuleInfo("ReJSON", 20000),         // JSON data type support
+			createModuleInfo("Bloom", 20000),          // Bloom filter capabilities
+			createModuleInfo("CuckooFilter", 20000),   // Cuckoo filter support
+			createModuleInfo("CountMinSketch", 20000), // Count-Min Sketch structure
+			createModuleInfo("TopK", 20000),           // Top-K statistics
+			createModuleInfo("HyperLogLog", 20000),    // HyperLogLog structure
+			createModuleInfo("TDigest", 20000),        // T-Digest structure
+			createModuleInfo("TimeSeries", 20000),     // Time series data type
+			createModuleInfo("Geo", 20000),            // Geospatial features
+			createModuleInfo("Search", 20000),         // Search capabilities
+			createModuleInfo("BitMap", 20000),         // Bitmap operations
+			createModuleInfo("Stream", 20000),         // Stream data type
 		}
-		log.Printf("[DEBUG] MODULE response - LIST: %+v", models.Value{Type: "array", Array: jsonModule})
-		return models.Value{Type: "array", Array: jsonModule}
+
+		log.Printf("[DEBUG] MODULE response - LIST: %+v", models.Value{Type: "array", Array: modules})
+		return models.Value{Type: "array", Array: modules}
 
 	case "LOAD":
 		log.Printf("[DEBUG] MODULE response - LOAD: %+v", models.Value{Type: "error", Str: "ERR modules not supported"})
@@ -73,5 +55,20 @@ func (h *ModuleHandlers) HandleModule(args []models.Value) models.Value {
 
 	default:
 		return models.Value{Type: "error", Str: "ERR unknown subcommand for MODULE"}
+	}
+}
+
+// createModuleInfo creates a standardized module information array
+func createModuleInfo(name string, version int) models.Value {
+	return models.Value{
+		Type: "array",
+		Array: []models.Value{
+			{Type: "string", Str: "name"},
+			{Type: "string", Str: name},
+			{Type: "string", Str: "ver"},
+			{Type: "integer", Num: version},
+			{Type: "string", Str: "path"},
+			{Type: "string", Str: "built-in"},
+		},
 	}
 }
