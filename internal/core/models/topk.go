@@ -7,11 +7,11 @@ import (
 
 // TopK structure to track frequent items
 type TopK struct {
-	k        int              // Number of top elements to track
-	capacity int              // Maximum number of items to track
-	decay    float64          // Decay factor for counts
-	items    map[string]int64 // Item counts
-	mu       sync.RWMutex     // For thread safety
+	mu       sync.RWMutex
+	items    map[string]int64
+	decay    float64
+	k        int
+	capacity int
 }
 
 // NewTopK creates a new TopK structure

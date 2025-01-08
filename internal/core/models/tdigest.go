@@ -13,11 +13,11 @@ type Centroid struct {
 
 // TDigest represents a T-Digest data structure
 type TDigest struct {
-	Centroids   []Centroid
 	compression float64
 	count       float64
 	min         float64
 	max         float64
+	Centroids   []Centroid
 }
 
 // NewTDigest creates a new T-Digest with given compression parameter

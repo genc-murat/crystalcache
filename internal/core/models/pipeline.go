@@ -1,8 +1,8 @@
 package models
 
 type PipelineCommand struct {
-	Name string
 	Args []Value
+	Name string
 }
 
 type Pipeline struct {

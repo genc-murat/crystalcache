@@ -17,17 +17,17 @@ const (
 // CuckooFilter represents a Cuckoo Filter data structure
 type CuckooFilter struct {
 	capacity  uint64
-	buckets   [][]byte
 	itemCount uint64
+	buckets   [][]byte
 	tagMask   byte
 }
 
 // CuckooInfo represents information about a Cuckoo Filter
 type CuckooInfo struct {
 	Size         uint64
-	BucketSize   int
 	ItemCount    uint64
 	FilterFilled float64
+	BucketSize   int
 	Expansion    int
 }
 

@@ -8,12 +8,12 @@ import (
 )
 
 type BloomFilter struct {
+	count     uint64
+	mu        sync.RWMutex
 	bitset    []bool
 	size      uint
 	hashCount uint
-	count     uint64 // Changed to uint64
 	config    BloomFilterConfig
-	mu        sync.RWMutex
 }
 
 type BloomFilterConfig struct {
@@ -124,13 +124,13 @@ func (bf *BloomFilter) FalsePositiveRate() float64 {
 }
 
 type BloomFilterStats struct {
+	Count             uint64
+	SetBits           uint64
+	FalsePositiveRate float64
 	Size              uint
 	HashCount         uint
-	Count             uint64 // Changed to uint64
 	BitsetSize        uint
-	SetBits           uint64 // Changed to uint64
-	FalsePositiveRate float64
-	MemoryUsage       uint // bytes
+	MemoryUsage       uint
 }
 
 func (bf *BloomFilter) Stats() BloomFilterStats {

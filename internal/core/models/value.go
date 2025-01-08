@@ -3,19 +3,18 @@ package models
 import "fmt"
 
 type Value struct {
-	Type   string
-	Str    string
-	Num    int
-	Bulk   string
-	Array  []Value
-	Bool   bool
-	Double float64
-	BigNum string
-	Map    map[string]Value
-	Set    []Value
-	Blob   []byte
-	// Attribute is used for metadata, not the actual value
+	Double    float64
+	Map       map[string]Value
 	Attribute map[string]Value
+	Array     []Value
+	Set       []Value
+	Blob      []byte
+	Type      string
+	Str       string
+	Bulk      string
+	BigNum    string
+	Num       int
+	Bool      bool
 }
 
 func (v Value) String() string {

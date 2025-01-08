@@ -14,8 +14,8 @@ const (
 
 // HyperLogLog represents the HyperLogLog probabilistic data structure
 type HyperLogLog struct {
-	registers []byte
 	size      uint64
+	registers []byte
 }
 
 // NewHyperLogLog creates a new HyperLogLog with default precision

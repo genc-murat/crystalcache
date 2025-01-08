@@ -1,12 +1,12 @@
 package models
 
 type Transaction struct {
+	Watches  map[string]int64
 	Commands []Command
 	InMulti  bool
-	Watches  map[string]int64
 }
 
 type Command struct {
-	Name string
 	Args []Value
+	Name string
 }

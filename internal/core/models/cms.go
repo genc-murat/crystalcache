@@ -16,11 +16,11 @@ var (
 
 // CountMinSketch represents a count-min sketch data structure
 type CountMinSketch struct {
-	Width    uint
-	Depth    uint
 	Count    uint64
 	Matrix   [][]uint64
 	HashSeed []uint64
+	Width    uint
+	Depth    uint
 }
 
 // NewCountMinSketchByDim initializes a new Count-Min Sketch with given dimensions

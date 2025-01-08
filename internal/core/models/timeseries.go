@@ -3,10 +3,10 @@ package models
 import "sync"
 
 type TimeSeries struct {
-	Samples []TimeSeriesSample
-	Labels  map[string]string
 	Mutex   sync.Mutex
+	Labels  map[string]string
 	Rules   []TimeSeriesRule
+	Samples []TimeSeriesSample
 }
 
 type TimeSeriesSample struct {
@@ -15,14 +15,14 @@ type TimeSeriesSample struct {
 }
 
 type TimeSeriesStats struct {
-	TotalSamples int
 	MaxValue     float64
 	MinValue     float64
 	AvgValue     float64
+	TotalSamples int
 }
 
 type TimeSeriesRule struct {
-	AggregationType string
 	BucketSize      int64
+	AggregationType string
 	DestinationKey  string
 }

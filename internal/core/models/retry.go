@@ -6,11 +6,11 @@ import (
 )
 
 type RetryStrategy struct {
-	MaxAttempts     int
-	InitialInterval time.Duration
 	MaxInterval     time.Duration
-	Multiplier      float64
+	InitialInterval time.Duration
 	Timeout         time.Duration
+	Multiplier      float64
+	MaxAttempts     int
 }
 
 var (

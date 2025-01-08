@@ -2,8 +2,8 @@ package models
 
 // Suggestion represents an autocomplete suggestion entry
 type Suggestion struct {
-	String  string
 	Score   float64
+	String  string
 	Payload string
 }
 
