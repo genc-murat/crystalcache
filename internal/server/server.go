@@ -20,33 +20,33 @@ import (
 )
 
 type Server struct {
+	wg          sync.WaitGroup
+	replMutex   sync.RWMutex
+	activeConns sync.Map
+
+	// Ana servis arayüzleri
 	cache    ports.Cache
 	storage  ports.Storage
 	pool     ports.Pool
 	metrics  *metrics.Metrics
 	registry *handlers.Registry
 
-	// Shutdown coordination
-	shutdown chan struct{}
-	wg       sync.WaitGroup
-
 	clientManager *client.Manager
 	adminHandlers *handlers.AdminHandlers
-	activeConns   sync.Map
 
-	// Replica
-	isMaster   bool
-	masterHost string
-	masterPort string
 	replConn   net.Conn
 	replReader *resp.Reader
 	replWriter *resp.Writer
 	replChan   chan models.Value
-	replMutex  sync.RWMutex
 	replicas   map[string]*replica
 
 	aclManager    *acl.ACLManager
 	aclMiddleware *acl.Middleware
+
+	shutdown   chan struct{}
+	isMaster   bool
+	masterHost string
+	masterPort string
 }
 
 type replica struct {
@@ -55,10 +55,10 @@ type replica struct {
 }
 
 type ServerConfig struct {
-	MaxConnections int
 	ReadTimeout    time.Duration
 	WriteTimeout   time.Duration
 	IdleTimeout    time.Duration
+	MaxConnections int
 }
 
 func NewServer(cache ports.Cache, storage ports.Storage, pool ports.Pool, config ServerConfig) *Server {

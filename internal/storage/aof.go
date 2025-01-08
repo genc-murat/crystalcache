@@ -18,12 +18,12 @@ import (
 
 // AOFConfig holds configuration for AOF persistence
 type AOFConfig struct {
+	SyncInterval   time.Duration
+	RotationSize   int64
+	BufferSize     int
 	Path           string
 	SyncStrategy   string // "always", "everysec", "no"
-	SyncInterval   time.Duration
-	BufferSize     int
 	EnableRotation bool
-	RotationSize   int64
 }
 
 // DefaultAOFConfig returns default configuration
@@ -39,18 +39,17 @@ func DefaultAOFConfig() AOFConfig {
 }
 
 type AOF struct {
-	config   AOFConfig
+	mu     sync.RWMutex
+	config AOFConfig
+
 	file     *os.File
 	writer   *bufio.Writer
 	reader   *bufio.Reader
 	fileLock *flock.Flock
-	mu       sync.RWMutex
 	logger   *log.Logger
 
-	// Background sync
-	syncCh chan struct{}
-	done   chan struct{}
-
+	syncCh     chan struct{}
+	done       chan struct{}
 	writeQueue chan models.Value
 }
 

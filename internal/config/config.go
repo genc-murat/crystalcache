@@ -11,22 +11,22 @@ import (
 )
 
 type Config struct {
-	Environment string        `yaml:"environment"`
 	Server      ServerConfig  `yaml:"server"`
 	Cache       CacheConfig   `yaml:"cache"`
 	Storage     StorageConfig `yaml:"storage"`
 	Pool        PoolConfig    `yaml:"pool"`
 	Metrics     MetricsConfig `yaml:"metrics"`
 	Pprof       PprofConfig   `yaml:"pprof"`
+	Environment string        `yaml:"environment"`
 }
 
 type ServerConfig struct {
-	Host           string        `yaml:"host"`
-	Port           int           `yaml:"port"`
-	MaxConnections int           `yaml:"max_connections"`
 	ReadTimeout    time.Duration `yaml:"read_timeout"`
 	WriteTimeout   time.Duration `yaml:"write_timeout"`
 	IdleTimeout    time.Duration `yaml:"idle_timeout"`
+	MaxConnections int           `yaml:"max_connections"`
+	Port           int           `yaml:"port"`
+	Host           string        `yaml:"host"`
 }
 
 type CacheConfig struct {
@@ -35,30 +35,30 @@ type CacheConfig struct {
 }
 
 type StorageConfig struct {
+	SyncInterval time.Duration `yaml:"sync_interval"`
 	Type         string        `yaml:"type"`
 	Path         string        `yaml:"path"`
-	SyncInterval time.Duration `yaml:"sync_interval"`
 }
 
 type PoolConfig struct {
-	InitialSize   int           `yaml:"initial_size"`
-	MaxSize       int           `yaml:"max_size"`
 	ReadTimeout   time.Duration `yaml:"read_timeout"`
 	WriteTimeout  time.Duration `yaml:"write_timeout"`
 	IdleTimeout   time.Duration `yaml:"idle_timeout"`
-	RetryAttempts int           `yaml:"retry_attempts"`
 	RetryDelay    time.Duration `yaml:"retry_delay"`
+	MaxSize       int           `yaml:"max_size"`
+	InitialSize   int           `yaml:"initial_size"`
+	RetryAttempts int           `yaml:"retry_attempts"`
 }
 
 type MetricsConfig struct {
-	Enabled bool   `yaml:"enabled"`
 	Port    int    `yaml:"port"`
+	Enabled bool   `yaml:"enabled"`
 	Path    string `yaml:"path"`
 }
 
 type PprofConfig struct {
-	Enabled bool `yaml:"enabled"`
 	Port    int  `yaml:"port"`
+	Enabled bool `yaml:"enabled"`
 }
 
 func findProjectRoot() (string, error) {

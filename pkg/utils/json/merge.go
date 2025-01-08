@@ -2,12 +2,9 @@ package json
 
 // MergeOptions holds configuration for merge operations
 type MergeOptions struct {
-	// OverwriteExisting determines if existing values should be overwritten
+	MaxDepth          int
 	OverwriteExisting bool
-	// MaxDepth sets the maximum recursion depth for deep merge (-1 for unlimited)
-	MaxDepth int
-	// SkipNullValues determines if null values should be skipped during merge
-	SkipNullValues bool
+	SkipNullValues    bool
 }
 
 // DefaultMergeOptions returns default merge options

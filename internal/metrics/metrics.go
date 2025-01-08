@@ -7,12 +7,12 @@ import (
 )
 
 type Metrics struct {
-	cmdCount      int64
-	startTime     time.Time
-	activeConns   int32
-	totalCommands int64
-	commandStats  map[string]*CommandStats
 	mu            sync.RWMutex
+	startTime     time.Time
+	cmdCount      int64
+	totalCommands int64
+	activeConns   int32
+	commandStats  map[string]*CommandStats
 }
 
 type CommandStats struct {

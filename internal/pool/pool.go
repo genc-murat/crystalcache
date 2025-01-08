@@ -15,26 +15,18 @@ var (
 )
 
 type ConnectionPool struct {
-	// Pool yapılandırması
-	config Config
-
-	// Connection factory
-	factory func() (net.Conn, error)
-
-	// Connection havuzları
-	readPool  chan net.Conn
-	writePool chan net.Conn
-
-	// Metrics
 	stats struct {
 		sync.RWMutex
 		active   int
 		idle     int
 		waitTime time.Duration
 	}
-
-	closed bool
-	mu     sync.RWMutex
+	mu        sync.RWMutex
+	config    Config
+	factory   func() (net.Conn, error)
+	readPool  chan net.Conn
+	writePool chan net.Conn
+	closed    bool
 }
 
 func NewConnectionPool(config Config, factory func() (net.Conn, error)) (*ConnectionPool, error) {

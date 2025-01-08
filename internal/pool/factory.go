@@ -6,8 +6,8 @@ import (
 )
 
 type ConnFactory struct {
-	address     string
 	dialTimeout time.Duration
+	address     string
 }
 
 func NewConnFactory(address string, dialTimeout time.Duration) *ConnFactory {
