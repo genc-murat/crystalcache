@@ -9,27 +9,23 @@ import (
 	"time"
 )
 
-// Client represents a connected client.
 type Client struct {
-	ID         int64        // Unique client ID.
-	Addr       string       // Client's network address.
-	CreateTime time.Time    // Time when the client connected.
-	LastCmd    time.Time    // Time of the last command received from the client.
-	Flags      []string     // Client flags (e.g., "N" for normal).
-	DB         int          // Currently selected database.
-	Name       string       // Client name (set by CLIENT SETNAME).
-	conn       net.Conn     // The underlying network connection. // Added connection for potential future use
-	mu         sync.RWMutex // Mutex for protecting client-specific data if needed
+	mu         sync.RWMutex
+	CreateTime time.Time
+	LastCmd    time.Time
+	ID         int64
+	conn       net.Conn
+	Flags      []string
+	Addr       string
+	Name       string
+	DB         int
 }
 
-// Manager manages connected clients.
 type Manager struct {
-	Clients map[int64]*Client // Map of client IDs to Client structs.
-	NextID  int64             // Atomic counter for generating unique client IDs.
-	// Ctxs maps net.Conn to *Client. Used for quick lookup by connection.
-	// Consider renaming to ConnectionToClient or ClientContexts for clarity.
-	Ctxs sync.Map
-	Mu   sync.RWMutex // Mutex for protecting the Clients map and NextID.
+	Mu      sync.RWMutex
+	Ctxs    sync.Map
+	Clients map[int64]*Client
+	NextID  int64
 }
 
 // NewManager creates a new client manager.

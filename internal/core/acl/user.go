@@ -17,18 +17,17 @@ type ACLSelector struct {
 	AllowW  bool // Write permission
 }
 
-// User represents an ACL user with Redis-style permissions
 type User struct {
-	Username   string
-	HashedPass []string // Multiple passwords supported
-	Enabled    bool
-	Commands   map[string]bool // Commands explicitly allowed
-	Keys       []ACLSelector   // Key patterns with permissions
-	Categories []string        // Command categories (+@all, -@admin, etc.)
-	NoPass     bool            // True if user requires no password
-	ResetTime  time.Time       // Time when keys/commands were reset
 	Created    time.Time
+	ResetTime  time.Time
 	LastAuth   time.Time
+	Commands   map[string]bool
+	HashedPass []string
+	Keys       []ACLSelector
+	Categories []string
+	Username   string
+	Enabled    bool
+	NoPass     bool
 }
 
 // Command categories
@@ -46,9 +45,9 @@ const (
 
 // ACLRule represents a Redis-style ACL rule
 type ACLRule struct {
-	Allow    bool
 	Category string
 	Command  string
+	Allow    bool
 }
 
 // DefaultUser constants
@@ -59,9 +58,9 @@ const (
 
 // ACLManager manages ACL users and permissions
 type ACLManager struct {
-	users      map[string]*User
-	categories map[string][]string // Maps categories to commands
 	mu         sync.RWMutex
+	users      map[string]*User
+	categories map[string][]string
 }
 
 // NewACLManager creates a new ACL manager instance
