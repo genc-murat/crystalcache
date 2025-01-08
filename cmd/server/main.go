@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -13,39 +14,37 @@ import (
 	_ "net/http/pprof"
 
 	"github.com/genc-murat/crystalcache/internal/cache"
+	"github.com/genc-murat/crystalcache/internal/config"
 	"github.com/genc-murat/crystalcache/internal/pool"
 	"github.com/genc-murat/crystalcache/internal/server"
 	"github.com/genc-murat/crystalcache/internal/storage"
 )
 
 func main() {
-
-	go func() {
-		log.Println("Pprof server starting on :6060")
-		if err := http.ListenAndServe(":6060", nil); err != nil {
-			log.Printf("Pprof server error: %v", err)
-		}
-	}()
-
-	// _, err := config.LoadConfig("development")
-	// if err != nil {
-	// 	log.Fatalf("Error loading config: %v", err)
-	// }
-
-	// Server config
-	serverConfig := server.ServerConfig{
-		MaxConnections: 1000,
-		ReadTimeout:    10 * time.Second,
-		WriteTimeout:   10 * time.Second,
-		IdleTimeout:    60 * time.Second,
+	// Load configuration
+	cfg, err := config.LoadConfig("development")
+	if err != nil {
+		log.Fatalf("Error loading config: %v", err)
 	}
 
-	memCache := cache.NewMemoryCache()
-	memCache.StartDefragmentation(5*time.Minute, 0.25)
+	// Start pprof server if enabled
+	if cfg.Pprof.Enabled {
+		go func() {
+			log.Printf("Pprof server starting on :%d", cfg.Pprof.Port)
+			if err := http.ListenAndServe(fmt.Sprintf(":%d", cfg.Pprof.Port), nil); err != nil {
+				log.Printf("Pprof server error: %v", err)
+			}
+		}()
+	}
 
+	// Initialize cache
+	memCache := cache.NewMemoryCache()
+	memCache.StartDefragmentation(cfg.Cache.DefragInterval, cfg.Cache.DefragThreshold)
+
+	// Initialize storage
 	aofConfig := storage.DefaultAOFConfig()
-	aofConfig.Path = "database.aof"
-	aofConfig.SyncInterval = 2 * time.Second
+	aofConfig.Path = cfg.Storage.Path
+	aofConfig.SyncInterval = cfg.Storage.SyncInterval
 
 	aofStorage, err := storage.NewAOF(aofConfig)
 	if err != nil {
@@ -53,23 +52,31 @@ func main() {
 	}
 	defer aofStorage.Close()
 
-	server := server.NewServer(memCache, aofStorage, nil, serverConfig)
-	server.SetMaster(true)
-	go server.Start(":6379")
-	time.Sleep(1 * time.Second)
-
-	// Connection pool
-	poolConfig := pool.Config{
-		InitialSize:   10,
-		MaxSize:       100,
-		ReadTimeout:   5000 * time.Second,
-		WriteTimeout:  5000 * time.Second,
-		IdleTimeout:   6000 * time.Second,
-		RetryAttempts: 3,
-		RetryDelay:    100 * time.Millisecond,
+	// Initialize server
+	serverConfig := server.ServerConfig{
+		MaxConnections: cfg.Server.MaxConnections,
+		ReadTimeout:    cfg.Server.ReadTimeout,
+		WriteTimeout:   cfg.Server.WriteTimeout,
+		IdleTimeout:    cfg.Server.IdleTimeout,
 	}
 
-	factory := pool.NewConnFactory("localhost:6379", 5*time.Second)
+	server := server.NewServer(memCache, aofStorage, nil, serverConfig)
+	server.SetMaster(true)
+	go server.Start(fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port))
+	time.Sleep(1 * time.Second)
+
+	// Initialize connection pool
+	poolConfig := pool.Config{
+		InitialSize:   cfg.Pool.InitialSize,
+		MaxSize:       cfg.Pool.MaxSize,
+		ReadTimeout:   cfg.Pool.ReadTimeout,
+		WriteTimeout:  cfg.Pool.WriteTimeout,
+		IdleTimeout:   cfg.Pool.IdleTimeout,
+		RetryAttempts: cfg.Pool.RetryAttempts,
+		RetryDelay:    cfg.Pool.RetryDelay,
+	}
+
+	factory := pool.NewConnFactory(fmt.Sprintf("%s:%d", cfg.Server.Host, cfg.Server.Port), 5*time.Second)
 	connectionPool, err := pool.NewConnectionPool(poolConfig, factory.CreateConnection)
 	if err != nil {
 		log.Fatal(err)
@@ -78,17 +85,19 @@ func main() {
 
 	server.SetConnectionPool(connectionPool)
 
-	// Metrics server
-	go func() {
-		http.HandleFunc("/metrics", func(w http.ResponseWriter, r *http.Request) {
-			metrics := server.GetMetrics()
-			json.NewEncoder(w).Encode(metrics)
-		})
-		log.Printf("Metrics server starting on :2112")
-		if err := http.ListenAndServe(":2112", nil); err != nil {
-			log.Printf("Metrics server error: %v", err)
-		}
-	}()
+	// Start metrics server if enabled
+	if cfg.Metrics.Enabled {
+		go func() {
+			http.HandleFunc(cfg.Metrics.Path, func(w http.ResponseWriter, r *http.Request) {
+				metrics := server.GetMetrics()
+				json.NewEncoder(w).Encode(metrics)
+			})
+			log.Printf("Metrics server starting on :%d", cfg.Metrics.Port)
+			if err := http.ListenAndServe(fmt.Sprintf(":%d", cfg.Metrics.Port), nil); err != nil {
+				log.Printf("Metrics server error: %v", err)
+			}
+		}()
+	}
 
 	// Graceful shutdown
 	sigCh := make(chan os.Signal, 1)

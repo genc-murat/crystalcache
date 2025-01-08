@@ -1,0 +1,76 @@
+# config/development.yml
+environment: development
+
+server:
+  host: "0.0.0.0"
+  port: 6379
+  max_connections: 1000
+  read_timeout: 10s
+  write_timeout: 10s
+  idle_timeout: 60s
+
+cache:
+  defrag_interval: 5m
+  defrag_threshold: 0.25
+
+storage:
+  type: "aof"
+  path: "database.aof"
+  sync_interval: 2s
+
+pool:
+  initial_size: 10
+  max_size: 100
+  read_timeout: 5000s
+  write_timeout: 5000s
+  idle_timeout: 6000s
+  retry_attempts: 3
+  retry_delay: 100ms
+
+metrics:
+  enabled: true
+  port: 2112
+  path: "/metrics"
+
+pprof:
+  enabled: true
+  port: 6060
+
+---
+# config/production.yml
+environment: production
+
+server:
+  host: "0.0.0.0"
+  port: 6379
+  max_connections: 5000
+  read_timeout: 5s
+  write_timeout: 5s
+  idle_timeout: 30s
+
+cache:
+  defrag_interval: 10m
+  defrag_threshold: 0.20
+
+storage:
+  type: "aof"
+  path: "/var/lib/crystalcache/database.aof"
+  sync_interval: 1s
+
+pool:
+  initial_size: 50
+  max_size: 500
+  read_timeout: 3000s
+  write_timeout: 3000s
+  idle_timeout: 3600s
+  retry_attempts: 5
+  retry_delay: 200ms
+
+metrics:
+  enabled: true
+  port: 2112
+  path: "/metrics"
+
+pprof:
+  enabled: false
+  port: 6060
