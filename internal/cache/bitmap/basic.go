@@ -26,7 +26,7 @@ var ErrOutOfBoundsOffset = fmt.Errorf("ERR requested bit offset is out of bounds
 // GetBit retrieves the bit value (0 or 1) at the given offset within the bitmap associated with the key.
 // If the key is not found, it returns 0 and nil error.
 // If the value associated with the key is not a byte slice, it returns an error.
-// If the offset is beyond the bounds of the bitmap, it returns 0 and an ErrOutOfBoundsOffset error.
+// If the offset is beyond the bounds of the bitmap, it returns 0 and nil error.
 func (b *BasicOps) GetBit(key string, offset int64) (int, error) {
 	val, exists := b.cache.Load(key)
 	if !exists {
@@ -40,7 +40,7 @@ func (b *BasicOps) GetBit(key string, offset int64) (int, error) {
 
 	byteIndex := offset / 8
 	if int64(len(valBytes)) <= byteIndex {
-		return 0, ErrOutOfBoundsOffset // Return specific error for out-of-bounds
+		return 0, nil // Return 0 and nil error for out-of-bounds
 	}
 
 	bitIndex := offset % 8
