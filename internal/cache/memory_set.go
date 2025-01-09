@@ -652,3 +652,14 @@ func (c *MemoryCache) SUnionMulti(keys ...string) []string {
 
 	return finalResult
 }
+
+func (c *MemoryCache) defragSets() {
+	newSets := &sync.Map{}
+	c.sets_.Range(func(key, setI interface{}) bool {
+		set := setI.(*sync.Map)
+		newSet := c.defragSyncMap(set)
+		newSets.Store(key, newSet)
+		return true
+	})
+	c.sets_ = newSets
+}

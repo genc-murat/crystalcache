@@ -316,5 +316,8 @@ func (c *MemoryCache) CFLoadChunk(key string, iter uint64, data []byte) error {
 // It calls the defragSyncMap method to perform the defragmentation and
 // updates the cuckooFilters field with the defragmented data.
 func (c *MemoryCache) defragCuckooFilters() {
-	c.cuckooFilters = c.defragSyncMap(c.cuckooFilters)
+	defraggedCuckooFilters := c.defragSyncMap(c.cuckooFilters)
+	if defraggedCuckooFilters != c.cuckooFilters {
+		c.cuckooFilters = defraggedCuckooFilters
+	}
 }

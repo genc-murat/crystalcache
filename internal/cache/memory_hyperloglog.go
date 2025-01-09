@@ -164,5 +164,8 @@ func (c *MemoryCache) PFSelfTest() error {
 // defragHLL defragments the HyperLogLog (HLL) data structures stored in the memory cache.
 // It optimizes the memory usage by consolidating fragmented HLL data structures.
 func (c *MemoryCache) defragHLL() {
-	c.hlls = c.defragSyncMap(c.hlls)
+	defraggedHLLs := c.defragSyncMap(c.hlls)
+	if defraggedHLLs != c.hlls {
+		c.hlls = defraggedHLLs
+	}
 }

@@ -452,12 +452,12 @@ func (c *MemoryCache) GeoSearchStore(destKey, srcKey string, options *models.Geo
 }
 
 func (c *MemoryCache) defragGeoData() {
-	newGeoData := &sync.Map{}
 	c.geoData.Range(func(key, valueI interface{}) bool {
 		geoSet := valueI.(*sync.Map)
-		newGeoSet := c.defragSyncMap(geoSet)
-		newGeoData.Store(key, newGeoSet)
+		defraggedGeoSet := c.defragSyncMap(geoSet)
+		if defraggedGeoSet != geoSet {
+			c.geoData.Store(key, defraggedGeoSet)
+		}
 		return true
 	})
-	c.geoData = newGeoData
 }

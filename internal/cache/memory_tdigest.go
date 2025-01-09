@@ -257,5 +257,8 @@ func (c *MemoryCache) TDigestTrimmedMean(key string, lowQuantile, highQuantile f
 // It consolidates the t-digests by calling the defragSyncMap method,
 // which helps in optimizing memory usage and improving performance.
 func (c *MemoryCache) defragTDigests() {
-	c.tdigests = c.defragSyncMap(c.tdigests)
+	defraggedTDigests := c.defragSyncMap(c.tdigests)
+	if defraggedTDigests != c.tdigests {
+		c.tdigests = defraggedTDigests
+	}
 }

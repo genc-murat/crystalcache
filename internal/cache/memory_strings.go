@@ -355,3 +355,7 @@ func (c *MemoryCache) SEExpire(key string, seconds int, condition string) (bool,
 
 	return true, nil
 }
+
+func (c *MemoryCache) defragStrings() {
+	c.strings = c.defragSyncMap(c.strings)
+}

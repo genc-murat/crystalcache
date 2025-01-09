@@ -441,3 +441,14 @@ func (c *MemoryCache) HIncrByMulti(key string, fieldsAndIncrements map[string]in
 
 	return results, nil
 }
+
+func (c *MemoryCache) defragHashes() {
+	c.hsets.Range(func(hashKey, hashMapI interface{}) bool {
+		hashMap := hashMapI.(*sync.Map)
+		defraggedHashMap := c.defragSyncMap(hashMap)
+		if defraggedHashMap != hashMap {
+			c.hsets.Store(hashKey, defraggedHashMap)
+		}
+		return true
+	})
+}

@@ -98,5 +98,8 @@ func (c *MemoryCache) TOPKInfo(key string) (map[string]interface{}, error) {
 }
 
 func (c *MemoryCache) defragTopK() {
-	c.topks = c.defragSyncMap(c.topks)
+	defraggedTopKs := c.defragSyncMap(c.topks)
+	if defraggedTopKs != c.topks {
+		c.topks = defraggedTopKs
+	}
 }

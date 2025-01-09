@@ -3,7 +3,6 @@ package cache
 import (
 	"sort"
 	"strings"
-	"sync"
 
 	"github.com/genc-murat/crystalcache/internal/core/models"
 )
@@ -227,18 +226,25 @@ func min(a, b, c int) int {
 // to the new map, ensuring that the new map has the correct capacity for each
 // SuggestionDict. This helps in optimizing memory usage and improving performance.
 func (c *MemoryCache) defragSuggestions() {
-	newSuggestions := &sync.Map{}
 	c.suggestions.Range(func(key, valueI interface{}) bool {
 		dict := valueI.(*models.SuggestionDict)
-		// Create a new dictionary with the correct capacity
-		newDict := models.NewSuggestionDict()
-		newDict.Entries = make(map[string]*models.Suggestion, len(dict.Entries))
-		// Copy all entries
-		for str, sug := range dict.Entries {
-			newDict.Entries[str] = sug
+		if float64(len(dict.Entries)) > 0 && float64(len(dict.Entries))/float64(approximateCapacityForMap(len(dict.Entries))) < 0.5 {
+			// Create a new dictionary with the correct capacity
+			newDict := models.NewSuggestionDict()
+			newDict.Entries = make(map[string]*models.Suggestion, len(dict.Entries))
+			// Copy all entries
+			for str, sug := range dict.Entries {
+				newDict.Entries[str] = sug
+			}
+			c.suggestions.Store(key, newDict)
 		}
-		newSuggestions.Store(key, newDict)
 		return true
 	})
-	c.suggestions = newSuggestions
+}
+
+// approximateCapacityForMap provides a rough estimate of a map's underlying capacity.
+// This is a heuristic and might not be perfectly accurate.
+func approximateCapacityForMap(count int) int {
+	// You can adjust this factor based on your observations of map behavior.
+	return int(float64(count) * 1.5)
 }

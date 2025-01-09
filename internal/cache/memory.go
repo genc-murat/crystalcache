@@ -1471,13 +1471,38 @@ func (c *MemoryCache) GetBloomFilterStats() models.BloomFilterStats {
 	return c.bloomFilter.Stats()
 }
 
-func (c *MemoryCache) defragSyncMap(oldMap *sync.Map) *sync.Map {
+func (c *MemoryCache) defragSyncMap(m *sync.Map) *sync.Map {
+	var needsDefrag bool
+	var count int
+	m.Range(func(k, v interface{}) bool {
+		count++
+		return true
+	})
+
+	// Heuristic: Defrag if capacity is significantly larger than the number of elements
+	// This is a simplification as `sync.Map` doesn't expose capacity directly.
+	// You might need to adjust this heuristic based on observed behavior.
+	if count > 0 && float64(count) < 0.5*float64(approximateCapacity(count)) {
+		needsDefrag = true
+	}
+
+	if !needsDefrag {
+		return m
+	}
+
 	newMap := &sync.Map{}
-	oldMap.Range(func(key, value interface{}) bool {
-		newMap.Store(key, value)
+	m.Range(func(k, v interface{}) bool {
+		newMap.Store(k, v)
 		return true
 	})
 	return newMap
+}
+
+// approximateCapacity provides a rough estimate of the sync.Map's capacity.
+// This is a heuristic and might not be perfectly accurate.
+func approximateCapacity(count int) int {
+	// You can adjust this factor based on your observations of sync.Map behavior.
+	return count * 2
 }
 
 func (c *MemoryCache) Defragment() {
@@ -1513,83 +1538,49 @@ func (c *MemoryCache) defragJSON() {
 }
 
 func (c *MemoryCache) defragStreams() {
-	newStreams := &sync.Map{}
 	c.streams.Range(func(key, streamI interface{}) bool {
 		stream := streamI.(*sync.Map)
-		newStream := c.defragSyncMap(stream)
-		newStreams.Store(key, newStream)
+		defraggedStream := c.defragSyncMap(stream)
+		if defraggedStream != stream {
+			c.streams.Store(key, defraggedStream)
+		}
 		return true
 	})
-	c.streams = newStreams
 }
 
 func (c *MemoryCache) defragStreamGroups() {
-	newGroups := &sync.Map{}
 	c.streamGroups.Range(func(key, groupI interface{}) bool {
 		group := groupI.(*sync.Map)
-		newGroup := c.defragSyncMap(group)
-		newGroups.Store(key, newGroup)
+		defraggedGroup := c.defragSyncMap(group)
+		if defraggedGroup != group {
+			c.streamGroups.Store(key, defraggedGroup)
+		}
 		return true
 	})
-	c.streamGroups = newGroups
 }
 
 func (c *MemoryCache) defragBitmaps() {
-	newBitmaps := &sync.Map{}
 	c.bitmaps.Range(func(key, bitmapI interface{}) bool {
 		bitmap := bitmapI.([]byte)
 		if cap(bitmap) > 2*len(bitmap) {
 			newBitmap := make([]byte, len(bitmap))
 			copy(newBitmap, bitmap)
-			newBitmaps.Store(key, newBitmap)
-		} else {
-			newBitmaps.Store(key, bitmap)
+			c.bitmaps.Store(key, newBitmap)
 		}
 		return true
 	})
-	c.bitmaps = newBitmaps
-}
-
-func (c *MemoryCache) defragStrings() {
-	c.strings = c.defragSyncMap(c.strings)
-}
-
-func (c *MemoryCache) defragHashes() {
-	newHsets := &sync.Map{}
-	c.hsets.Range(func(hashKey, hashMapI interface{}) bool {
-		hashMap := hashMapI.(*sync.Map)
-		newHashMap := c.defragSyncMap(hashMap)
-		newHsets.Store(hashKey, newHashMap)
-		return true
-	})
-	c.hsets = newHsets
 }
 
 func (c *MemoryCache) defragLists() {
-	newLists := &sync.Map{}
 	c.lists.Range(func(key, listI interface{}) bool {
 		list := listI.(*[]string)
 		if cap(*list) > 2*len(*list) {
 			newList := make([]string, len(*list))
 			copy(newList, *list)
-			newLists.Store(key, &newList)
-		} else {
-			newLists.Store(key, list)
+			c.lists.Store(key, &newList)
 		}
 		return true
 	})
-	c.lists = newLists
-}
-
-func (c *MemoryCache) defragSets() {
-	newSets := &sync.Map{}
-	c.sets_.Range(func(key, setI interface{}) bool {
-		set := setI.(*sync.Map)
-		newSet := c.defragSyncMap(set)
-		newSets.Store(key, newSet)
-		return true
-	})
-	c.sets_ = newSets
 }
 
 // Helper function to get memory stats for monitoring defragmentation

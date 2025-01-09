@@ -186,5 +186,8 @@ func (c *MemoryCache) CMSInfo(key string) (map[string]interface{}, error) {
 // defragCMS defragments the Count-Min Sketch (CMS) data structure used by the MemoryCache.
 // It replaces the current CMS with a defragmented version by calling the defragSyncMap method.
 func (c *MemoryCache) defragCMS() {
-	c.cms = c.defragSyncMap(c.cms)
+	defraggedCMS := c.defragSyncMap(c.cms)
+	if defraggedCMS != c.cms {
+		c.cms = defraggedCMS
+	}
 }

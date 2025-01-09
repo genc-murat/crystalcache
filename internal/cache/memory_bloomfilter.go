@@ -340,5 +340,8 @@ func (c *MemoryCache) BFInsert(key string, errorRate float64, capacity uint, ite
 // It calls the defragSyncMap method to perform the defragmentation and
 // updates the bloom filters map with the defragmented version.
 func (c *MemoryCache) defragBloomFilters() {
-	c.bfilters = c.defragSyncMap(c.bfilters)
+	defraggedBloomFilters := c.defragSyncMap(c.bfilters)
+	if defraggedBloomFilters != c.bfilters {
+		c.bfilters = defraggedBloomFilters
+	}
 }
