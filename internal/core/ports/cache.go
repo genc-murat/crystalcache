@@ -39,6 +39,7 @@ type Cache interface {
 	DBSize() int
 	SDiff(keys ...string) []string
 	LRem(key string, count int, value string) (int, error)
+	Unlink(key string) (bool, error)
 	Rename(oldKey, newKey string) error
 	Info() map[string]string
 	Multi() error

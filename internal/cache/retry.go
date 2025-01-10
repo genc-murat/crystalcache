@@ -2871,6 +2871,23 @@ func (rd *RetryDecorator) SortRO(key string, desc bool, alpha bool, limit bool, 
 	return results, finalErr
 }
 
+func (rd *RetryDecorator) Unlink(key string) (bool, error) {
+	var unlinked bool
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		unlinked, err = rd.cache.Unlink(key)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return false, err
+	}
+	return unlinked, finalErr
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }

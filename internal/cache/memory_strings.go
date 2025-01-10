@@ -356,6 +356,60 @@ func (c *MemoryCache) SEExpire(key string, seconds int, condition string) (bool,
 	return true, nil
 }
 
+func (c *MemoryCache) Unlink(key string) (bool, error) {
+	// Check if key exists first
+	if !c.Exists(key) {
+		return false, nil
+	}
+
+	// Delete from the appropriate map based on key type
+	go func() {
+		switch c.Type(key) {
+		case "string":
+			c.strings.Delete(key)
+		case "hash":
+			c.hsets.Delete(key)
+		case "list":
+			c.lists.Delete(key)
+		case "set":
+			c.sets_.Delete(key)
+		case "zset":
+			c.zsets.Delete(key)
+		case "json":
+			c.jsonData.Delete(key)
+		case "stream":
+			c.streams.Delete(key)
+		case "bitmap":
+			c.bitmaps.Delete(key)
+		case "geo":
+			c.geoData.Delete(key)
+		case "suggestion":
+			c.suggestions.Delete(key)
+		case "cms":
+			c.cms.Delete(key)
+		case "cuckoo":
+			c.cuckooFilters.Delete(key)
+		case "hll":
+			c.hlls.Delete(key)
+		case "tdigest":
+			c.tdigests.Delete(key)
+		case "bf":
+			c.bfilters.Delete(key)
+		case "topk":
+			c.topks.Delete(key)
+		}
+
+		// Also delete expiration time if exists
+		c.expires.Delete(key)
+
+		// Increment key version to maintain consistency
+		c.incrementKeyVersion(key)
+	}()
+
+	// Return immediately since actual deletion happens asynchronously
+	return true, nil
+}
+
 func (c *MemoryCache) defragStrings() {
 	c.strings = c.defragSyncMap(c.strings)
 }

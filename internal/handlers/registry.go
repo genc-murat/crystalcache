@@ -98,6 +98,7 @@ func (r *Registry) registerHandlers() {
 	r.handlers["PTTL"] = r.stringHandlers.HandlePTTL
 	r.handlers["EXPIREAT"] = r.stringHandlers.HandleExpireAt
 	r.handlers["PEXPIREAT"] = r.stringHandlers.HandlePExpireAt
+	r.handlers["UNLINK"] = r.stringHandlers.HandleUnlink
 
 	// Hash Commands
 	r.handlers["HSET"] = r.hashHandlers.HandleHSet

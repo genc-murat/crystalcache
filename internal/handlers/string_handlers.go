@@ -1009,3 +1009,22 @@ func (h *StringHandlers) HandleSetEx(args []models.Value) models.Value {
 
 	return models.Value{Type: "string", Str: "OK"}
 }
+
+func (h *StringHandlers) HandleUnlink(args []models.Value) models.Value {
+	if len(args) < 1 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'unlink' command"}
+	}
+
+	unlinked := 0
+	for _, arg := range args {
+		exists, err := h.cache.Unlink(arg.Bulk)
+		if err != nil {
+			return models.Value{Type: "error", Str: err.Error()}
+		}
+		if exists {
+			unlinked++
+		}
+	}
+
+	return models.Value{Type: "integer", Num: unlinked}
+}
