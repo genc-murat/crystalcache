@@ -2837,6 +2837,40 @@ func (rd *RetryDecorator) SUnionMulti(keys ...string) []string {
 	return result
 }
 
+func (rd *RetryDecorator) Sort(key string, desc bool, alpha bool, limit bool, start int, count int, store string) ([]string, error) {
+	var results []string
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		results, err = rd.cache.Sort(key, desc, alpha, limit, start, count, store)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return results, finalErr
+}
+
+func (rd *RetryDecorator) SortRO(key string, desc bool, alpha bool, limit bool, start int, count int) ([]string, error) {
+	var results []string
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		results, err = rd.cache.Sort(key, desc, alpha, limit, start, count, "") // Pass empty store to ensure read-only
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return nil, err
+	}
+	return results, finalErr
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }

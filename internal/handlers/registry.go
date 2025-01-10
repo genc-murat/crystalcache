@@ -34,6 +34,7 @@ type Registry struct {
 	bloomFilterHandlers *BloomFilterHandlers
 	topkHandlers        *TopKHandlers
 	timeSeriesHandlers  *TimeSeriesHandlers
+	sortHandlers        *SortHandlers
 }
 
 func NewRegistry(cache ports.Cache, clientManager *client.Manager) *Registry {
@@ -63,6 +64,7 @@ func NewRegistry(cache ports.Cache, clientManager *client.Manager) *Registry {
 		bloomFilterHandlers: NewBloomFilterHandlers(cache),
 		topkHandlers:        NewTopKHandlers(cache),
 		timeSeriesHandlers:  NewTimeSeriesHandlers(cache),
+		sortHandlers:        NewSortHandlers(cache),
 	}
 
 	r.registerHandlers()
@@ -379,6 +381,10 @@ func (r *Registry) registerHandlers() {
 	r.handlers["TS.MREVRANGE"] = r.timeSeriesHandlers.HandleTSMRevRange
 	r.handlers["TS.QUERYINDEX"] = r.timeSeriesHandlers.HandleTSQueryIndex
 	r.handlers["TS.REVRANGE"] = r.timeSeriesHandlers.HandleTSRevRange
+
+	// Sort Commands
+	r.handlers["SORT"] = r.sortHandlers.HandleSort
+	r.handlers["SORT_RO"] = r.sortHandlers.HandleSortRO
 
 	// new commands
 	r.handlers["DELTYPE"] = r.stringHandlers.HandleDelType

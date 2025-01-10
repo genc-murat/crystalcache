@@ -227,6 +227,9 @@ type Cache interface {
 	TSQueryIndex(filters map[string]string) ([]string, error)
 	TSRevRange(key string, from, to int64) ([]models.TimeSeriesSample, error)
 
+	// Sort Commands
+	Sort(key string, desc bool, alpha bool, limit bool, start int, count int, store string) ([]string, error)
+
 	// New Commands
 	DelType(typeName string) (int64, error)
 	KeyCount(typeName string) (int64, error)
