@@ -1068,3 +1068,25 @@ func (h *StringHandlers) HandleRenameNX(args []models.Value) models.Value {
 
 	return models.Value{Type: "integer", Num: boolToInt(success)}
 }
+
+func (h *StringHandlers) HandleCopy(args []models.Value) models.Value {
+	if len(args) < 2 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'copy' command"}
+	}
+
+	source := args[0].Bulk
+	destination := args[1].Bulk
+
+	// Parse optional REPLACE argument
+	replace := false
+	if len(args) > 2 && strings.ToUpper(args[2].Bulk) == "REPLACE" {
+		replace = true
+	}
+
+	success, err := h.cache.Copy(source, destination, replace)
+	if err != nil {
+		return models.Value{Type: "error", Str: err.Error()}
+	}
+
+	return models.Value{Type: "integer", Num: boolToInt(success)}
+}

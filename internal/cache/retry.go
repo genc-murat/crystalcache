@@ -2905,6 +2905,23 @@ func (rd *RetryDecorator) RenameNX(oldKey, newKey string) (bool, error) {
 	return success, finalErr
 }
 
+func (rd *RetryDecorator) Copy(source, destination string, replace bool) (bool, error) {
+	var success bool
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		success, err = rd.cache.Copy(source, destination, replace)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return false, err
+	}
+	return success, finalErr
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }

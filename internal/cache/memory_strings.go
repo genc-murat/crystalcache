@@ -3,8 +3,11 @@ package cache
 import (
 	"fmt"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/genc-murat/crystalcache/internal/core/models"
 )
 
 // Set stores a key-value pair in the memory cache. It adds the key to the bloom filter,
@@ -481,6 +484,148 @@ func (c *MemoryCache) RenameNX(oldKey, newKey string) (bool, error) {
 	c.incrementKeyVersion(newKey)
 
 	return true, nil
+}
+
+func (c *MemoryCache) Copy(source, destination string, replace bool) (bool, error) {
+	// Check if source exists
+	if !c.Exists(source) {
+		return false, nil
+	}
+
+	// Check if destination exists when replace is false
+	if !replace && c.Exists(destination) {
+		return false, nil
+	}
+
+	// Get source key type and value
+	keyType := c.Type(source)
+	var success bool
+
+	switch keyType {
+	case "string":
+		if value, exists := c.strings.Load(source); exists {
+			c.strings.Store(destination, value)
+			success = true
+		}
+
+	case "hash":
+		if value, exists := c.hsets.Load(source); exists {
+			// Deep copy the hash map
+			originalMap := value.(*sync.Map)
+			newMap := &sync.Map{}
+			originalMap.Range(func(k, v interface{}) bool {
+				newMap.Store(k, v)
+				return true
+			})
+			c.hsets.Store(destination, newMap)
+			success = true
+		}
+
+	case "list":
+		if value, exists := c.lists.Load(source); exists {
+			// Deep copy the list
+			originalList := value.(*[]string)
+			newList := make([]string, len(*originalList))
+			copy(newList, *originalList)
+			c.lists.Store(destination, &newList)
+			success = true
+		}
+
+	case "set":
+		if value, exists := c.sets_.Load(source); exists {
+			// Deep copy the set
+			originalSet := value.(*sync.Map)
+			newSet := &sync.Map{}
+			originalSet.Range(func(k, v interface{}) bool {
+				newSet.Store(k, v)
+				return true
+			})
+			c.sets_.Store(destination, newSet)
+			success = true
+		}
+
+	case "zset":
+		if value, exists := c.zsets.Load(source); exists {
+			// Deep copy the sorted set
+			originalZSet := value.(*sync.Map)
+			newZSet := &sync.Map{}
+			originalZSet.Range(func(k, v interface{}) bool {
+				newZSet.Store(k, v)
+				return true
+			})
+			c.zsets.Store(destination, newZSet)
+			success = true
+		}
+
+	case "json":
+		if value, exists := c.jsonData.Load(source); exists {
+			c.jsonData.Store(destination, deepCopyJSON(value))
+			success = true
+		}
+
+	case "stream":
+		if value, exists := c.streams.Load(source); exists {
+			// Deep copy the stream
+			originalStream := value.(*sync.Map)
+			newStream := &sync.Map{}
+			originalStream.Range(func(k, v interface{}) bool {
+				entry := v.(*models.StreamEntry)
+				newEntry := &models.StreamEntry{
+					ID:     entry.ID,
+					Fields: make(map[string]string),
+				}
+				for k, v := range entry.Fields {
+					newEntry.Fields[k] = v
+				}
+				newStream.Store(k, newEntry)
+				return true
+			})
+			c.streams.Store(destination, newStream)
+			success = true
+		}
+
+	case "bitmap":
+		if value, exists := c.bitmaps.Load(source); exists {
+			// Deep copy the bitmap
+			originalBitmap := value.([]byte)
+			newBitmap := make([]byte, len(originalBitmap))
+			copy(newBitmap, originalBitmap)
+			c.bitmaps.Store(destination, newBitmap)
+			success = true
+		}
+	}
+
+	// Copy expiration if exists
+	if success {
+		if expTime, hasExp := c.expires.Load(source); hasExp {
+			c.expires.Store(destination, expTime)
+		}
+
+		// Update key version
+		c.incrementKeyVersion(destination)
+	}
+
+	return success, nil
+}
+
+// Helper function to deep copy JSON values
+func deepCopyJSON(value interface{}) interface{} {
+	switch v := value.(type) {
+	case map[string]interface{}:
+		newMap := make(map[string]interface{})
+		for k, val := range v {
+			newMap[k] = deepCopyJSON(val)
+		}
+		return newMap
+	case []interface{}:
+		newSlice := make([]interface{}, len(v))
+		for i, val := range v {
+			newSlice[i] = deepCopyJSON(val)
+		}
+		return newSlice
+	default:
+		return v
+	}
 }
 
 func (c *MemoryCache) defragStrings() {

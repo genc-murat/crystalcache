@@ -101,6 +101,7 @@ func (r *Registry) registerHandlers() {
 	r.handlers["UNLINK"] = r.stringHandlers.HandleUnlink
 	r.handlers["RENAME"] = r.stringHandlers.HandleRename
 	r.handlers["RENAMENX"] = r.stringHandlers.HandleRenameNX
+	r.handlers["COPY"] = r.stringHandlers.HandleCopy
 
 	// Hash Commands
 	r.handlers["HSET"] = r.hashHandlers.HandleHSet
