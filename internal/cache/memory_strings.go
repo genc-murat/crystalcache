@@ -410,6 +410,79 @@ func (c *MemoryCache) Unlink(key string) (bool, error) {
 	return true, nil
 }
 
+func (c *MemoryCache) RenameNX(oldKey, newKey string) (bool, error) {
+	// Check if source key exists
+	if !c.Exists(oldKey) {
+		return false, fmt.Errorf("ERR no such key")
+	}
+
+	// Check if destination key exists
+	if c.Exists(newKey) {
+		return false, nil
+	}
+
+	// Get key type and value
+	keyType := c.Type(oldKey)
+	var value interface{}
+	var exists bool
+
+	switch keyType {
+	case "string":
+		value, exists = c.strings.LoadAndDelete(oldKey)
+		if exists {
+			c.strings.Store(newKey, value)
+		}
+	case "hash":
+		value, exists = c.hsets.LoadAndDelete(oldKey)
+		if exists {
+			c.hsets.Store(newKey, value)
+		}
+	case "list":
+		value, exists = c.lists.LoadAndDelete(oldKey)
+		if exists {
+			c.lists.Store(newKey, value)
+		}
+	case "set":
+		value, exists = c.sets_.LoadAndDelete(oldKey)
+		if exists {
+			c.sets_.Store(newKey, value)
+		}
+	case "zset":
+		value, exists = c.zsets.LoadAndDelete(oldKey)
+		if exists {
+			c.zsets.Store(newKey, value)
+		}
+	case "json":
+		value, exists = c.jsonData.LoadAndDelete(oldKey)
+		if exists {
+			c.jsonData.Store(newKey, value)
+		}
+	case "stream":
+		value, exists = c.streams.LoadAndDelete(oldKey)
+		if exists {
+			c.streams.Store(newKey, value)
+		}
+	case "bitmap":
+		value, exists = c.bitmaps.LoadAndDelete(oldKey)
+		if exists {
+			c.bitmaps.Store(newKey, value)
+		}
+	default:
+		return false, fmt.Errorf("ERR unsupported key type")
+	}
+
+	// Handle expiration time if exists
+	if expTime, hasExp := c.expires.LoadAndDelete(oldKey); hasExp {
+		c.expires.Store(newKey, expTime)
+	}
+
+	// Update key versions
+	c.incrementKeyVersion(oldKey)
+	c.incrementKeyVersion(newKey)
+
+	return true, nil
+}
+
 func (c *MemoryCache) defragStrings() {
 	c.strings = c.defragSyncMap(c.strings)
 }

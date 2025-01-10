@@ -41,6 +41,7 @@ type Cache interface {
 	LRem(key string, count int, value string) (int, error)
 	Unlink(key string) (bool, error)
 	Rename(oldKey, newKey string) error
+	RenameNX(oldKey, newKey string) (bool, error)
 	Info() map[string]string
 	Multi() error
 	Exec() ([]models.Value, error)

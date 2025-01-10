@@ -1028,3 +1028,43 @@ func (h *StringHandlers) HandleUnlink(args []models.Value) models.Value {
 
 	return models.Value{Type: "integer", Num: unlinked}
 }
+
+func (h *StringHandlers) HandleRename(args []models.Value) models.Value {
+	if len(args) != 2 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'rename' command"}
+	}
+
+	oldKey := args[0].Bulk
+	newKey := args[1].Bulk
+
+	if oldKey == newKey {
+		return models.Value{Type: "string", Str: "OK"}
+	}
+
+	err := h.cache.Rename(oldKey, newKey)
+	if err != nil {
+		return models.Value{Type: "error", Str: err.Error()}
+	}
+
+	return models.Value{Type: "string", Str: "OK"}
+}
+
+func (h *StringHandlers) HandleRenameNX(args []models.Value) models.Value {
+	if len(args) != 2 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'renamenx' command"}
+	}
+
+	oldKey := args[0].Bulk
+	newKey := args[1].Bulk
+
+	if oldKey == newKey {
+		return models.Value{Type: "integer", Num: 0}
+	}
+
+	success, err := h.cache.RenameNX(oldKey, newKey)
+	if err != nil {
+		return models.Value{Type: "error", Str: err.Error()}
+	}
+
+	return models.Value{Type: "integer", Num: boolToInt(success)}
+}

@@ -99,6 +99,8 @@ func (r *Registry) registerHandlers() {
 	r.handlers["EXPIREAT"] = r.stringHandlers.HandleExpireAt
 	r.handlers["PEXPIREAT"] = r.stringHandlers.HandlePExpireAt
 	r.handlers["UNLINK"] = r.stringHandlers.HandleUnlink
+	r.handlers["RENAME"] = r.stringHandlers.HandleRename
+	r.handlers["RENAMENX"] = r.stringHandlers.HandleRenameNX
 
 	// Hash Commands
 	r.handlers["HSET"] = r.hashHandlers.HandleHSet
