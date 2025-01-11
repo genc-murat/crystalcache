@@ -628,6 +628,26 @@ func deepCopyJSON(value interface{}) interface{} {
 	}
 }
 
+func (c *MemoryCache) Persist(key string) (bool, error) {
+	// Check if key exists
+	if !c.Exists(key) {
+		return false, nil
+	}
+
+	// Check if key has an expiration time
+	if _, exists := c.expires.Load(key); !exists {
+		return false, nil
+	}
+
+	// Remove expiration time
+	c.expires.Delete(key)
+
+	// Update key version to maintain consistency
+	c.incrementKeyVersion(key)
+
+	return true, nil
+}
+
 func (c *MemoryCache) defragStrings() {
 	c.strings = c.defragSyncMap(c.strings)
 }

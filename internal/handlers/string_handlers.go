@@ -1090,3 +1090,18 @@ func (h *StringHandlers) HandleCopy(args []models.Value) models.Value {
 
 	return models.Value{Type: "integer", Num: boolToInt(success)}
 }
+
+func (h *StringHandlers) HandlePersist(args []models.Value) models.Value {
+	if len(args) != 1 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'persist' command"}
+	}
+
+	key := args[0].Bulk
+	persisted, err := h.cache.Persist(key)
+	if err != nil {
+		return models.Value{Type: "error", Str: err.Error()}
+	}
+
+	// Return 1 if timeout was removed, 0 if key doesn't exist or didn't have a timeout
+	return models.Value{Type: "integer", Num: boolToInt(persisted)}
+}

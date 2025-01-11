@@ -2922,6 +2922,23 @@ func (rd *RetryDecorator) Copy(source, destination string, replace bool) (bool, 
 	return success, finalErr
 }
 
+func (rd *RetryDecorator) Persist(key string) (bool, error) {
+	var persisted bool
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		persisted, err = rd.cache.Persist(key)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return false, err
+	}
+	return persisted, finalErr
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }

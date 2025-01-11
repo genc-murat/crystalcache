@@ -55,6 +55,7 @@ type Cache interface {
 	Pipeline() *models.Pipeline
 	ExecPipeline(pipeline *models.Pipeline) []models.Value
 	IncrCommandCount()
+	Persist(key string) (bool, error)
 	WithRetry(strategy models.RetryStrategy) Cache
 	ZAdd(key string, score float64, member string) error
 	ZCard(key string) int
