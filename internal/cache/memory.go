@@ -1,8 +1,11 @@
 package cache
 
 import (
+	cryptorand "crypto/rand"
 	"fmt"
 	"log"
+	"math/big"
+	mathrand "math/rand"
 	"runtime"
 	"sort"
 	"strconv"
@@ -96,6 +99,11 @@ func NewMemoryCache() *MemoryCache {
 	mc.bitmapManager = bitmap.NewManager(mc.bitmaps, mc.keyVersions)
 
 	return mc
+}
+
+func init() {
+	// Initialize math/rand with a time-based seed
+	mathrand.Seed(time.Now().UnixNano())
 }
 
 func (c *MemoryCache) cleanExpired() {
@@ -2540,6 +2548,54 @@ func (c *MemoryCache) LRotate(key string) (bool, error) {
 		}
 		// If update fails, retry
 	}
+}
+
+func (c *MemoryCache) RandomKey() (string, bool) {
+	// Collect all existing keys
+	var allKeys []string
+
+	// Helper function to collect keys from a sync.Map
+	collectKeys := func(m *sync.Map) {
+		m.Range(func(key, _ interface{}) bool {
+			if keyStr, ok := key.(string); ok {
+				allKeys = append(allKeys, keyStr)
+			}
+			return true
+		})
+	}
+
+	// Collect keys from all data structures
+	collectKeys(c.strings)
+	collectKeys(c.hsets)
+	collectKeys(c.lists)
+	collectKeys(c.sets_)
+	collectKeys(c.zsets)
+	collectKeys(c.jsonData)
+	collectKeys(c.streams)
+	collectKeys(c.bitmaps)
+	collectKeys(c.geoData)
+	collectKeys(c.suggestions)
+	collectKeys(c.cms)
+	collectKeys(c.cuckooFilters)
+	collectKeys(c.hlls)
+	collectKeys(c.tdigests)
+	collectKeys(c.bfilters)
+	collectKeys(c.topks)
+	collectKeys(c.timeSeries)
+
+	// If no keys exist, return false
+	if len(allKeys) == 0 {
+		return "", false
+	}
+
+	// Try to use cryptographically secure random number
+	bigN := big.NewInt(int64(len(allKeys)))
+	if n, err := cryptorand.Int(cryptorand.Reader, bigN); err == nil {
+		return allKeys[n.Int64()], true
+	}
+
+	// Fallback to math/rand if crypto/rand fails
+	return allKeys[mathrand.Intn(len(allKeys))], true
 }
 
 func (c *MemoryCache) WithRetry(strategy models.RetryStrategy) ports.Cache {

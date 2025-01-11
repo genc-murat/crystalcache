@@ -2939,6 +2939,18 @@ func (rd *RetryDecorator) Persist(key string) (bool, error) {
 	return persisted, finalErr
 }
 
+func (rd *RetryDecorator) RandomKey() (string, bool) {
+	var key string
+	var exists bool
+
+	rd.executeWithRetry(func() error {
+		key, exists = rd.cache.RandomKey()
+		return nil
+	})
+
+	return key, exists
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }

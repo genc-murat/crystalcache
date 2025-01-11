@@ -433,3 +433,15 @@ func (h *AdminHandlers) HandleMemoryUsage(args []models.Value) models.Value {
 		},
 	}
 }
+func (h *AdminHandlers) HandleRandomKey(args []models.Value) models.Value {
+	if len(args) != 0 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'randomkey' command"}
+	}
+
+	key, exists := h.cache.RandomKey()
+	if !exists {
+		return models.Value{Type: "null"} // Return nil when DB is empty
+	}
+
+	return models.Value{Type: "bulk", Bulk: key}
+}

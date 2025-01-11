@@ -221,6 +221,7 @@ func (r *Registry) registerHandlers() {
 	r.handlers["MEMORY"] = r.memoryHandlers.HandleMemory
 	r.handlers["TYPE"] = r.memoryHandlers.HandleType
 	r.handlers["TTL"] = r.memoryHandlers.HandleTTL
+	r.handlers["RANDOMKEY"] = r.adminHandlers.HandleRandomKey
 
 	r.handlers["CLUSTER"] = r.clusterHandlers.HandleCluster
 
@@ -261,7 +262,6 @@ func (r *Registry) registerHandlers() {
 	r.handlers["JSON.MSET"] = r.jsonHandlers.HandleJSONMSet
 	r.handlers["JSON.RESP"] = r.jsonHandlers.HandleJSONResp
 
-	// In NewRegistry
 	r.handlers["REPLICAOF"] = r.replicaHandlers.HandleReplicaOf
 
 	// stream commands
