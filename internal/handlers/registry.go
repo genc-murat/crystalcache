@@ -103,6 +103,7 @@ func (r *Registry) registerHandlers() {
 	r.handlers["RENAMENX"] = r.stringHandlers.HandleRenameNX
 	r.handlers["COPY"] = r.stringHandlers.HandleCopy
 	r.handlers["PERSIST"] = r.stringHandlers.HandlePersist
+	r.handlers["TOUCH"] = r.stringHandlers.HandleTouch
 
 	// Hash Commands
 	r.handlers["HSET"] = r.hashHandlers.HandleHSet

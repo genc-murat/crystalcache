@@ -52,6 +52,8 @@ type MemoryCache struct {
 	bitmapManager *bitmap.Manager
 
 	patternMatcher *pattern.Matcher
+
+	lastAccessed *sync.Map
 }
 
 func NewMemoryCache() *MemoryCache {
@@ -85,6 +87,7 @@ func NewMemoryCache() *MemoryCache {
 		topks:          &sync.Map{},
 		timeSeries:     &sync.Map{},
 		patternMatcher: pattern.NewMatcher(),
+		lastAccessed:   &sync.Map{},
 	}
 
 	// Start background cleanup

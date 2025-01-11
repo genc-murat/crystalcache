@@ -2951,6 +2951,23 @@ func (rd *RetryDecorator) RandomKey() (string, bool) {
 	return key, exists
 }
 
+func (rd *RetryDecorator) Touch(keys ...string) (int, error) {
+	var count int
+	var finalErr error
+
+	err := rd.executeWithRetry(func() error {
+		var err error
+		count, err = rd.cache.Touch(keys...)
+		finalErr = err
+		return err
+	})
+
+	if err != nil {
+		return 0, err
+	}
+	return count, finalErr
+}
+
 func (rd *RetryDecorator) WithRetry(strategy models.RetryStrategy) ports.Cache {
 	return NewRetryDecorator(rd.cache, strategy)
 }

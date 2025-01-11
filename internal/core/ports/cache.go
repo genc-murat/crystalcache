@@ -58,6 +58,7 @@ type Cache interface {
 	Persist(key string) (bool, error)
 	WithRetry(strategy models.RetryStrategy) Cache
 	ZAdd(key string, score float64, member string) error
+	Touch(keys ...string) (int, error)
 	ZCard(key string) int
 	ZCount(key string, min, max float64) int
 	ZRange(key string, start, stop int) []string

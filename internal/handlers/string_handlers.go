@@ -1105,3 +1105,22 @@ func (h *StringHandlers) HandlePersist(args []models.Value) models.Value {
 	// Return 1 if timeout was removed, 0 if key doesn't exist or didn't have a timeout
 	return models.Value{Type: "integer", Num: boolToInt(persisted)}
 }
+
+func (h *StringHandlers) HandleTouch(args []models.Value) models.Value {
+	if len(args) < 1 {
+		return models.Value{Type: "error", Str: "ERR wrong number of arguments for 'touch' command"}
+	}
+
+	// Extract key names from args
+	keys := make([]string, len(args))
+	for i, arg := range args {
+		keys[i] = arg.Bulk
+	}
+
+	count, err := h.cache.Touch(keys...)
+	if err != nil {
+		return models.Value{Type: "error", Str: err.Error()}
+	}
+
+	return models.Value{Type: "integer", Num: count}
+}

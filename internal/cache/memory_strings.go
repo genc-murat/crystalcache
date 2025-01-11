@@ -54,7 +54,8 @@ func (c *MemoryCache) Get(key string) (string, bool) {
 		}
 	}
 
-	if value, ok := c.strings.Load(key); ok {
+	if value, exists := c.strings.Load(key); exists {
+		c.lastAccessed.Store(key, time.Now())
 		return value.(string), true
 	}
 	return "", false
@@ -646,6 +647,20 @@ func (c *MemoryCache) Persist(key string) (bool, error) {
 	c.incrementKeyVersion(key)
 
 	return true, nil
+}
+
+func (c *MemoryCache) Touch(keys ...string) (int, error) {
+	count := 0
+	now := time.Now()
+
+	for _, key := range keys {
+		if c.Exists(key) {
+			c.lastAccessed.Store(key, now)
+			count++
+		}
+	}
+
+	return count, nil
 }
 
 func (c *MemoryCache) defragStrings() {
